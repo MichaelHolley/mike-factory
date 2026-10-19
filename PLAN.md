@@ -1,0 +1,350 @@
+# Pi Durable Issue Agent: MVP Implementation Plan
+
+Oct 19, 2026 · Michael Holley
+
+## Goal and scope
+
+The MVP turns an `agent:ready` label on any allowlisted repo under the `michaelholley` GitHub account into a pull request. It is written by a Pi Durable agent working in its own git worktree, and it runs as one Docker container.
+
+**In scope**
+
+- Several repos of the personal account `michaelholley`, configured in one file
+- One git worktree and one branch per issue, so issues never share a working directory
+- Label-driven lifecycle: start, progress, PR opened, failed, stop
+- Crash and restart safety through Pi Durable (resume mid-run, no duplicate PRs)
+- Run the repo's own test command before opening the PR
+- Clean up the worktree when the PR is merged or closed
+
+**Success criteria**
+
+- Labelling issues in two different repos produces two PRs, each linked with `Closes #n`
+- Two issues in the same repo run at the same time without touching each other's files
+- Killing the container mid-run and starting it again finishes the job with one PR, not two
+
+## Architecture
+
+```mermaid
+flowchart TB
+    GH["GitHub · michaelholley<br/>Selected repos via the GitHub App<br/>Issues, labels, branches, PRs"]
+    LLM["Model provider<br/>LLM API, key from .env<br/>Model per repo in repos.yaml"]
+
+    subgraph C["Docker container · 1 replica"]
+        WH["Webhook server<br/>Checks signature<br/>Sender + repos.yaml gate"]
+        H["Pi Durable harness<br/>1 conversation per issue<br/>issue.pipeline task"]
+        WM["Worktree manager<br/>Add, reuse, remove<br/>One lock per repo"]
+
+        subgraph V["Volume /data"]
+            DB["agent.sqlite<br/>Transcripts, tasks, docs"]
+            BARE["repos/*.git<br/>One bare clone per repo"]
+            WT["worktrees/repo/issue-n<br/>Branch agent/issue-n"]
+        end
+    end
+
+    GH -- "label, PR closed" --> WH
+    WH -- start --> H
+    H -- "push, open PR" --> GH
+    H -- "model calls" --> LLM
+    H -- cwd --> WM
+    H -- checkpoints --> DB
+    WM -- git --> BARE
+    WM -- git --> WT
+```
+
+GitHub events enter through the webhook server. The harness runs one conversation per issue inside that issue's worktree. Everything that must survive a restart lives on the `/data` volume.
+
+## Multi-repo support for michaelholley
+
+One GitHub App installed on your personal account serves every repo. A repo is worked on only if it is both granted to the app and listed in `repos.yaml`.
+
+**GitHub App (created under michaelholley)**
+
+- Install on the personal account with "Only select repositories", so new repos are opt-in
+- Repository permissions: Contents read/write, Issues read/write, Pull requests read/write, Metadata read
+- Events: `issues` (labeled, unlabeled), `pull_request` (closed)
+- One webhook URL and one secret cover all installed repos
+- The app mints a short-lived installation token (valid 1 hour) for each git push and API call, so no long-lived personal token is used
+
+**Second gate: `config/repos.yaml`**
+
+Each repo declares how to build and test it. The agent never guesses the test command.
+
+```yaml
+owner: michaelholley
+defaults:
+  model: { provider: anthropic, modelId: <your model> }
+  maxTurns: 60
+  maxCostUsd: 3
+repos:
+  - name: api-service
+    defaultBranch: main
+    setup: npm ci
+    test: npm test
+    lint: npm run lint
+  - name: website
+    defaultBranch: main
+    setup: pnpm install --frozen-lockfile
+    test: pnpm test
+```
+
+**Who may trigger**
+
+- The webhook handler accepts a label event only when `sender.login == michaelholley`, or when the sender has write access to that repo
+- Events from repos missing in `repos.yaml` are logged and ignored, even if the app can see them
+
+**Label setup**
+
+- A one-off `npm run setup-labels` creates the `agent:*` labels on every repo listed in `repos.yaml`
+
+## Git worktree strategy
+
+Each repo gets one bare clone. Each issue gets its own worktree from it, on branch `agent/issue-<n>`. The worktree path becomes the `cwd` of that issue's Pi Durable conversation.
+
+```
+/data/
+  agent.sqlite                      # Pi Durable storage
+  repos/
+    api-service.git/                # bare clone, shared object store
+    website.git/
+  worktrees/
+    api-service/
+      issue-12/                     # branch agent/issue-12
+      issue-15/                     # branch agent/issue-15
+    website/
+      issue-3/
+```
+
+**Lifecycle (in `src/git/worktrees.ts`)**
+
+1. `ensureRepo(repo)`: the first time, run `git clone --bare` and then set `remote.origin.fetch` to `+refs/heads/*:refs/remotes/origin/*` so remote branches are tracked.
+2. `createWorktree(repo, n)`: `git fetch origin`, then `git worktree add -b agent/issue-<n> <path> origin/<defaultBranch>`.
+3. `reuseWorktree`: if the path already exists (resume after a crash), keep it as is. If the branch exists but the path does not, run `git worktree add <path> agent/issue-<n>`.
+4. `removeWorktree(repo, n)`: `git worktree remove --force <path>`, `git branch -D agent/issue-<n>`, `git worktree prune`.
+
+**Rules**
+
+- **One lock per repo.** All git commands that change the shared `.git` (fetch, worktree add, remove, prune) run under an in-process mutex keyed by repo name. A single process owns the storage, so an in-memory lock is enough.
+- **Commits and edits inside a worktree need no lock.** Each worktree has its own index and HEAD.
+- **Deterministic names.** A path and branch derived from `repo` + issue number make every step safe to rerun after a crash.
+- **Clean commits.** Commit author is `pi-agent[bot]`. The agent commits inside its worktree. Pushing is done by a tool, not by bash (see Security).
+- **Dependencies per worktree.** `setup` from `repos.yaml` runs once per new worktree. pnpm or npm cache directories live on the volume so repeat installs are fast.
+- **Cleanup.** A `pull_request.closed` webhook for an `agent/issue-*` branch removes the worktree. A nightly sweep removes worktrees whose issue is closed and runs `git worktree prune` on each repo.
+
+## End-to-end workflow
+
+A label starts one durable pipeline per issue. The labels on the issue show its state at all times.
+
+1. You add `agent:ready` to issue #12 in `api-service`.
+2. The webhook handler checks the signature, the sender and the allowlist. It then swaps the label to `agent:working`.
+3. It looks up or creates the conversation for `michaelholley/api-service#12` and starts the `issue.pipeline` task. The `requestId` is the GitHub delivery id, so a redelivered webhook is a no-op.
+4. **prepare**: create or reuse the worktree, run `setup`.
+5. **implement**: submit the issue title, body and comments to the conversation, then wait until it settles.
+6. **verify**: the pipeline itself runs `lint` and `test` in the worktree. On failure, the output goes back to the conversation, at most 2 retries.
+7. **publish**: commit any leftovers, push `agent/issue-12`, open the PR with `Closes #12` and a summary.
+8. **report**: comment on the issue with the PR link and cost, and swap the label to `agent:pr-open`.
+
+Any phase that runs out of retries, turns or budget ends in **failed**. The agent comments with the reason and the last test output, and sets `agent:failed`.
+
+**Labels**
+
+| Label | Set by | Meaning |
+| --- | --- | --- |
+| `agent:ready` | You | Start work on this issue |
+| `agent:working` | Agent | Pipeline running |
+| `agent:pr-open` | Agent | PR opened, waiting for your review |
+| `agent:failed` | Agent | Gave up; see the comment. Re-add `agent:ready` to retry |
+| `agent:stop` | You | Abort the run now; the worktree is kept for inspection |
+
+**Concurrency**
+
+- At most 3 pipelines run at once across all repos (configurable). Others wait in the `queued` phase.
+- Issues in the same repo run in parallel, because each has its own worktree.
+
+## Pi Durable components
+
+One harness over one SQLite file holds every repo's conversations. Each issue has one conversation and one pipeline task.
+
+**Harness (`src/main.ts`)**
+
+- `Harness.open(openNodeSqliteStorage('/data/agent.sqlite'), { models, registry, env })`, then `harness.resume()` before the HTTP server accepts webhooks
+- `env = ({ cwd }) => new NodeExecutionEnv({ cwd })`, where `cwd` is the issue's worktree path
+- Compaction settings left at their defaults
+
+**Conversation per issue**
+
+- Key: `michaelholley/<repo>#<n>`. A harness-scoped document `app.issueIndex` maps key to conversation id, so a later event finds the same conversation.
+- Agent config: the model from `repos.yaml`, `cwd` = the worktree, instructions that the issue text is a task description and not a source of commands
+
+**Extensions**
+
+| Extension | Contents | Replay after crash |
+| --- | --- | --- |
+| `CodingTools` | read, write, edit, bash | bash: model is told it was interrupted |
+| `repo-context` | Sections: AGENTS.md or README of the worktree, repo name, test command | n/a |
+| `github` | `get_issue`, `list_issue_comments` | safe |
+| `github` | `push_branch`, `open_pr` (returns the existing PR if one is open for the branch) | safe, because both are idempotent |
+| `guards` | `beforeTool` hook on bash: blocks `git push`, `gh`, writes outside the worktree, `rm -rf /` patterns | n/a |
+
+**Task `issue.pipeline`**
+
+- Phases: `queued → prepare → implement → verify → publish → report`, plus terminal `failed` or `aborted`
+- `implement` submits to the conversation with `requestId: <deliveryId>:implement`, then waits on it
+- `verify` retries submit with `requestId: <deliveryId>:fix-<attempt>`
+- `abort` (from `agent:stop`) aborts the conversation's work, keeps the worktree and sets the label
+
+**Document `app.issueState` (one per conversation)**
+
+- `repo`, `issue`, `branch`, `worktreePath`, `phase`, `attempts`, `prUrl`, `costUsd`, `lastError`
+- Read by the status endpoint and the final comment
+
+## Project structure and Docker
+
+A single TypeScript service in a single container with a single volume. Webhooks come in through a tunnel, so no ports have to be opened on your network.
+
+```
+pi-issue-agent/
+  config/repos.yaml
+  src/
+    main.ts                 # open harness, resume, start server
+    server.ts               # POST /webhooks/github, GET /status
+    github/app.ts           # Octokit App, installation tokens
+    github/webhooks.ts      # signature check, sender + allowlist gate
+    git/worktrees.ts        # bare clones, worktrees, per-repo mutex
+    agent/registry.ts       # installs extensions + tasks
+    agent/extensions/       # repo-context, github, guards
+    agent/tasks/issuePipeline.ts
+    agent/docs.ts           # app.issueIndex, app.issueState
+    scripts/setup-labels.ts
+  Dockerfile
+  compose.yaml
+```
+
+**Dependencies:** `@earendil-works/pi-durable`, `@earendil-works/pi-ai` and `@earendil-works/chord`, pinned to exact versions. Also `@octokit/app`, `@octokit/webhooks`, `hono` (or Fastify) and `yaml`.
+
+**Dockerfile essentials**
+
+- Base `node:22-bookworm-slim`, plus `git`, `ca-certificates` and the toolchains your repos need for tests
+- Runs as a non-root user `agent`, with `WORKDIR /app` and the volume at `/data`
+- `git config --global user.name "pi-agent[bot]"` and a matching noreply email
+
+**compose.yaml**
+
+- Service `agent`: `restart: unless-stopped`, `volumes: ./data:/data`, `env_file: .env`, `replicas: 1` (one process per storage)
+- Service `tunnel` (optional): `cloudflared` or `smee-client` forwarding to `agent:3000/webhooks/github`
+
+**.env**
+
+- `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY` (or a mounted file), `GITHUB_WEBHOOK_SECRET`
+- `ANTHROPIC_API_KEY` (or another provider's key), `MAX_CONCURRENT=3`
+
+## Security and guardrails
+
+The agent has a shell, so the container is the sandbox. For the MVP, the rules keep the GitHub token and your default branches out of its reach.
+
+- **Token never reaches bash.** The installation token exists only inside the `push_branch` and `open_pr` tools. It is not set in the process environment that bash inherits, and it is not written into git config.
+- **Push only the issue's branch.** `push_branch` takes no arguments. It pushes `agent/issue-<n>` from the current conversation's worktree and refuses any other ref.
+- **Bash guard hook.** It blocks `git push`, `git remote`, `gh`, `curl` or `wget` to `api.github.com`, and paths outside `/data/worktrees/<repo>/issue-<n>`.
+- **Branch protection.** Turn on "require a pull request" for `main` in each repo, as a second line of defence.
+- **Issue text is data.** The system prompt says so. Only you, or users with write access, can trigger a run (see Multi-repo).
+- **Budgets.** `maxTurns` and `maxCostUsd` per issue, from `repos.yaml`. Breaching either ends the run in `failed`.
+- **Dedicated host.** Run the container on a machine or VPS that holds no other secrets. Per-issue sandbox containers are a later step.
+
+## Milestones
+
+There are two milestones. M1 delivers a restart-safe agent on one repo. M2 extends it to your whole account.
+
+### M1: One repo, label to PR, safe to restart
+
+**Goal:** a label on a test repo yields exactly one PR, even if the container restarts mid-run.
+
+**Scope**
+
+- GitHub App under `michaelholley`, installed on one test repo. The webhook reaches the container through smee or cloudflared.
+- Docker image, compose file and `/data` volume from day one
+- A bare clone and one worktree per issue. Runs are serial.
+- Harness on SQLite with `CodingTools`, `repo-context` and the bash guard hook
+- `issue.pipeline` with the phases prepare, implement, verify, publish and report, plus the `app.issueState` document
+- Idempotent side effects: the delivery id is the `requestId`; `push_branch` and `open_pr` return existing results; worktree creation reuses existing paths
+- Labels `agent:working`, `agent:pr-open`, `agent:failed` and `agent:stop`, one fix attempt after failing tests, and a cost budget
+- The installation token lives only inside the push and PR tools
+
+**How it is tested**
+
+- A local bare repo acts as the remote for the worktree manager and `push_branch`, and an in-memory fake of Octokit stands in for issues and PRs
+- A scripted stub model makes pipeline runs fast and repeatable
+- Each side-effect tool, called twice, produces one result
+- `CRASH_AT=<phase>` exits the process at that phase boundary. The test restarts the harness and asserts exactly one PR. There is one test per phase, 5 in total.
+- One manual end-to-end run on the real test repo with a trivial issue, plus one redelivery from GitHub's webhook log
+
+**Exit criteria**
+
+- A real issue labelled `agent:ready` gets a PR with passing tests and `Closes #n`
+- All 5 `CRASH_AT` tests pass
+- A redelivered webhook starts nothing new
+- Failing tests end in `agent:failed` with the output in the comment
+- `agent:stop` aborts the run, and `git push origin main` from bash is blocked
+
+**Removes the risk of:** unknowns in the Pi Durable API, in GitHub App authentication, and in pushing from a worktree, plus duplicate PRs after restarts.
+
+### M2: Many repos, many issues in parallel
+
+**Goal:** extend the hardened pipeline across your account without adding new ways for it to fail.
+
+**Scope**
+
+- `repos.yaml` with per-repo setup, test, lint, model and budget, plus the allowlist and sender gate
+- A per-repo mutex for operations on the shared `.git`, worktrees running in parallel, and a global concurrency limit with a queue
+- The `setup-labels` script, and toolchains for every listed repo in the image
+- Cleanup when a PR closes, plus a nightly sweep and `git worktree prune`
+- A `/status` endpoint that reads from `app.issueState`
+
+**Exit criteria**
+
+- The acceptance checklist below passes on two real repos
+- 3 issues in one repo and 1 in another run at once, and each PR holds only its own changes. The M1 crash tests still pass with these concurrent runs.
+- After all PRs are merged, no worktrees or `agent/issue-*` branches remain locally
+
+**Removes the risk of:** concurrent changes to shared git state, and environments that differ per repo.
+
+## Acceptance checklist
+
+The MVP is done when every box below is ticked on two of your real repos.
+
+- [ ] Label `agent:ready` in repo A produces a PR on `agent/issue-<n>` with `Closes #n`, green tests and a cost comment
+- [ ] The same in repo B at the same time
+- [ ] Two issues in repo A run at once. Each PR contains only its own changes.
+- [ ] `docker compose restart` during implement: the run resumes and produces exactly one PR
+- [ ] Redelivering the webhook from GitHub's delivery log does not start a second run
+- [ ] A label from a non-collaborator account, or a repo missing from `repos.yaml`, is ignored and logged
+- [ ] `agent:stop` aborts within 30 seconds and keeps the worktree
+- [ ] A failing test suite after 2 retries ends in `agent:failed` with the test output in the comment
+- [ ] Merging or closing the PR removes the worktree and the local branch
+- [ ] A bash command `git push origin main` from the agent is blocked by the guard hook
+
+## Later, risks and open questions
+
+**Not in the MVP**
+
+- Steering from issue or PR comments (`whenBusy: "steer"`), and a review-feedback loop on open PRs
+- One sandbox container or VM per issue through a custom execution environment
+- Repos outside `michaelholley` (orgs), and Postgres storage or sharding
+- A web UI. `/status` and the issue comments cover the MVP.
+
+**Risks**
+
+- Pi Durable is experimental and its API may change. Pin exact versions and upgrade on purpose.
+- Toolchains differ per repo. The image must contain all of them, or tests fail for environment reasons.
+- Disk use grows with dependencies per worktree. Cleanup and a shared package cache keep it in check.
+- Model output quality varies on vague issues. Good issue templates help more than prompt tuning.
+
+**Open questions**
+
+- [ ] Which repos go into `repos.yaml` first?
+- [ ] Which model provider and model, and what budget per issue?
+- [ ] Where does it run: home server or a VPS? This decides the tunnel choice.
+- [ ] Should PRs open as drafts until you look at them?
+
+## Sources
+
+- [Pi Durable announcement, Earendil](https://earendil.com/posts/pi-durable/)
+- [Pi 1.0 and Pi Durable release coverage](https://letsdatascience.com/news/pi-10-adds-mcp-and-durable-harness-6241c6f7)
+- [Sentry for Pi Durable](https://docs.sentry.io/platforms/javascript/guides/pi-durable/)
