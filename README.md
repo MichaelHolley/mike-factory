@@ -1,36 +1,15 @@
 # mike-factory
 
-A small service that turns a `/mike` comment on a GitHub issue into a pull request. `/mike <text>` adds extra instructions for the run, `/mike stop` aborts it, and the agent shows progress in one status comment on the issue that it edits in place. It adds no labels to your repos. A GitHub App webhook starts a durable [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable) run per issue (prepare, implement, verify, publish, report). State lives in SQLite on `/data`, so a restart resumes the run and still produces exactly one PR. See [PLAN.md](PLAN.md) for the design.
+A self-hosted coding agent that turns a GitHub issue into a pull request. Comment `/mike` on an issue and it reads the issue, implements the change, runs the repo's checks, and opens a PR.
 
-## Local development
+## How it works
 
-```sh
-pnpm install
-cp .env.example .env   # fill in the GitHub App values; leave OPENAI_API_KEY empty
-MODEL=faux DATA_DIR=./data pnpm dev
-pnpm test
-pnpm typecheck
-```
+- **`/mike`** starts a run on the issue. **`/mike <text>`** adds extra instructions. **`/mike stop`** aborts it.
+- Progress shows up in a single status comment on the issue, edited in place. No labels are added to your repos.
+- Each issue gets one durable [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable) run, triggered by a GitHub App webhook: prepare, implement, verify, publish, report.
+- State lives in SQLite, so a restart resumes the run and still produces exactly one PR.
+- Only an allowed sender can trigger runs, and each repo has its own setup/test/lint commands and turn and cost budgets.
 
-`MODEL=faux` swaps every repo's model for the scripted faux provider, so no real model runs on your machine. Without it, `OPENAI_API_KEY` is required.
+## Docs
 
-Configuration is in `config/repos.yaml` (owner, allowed sender id, per-repo commands and budgets). Environment variables are listed in `.env.example`. Secrets are read once at startup and removed from `process.env` before any tool shell can inherit them.
-
-## GitHub App setup
-
-1. Create a GitHub App under the owner account. Webhook URL `https://<host>/webhooks/github`, plus a webhook secret.
-2. Repository permissions: Contents read/write, Issues read/write, Pull requests read/write, Metadata read.
-3. Subscribe to events: `Issue comment`, `Pull request`.
-4. Generate a private key. Install the app on the account with "Only select repositories".
-5. Add each repo to `config/repos.yaml`, and turn on "require a pull request" for its default branch.
-
-## Deploy
-
-CI (`.github/workflows/docker.yml`) pushes `<user>/mike-factory:latest` and `:sha-<short>` to Docker Hub on every push to `main`. It needs the repo variable `DOCKERHUB_USERNAME` and the repo secret `DOCKERHUB_TOKEN`.
-
-On the VPS:
-
-1. Create a Portainer stack from `compose.yaml` and enter the variables from `.env.example` as the stack's environment variables (Portainer writes them to `stack.env`). Give the private key as base64 (`base64 -i key.pem | pbcopy`); raw PEM, one line with `\n`, or quoted also work. Optionally set `IMAGE_TAG`, e.g. `sha-abc1234`, to pin or roll back.
-2. Data lives in the named volume `agent-data`, which Docker creates owned by the container user.
-3. Add the snippet from `deploy/nginx.conf` to the TLS server block. Only `/webhooks/github` is exposed; the container binds `127.0.0.1:3000`.
-4. Deploying a new image is manual: pull and recreate the stack. Run a single replica; SQLite storage has one owner.
+- [Setup](docs/setup.md): local development, configuration, GitHub App, and deployment.
