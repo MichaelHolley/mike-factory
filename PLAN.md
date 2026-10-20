@@ -42,7 +42,7 @@ flowchart TB
     end
 
     GH -- "/mike comment, PR closed" --> NG
-    NG -- "mike-factory:3000 (Docker network)" --> WH
+    NG -- "127.0.0.1:3000" --> WH
     WH -- start --> H
     H -- "push, open PR" --> GH
     H -- "model calls" --> LLM
@@ -248,12 +248,12 @@ mike-factory/
 **compose.yaml**
 
 - Deployed as a Portainer stack on the VPS, using the image `<dockerhub-user>/mike-factory:latest`
-- Service `agent`: `restart: unless-stopped`, no published port (it joins the Nginx Proxy Manager network as `mike-factory`), named volume `agent-data:/data` (created owned by the container user), `env_file: stack.env` (Portainer writes the stack's environment variables there), one replica (one process per storage)
+- Service `agent`: `restart: unless-stopped`, `ports: "127.0.0.1:3000:3000"`, named volume `agent-data:/data` (created owned by the container user), `env_file: stack.env` (Portainer writes the stack's environment variables there), one replica (one process per storage)
 
-**Nginx Proxy Manager (container on the VPS)**
+**nginx (on the VPS host)**
 
-- Nginx Proxy Manager (a container) forwards the host to `http://mike-factory:3000`; `/webhooks/github` is public. The webhook signature is the auth.
-- `/status` (M2) needs an NPM access list with basic auth
+- `location /webhooks/github` proxies to `127.0.0.1:3000` and is public. The webhook signature is the auth.
+- `location /status` proxies to `127.0.0.1:3000` behind basic auth
 - Everything else returns 404
 
 **CD: `.github/workflows/docker.yml`**

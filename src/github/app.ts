@@ -106,7 +106,12 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
         const slug = appData?.slug;
         if (!slug) throw new Error("GET /app returned no slug");
         const botLogin = `${slug}[bot]`;
-        const { data: user } = await app.octokit.request("GET /users/{username}", { username: botLogin });
+        // App JWT auth only covers /app routes; the bot's public profile needs no auth.
+        const res = await fetch(`https://api.github.com/users/${encodeURIComponent(botLogin)}`, {
+          headers: { accept: "application/vnd.github+json", "user-agent": "mike-factory" },
+        });
+        if (!res.ok) throw new Error(`GET /users/${botLogin} failed: ${res.status}`);
+        const user = (await res.json()) as { id: number };
         return { name: botLogin, email: `${user.id}+${botLogin}@users.noreply.github.com` };
       })();
       identity.catch(() => (identity = undefined));
