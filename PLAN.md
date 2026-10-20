@@ -248,7 +248,7 @@ mike-factory/
 **compose.yaml**
 
 - Deployed as a Portainer stack on the VPS, using the image `<dockerhub-user>/mike-factory:latest`
-- Service `agent`: `restart: unless-stopped`, `ports: "127.0.0.1:3000:3000"`, `volumes: ./data:/data`, `env_file: .env`, `replicas: 1` (one process per storage)
+- Service `agent`: `restart: unless-stopped`, `ports: "127.0.0.1:3000:3000"`, named volume `agent-data:/data` (created owned by the container user), `env_file: stack.env` (Portainer writes the stack's environment variables there), one replica (one process per storage)
 
 **nginx (on the VPS host)**
 
@@ -259,7 +259,7 @@ mike-factory/
 **CD: `.github/workflows/docker.yml`**
 
 - Runs on every push to `main`, builds `linux/amd64`, and pushes `<dockerhub-user>/mike-factory:latest` and `:sha-<short>` to Docker Hub
-- Uses the repo secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`
+- Uses the repo variable `DOCKERHUB_USERNAME` and the repo secret `DOCKERHUB_TOKEN`
 - Deploying stays manual: pull and recreate the stack in Portainer. Pin a `sha-` tag to roll back.
 
 **Local development**

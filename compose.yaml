@@ -1,11 +1,13 @@
 services:
   agent:
-    image: ${DOCKERHUB_USER}/mike-factory:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_USER:-mpholley}/mike-factory:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
     volumes:
-      - ./data:/data
-    env_file: .env
-    deploy:
-      replicas: 1
+      - agent-data:/data
+    # Portainer writes the stack's environment variables to stack.env.
+    env_file: stack.env
+
+volumes:
+  agent-data:

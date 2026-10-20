@@ -26,11 +26,11 @@ Configuration is in `config/repos.yaml` (owner, allowed sender id, per-repo comm
 
 ## Deploy
 
-CI (`.github/workflows/docker.yml`) pushes `<user>/mike-factory:latest` and `:sha-<short>` to Docker Hub on every push to `main`. It needs the repo secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
+CI (`.github/workflows/docker.yml`) pushes `<user>/mike-factory:latest` and `:sha-<short>` to Docker Hub on every push to `main`. It needs the repo variable `DOCKERHUB_USERNAME` and the repo secret `DOCKERHUB_TOKEN`.
 
 On the VPS:
 
-1. Create a Portainer stack from `compose.yaml`. Set the stack variable `DOCKERHUB_USER` (and optionally `IMAGE_TAG`, e.g. `sha-abc1234` to pin or roll back).
-2. Put a `.env` (see `.env.example`) next to the stack's compose file, and `mkdir data && chown 10001:10001 data` (the container runs as uid 10001).
+1. Create a Portainer stack from `compose.yaml` and enter the variables from `.env.example` as the stack's environment variables (Portainer writes them to `stack.env`). Put the private key on one line with `\n` for newlines. Optionally set `IMAGE_TAG`, e.g. `sha-abc1234`, to pin or roll back.
+2. Data lives in the named volume `agent-data`, which Docker creates owned by the container user.
 3. Add the snippet from `deploy/nginx.conf` to the TLS server block. Only `/webhooks/github` is exposed; the container binds `127.0.0.1:3000`.
 4. Deploying a new image is manual: pull and recreate the stack. Run a single replica; SQLite storage has one owner.
