@@ -30,7 +30,7 @@ CI (`.github/workflows/docker.yml`) pushes `<user>/mike-factory:latest` and `:sh
 
 On the VPS:
 
-1. Create a Portainer stack from `compose.yaml` and enter the variables from `.env.example` as the stack's environment variables (Portainer writes them to `stack.env`). Put the private key on one line with `\n` for newlines. Optionally set `IMAGE_TAG`, e.g. `sha-abc1234`, to pin or roll back.
+1. Create a Portainer stack from `compose.yaml` and enter the variables from `.env.example` as the stack's environment variables (Portainer writes them to `stack.env`). Give the private key as base64 (`base64 -i key.pem | pbcopy`); raw PEM, one line with `\n`, or quoted also work. Optionally set `IMAGE_TAG`, e.g. `sha-abc1234`, to pin or roll back.
 2. Data lives in the named volume `agent-data`, which Docker creates owned by the container user.
 3. Nginx Proxy Manager runs as a container: the stack joins its network (`PROXY_NETWORK`, default `nginx-proxy-manager_default`) and NPM forwards the webhook host to `http://mike-factory:3000`. No host port is published. The service answers 404 on everything except `/webhooks/github`. (`deploy/nginx.conf` is the equivalent for a plain nginx on the host.)
 4. Deploying a new image is manual: pull and recreate the stack. Run a single replica; SQLite storage has one owner.
