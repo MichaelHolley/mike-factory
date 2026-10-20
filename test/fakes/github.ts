@@ -1,11 +1,10 @@
-import { AGENT_LABELS, type AgentLabel, type GitHubClient, type GitIdentity, type IssueComment, type IssueData, type PullRequestRef } from "../../src/contracts.ts";
+import { type GitHubClient, type GitIdentity, type IssueComment, type IssueData, type PullRequestRef } from "../../src/contracts.ts";
 
 export const FAKE_GIT_TOKEN = "fake-installation-token";
 export const FAKE_BOT_IDENTITY: GitIdentity = { name: "mike-factory[bot]", email: "1+mike-factory[bot]@users.noreply.github.com" };
 
 const BOT_LOGIN = FAKE_BOT_IDENTITY.name;
 const COMMENT_MARKER = (marker: string) => `<!-- ${marker} -->`;
-const isAgentLabel = (label: string): label is AgentLabel => (AGENT_LABELS as readonly string[]).includes(label);
 
 export interface FakePr extends PullRequestRef {
   repo: string;
@@ -69,10 +68,6 @@ export class FakeGitHub implements GitHubClient {
     this.commentList.push({ id: this.nextId++, repo, issue, author, body, createdAt: new Date().toISOString() });
   }
 
-  labelsOf(repo: string, issue: number): string[] {
-    return [...this.issue(repo, issue).labels];
-  }
-
   commentsOn(repo: string, issue: number): FakeComment[] {
     return this.commentList.filter((comment) => comment.repo === repo && comment.issue === issue);
   }
@@ -94,19 +89,6 @@ export class FakeGitHub implements GitHubClient {
   async listIssueComments(repo: string, issue: number): Promise<IssueComment[]> {
     this.called("listIssueComments");
     return this.commentsOn(repo, issue).map(({ author, body, createdAt }) => ({ author, body, createdAt }));
-  }
-
-  async setAgentLabel(repo: string, issue: number, label: AgentLabel): Promise<void> {
-    this.called("setAgentLabel");
-    const data = this.issue(repo, issue);
-    data.labels = data.labels.filter((name) => !isAgentLabel(name));
-    data.labels.push(label);
-  }
-
-  async clearAgentLabels(repo: string, issue: number): Promise<void> {
-    this.called("clearAgentLabels");
-    const data = this.issue(repo, issue);
-    data.labels = data.labels.filter((name) => !isAgentLabel(name));
   }
 
   async upsertComment(repo: string, issue: number, marker: string, body: string): Promise<void> {

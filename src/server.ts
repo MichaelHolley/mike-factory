@@ -20,7 +20,6 @@ export function createServer({ config, service, webhookSecret, log }: ServerDeps
     try {
       action = await verifyWebhook({
         event: c.req.header("x-github-event") ?? "",
-        deliveryId,
         signature: c.req.header("x-hub-signature-256") ?? "",
         rawBody,
         secret: webhookSecret,

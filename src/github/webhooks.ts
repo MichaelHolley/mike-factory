@@ -9,45 +9,55 @@ export class InvalidSignatureError extends Error {
   }
 }
 
-interface LabeledIssuePayload {
+interface IssueCommentPayload {
   action?: string;
-  label?: { name?: string };
-  issue?: { number?: number };
+  comment?: { id?: number; body?: string };
+  issue?: { number?: number; pull_request?: unknown };
   sender?: { id?: number };
   repository?: { name?: string; owner?: { login?: string } };
 }
 
-const ACTION_BY_LABEL = { "agent:ready": "start", "agent:stop": "stop" } as const;
+type Command = { kind: "start"; instructions: string } | { kind: "stop" };
+
+/** Reads `/mike [text]` or `/mike stop` from the first non-empty line; following lines belong to the instructions. */
+export function parseCommand(body: string): Command | undefined {
+  const [first = "", ...rest] = body.trimStart().split(/\r?\n/);
+  const match = /^\/mike(?:\s+(.*))?$/i.exec(first.trimEnd());
+  if (!match) return undefined;
+  const args = match[1] ?? "";
+  if (args.toLowerCase() === "stop") return { kind: "stop" };
+  return { kind: "start", instructions: [args, ...rest].join("\n").trim() };
+}
 
 export async function verifyWebhook(input: {
   event: string;
-  deliveryId: string;
   signature: string;
   rawBody: string;
   secret: string;
   config: AppConfig;
 }): Promise<WebhookAction> {
-  const { event, deliveryId, signature, rawBody, secret, config } = input;
+  const { event, signature, rawBody, secret, config } = input;
   const valid = signature ? await new Webhooks({ secret }).verify(rawBody, signature).catch(() => false) : false;
   if (!valid) throw new InvalidSignatureError();
 
-  if (event !== "issues") return ignore(`event ${event} is not handled`);
+  if (event !== "issue_comment") return ignore(`event ${event} is not handled`);
 
-  let payload: LabeledIssuePayload;
+  let payload: IssueCommentPayload;
   try {
-    payload = JSON.parse(rawBody) as LabeledIssuePayload;
+    payload = JSON.parse(rawBody) as IssueCommentPayload;
   } catch {
     return ignore("payload is not valid JSON");
   }
-  if (payload.action !== "labeled") return ignore(`issues action ${payload.action} is not handled`);
+  if (payload.action !== "created") return ignore(`issue_comment action ${payload.action} is not handled`);
+  if (payload.issue?.pull_request) return ignore("comment is on a pull request");
 
-  const label = payload.label?.name ?? "";
-  const kind = ACTION_BY_LABEL[label as keyof typeof ACTION_BY_LABEL];
-  if (!kind) return ignore(`label ${label} is not a trigger`);
+  const command = parseCommand(payload.comment?.body ?? "");
+  if (!command) return ignore("comment is not a /mike command");
 
   const issue = payload.issue?.number;
   const repo = payload.repository?.name;
-  if (typeof issue !== "number" || !repo) return ignore("payload has no issue number or repository");
+  const commentId = payload.comment?.id;
+  if (typeof issue !== "number" || typeof commentId !== "number" || !repo) return ignore("payload has no issue number, comment id or repository");
 
   if (Number(payload.sender?.id) !== config.allowedSenderId) return ignore(`sender ${payload.sender?.id} is not allowed`);
 
@@ -55,7 +65,7 @@ export async function verifyWebhook(input: {
   if (owner?.toLowerCase() !== config.owner.toLowerCase()) return ignore(`repository owner ${owner} is not ${config.owner}`);
   if (!config.repos.some((r) => r.name === repo)) return ignore(`repository ${repo} is not in repos.yaml`);
 
-  return { kind, repo, issue, deliveryId };
+  return { ...command, repo, issue, requestId: `comment-${commentId}` };
 }
 
 const ignore = (reason: string): WebhookAction => ({ kind: "ignore", reason });

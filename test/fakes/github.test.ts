@@ -2,15 +2,6 @@ import { describe, expect, it } from "vitest";
 import { FakeGitHub } from "./github.ts";
 
 describe("FakeGitHub", () => {
-  it("setAgentLabel swaps agent labels and keeps others", async () => {
-    const gh = new FakeGitHub();
-    gh.addIssue("r", { number: 1, labels: ["bug", "agent:ready"] });
-    await gh.setAgentLabel("r", 1, "agent:working");
-    expect(gh.labelsOf("r", 1).sort()).toEqual(["agent:working", "bug"]);
-    await gh.clearAgentLabels("r", 1);
-    expect(gh.labelsOf("r", 1)).toEqual(["bug"]);
-  });
-
   it("upsertComment edits the marked comment instead of adding another", async () => {
     const gh = new FakeGitHub();
     gh.addIssue("r", { number: 1 });

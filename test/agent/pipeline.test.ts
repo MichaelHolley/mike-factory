@@ -7,6 +7,7 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openAgentHarness } from "../../src/agent/harness.ts";
+import { STATUS_MARKER } from "../../src/agent/tasks/issuePipeline.ts";
 import type { GitHubClient } from "../../src/contracts.ts";
 import { autopilot, conversationIdOf, createWorld, ctx, git, issueStateOf, pipelineResult, REPO, startAction, stopAction, type World } from "./support.ts";
 
@@ -25,14 +26,15 @@ afterEach(async () => {
 
 async function launch(world: World, issueNumbers: number[] = [1]) {
   for (const number of issueNumbers) {
-    world.github.addIssue(REPO, { number, title: "Add hello", body: "Please add hello.txt.", labels: ["agent:ready"] });
+    world.github.addIssue(REPO, { number, title: "Add hello", body: "Please add hello.txt." });
   }
   const { harness, service } = await openAgentHarness({ storage: new MemoryStorage(), models: world.models, deps: world.deps }, ctx);
   open.push(harness);
   return { harness, service };
 }
 
-const labels = (world: World, issue = 1) => world.github.labelsOf(REPO, issue);
+const status = (world: World, issue = 1) =>
+  world.github.commentsOn(REPO, issue).find((comment) => comment.body.startsWith(`<!-- ${STATUS_MARKER} -->`))?.body;
 const remoteBranch = (world: World, issue = 1) => git(world.remote, "rev-parse", "--verify", "--quiet", `refs/heads/agent/issue-${issue}`);
 
 describe("issue pipeline", () => {
@@ -41,7 +43,7 @@ describe("issue pipeline", () => {
     autopilot(world.faux);
     const { harness, service } = await launch(world);
 
-    await service.start(startAction(1, "d1"));
+    await service.start(startAction(1, "comment-1"));
     const outcome = await pipelineResult(harness, 1);
 
     expect(outcome.status).toBe("completed");
@@ -50,7 +52,7 @@ describe("issue pipeline", () => {
     expect(pr).toMatchObject({ head: "agent/issue-1", base: "main", title: "Add hello", state: "open" });
     expect(pr.body).toContain("Closes #1");
     expect(git(world.remote, "show", "agent/issue-1:hello.txt")).toBe("hello");
-    expect(labels(world)).toEqual(["agent:pr-open"]);
+    expect(status(world)).toContain("Opened ");
     const comments = world.github.commentsOn(REPO, 1);
     expect(comments).toHaveLength(1);
     expect(comments[0]!.body).toContain(pr.url);
@@ -64,46 +66,48 @@ describe("issue pipeline", () => {
     autopilot(world.faux);
     const { harness, service } = await launch(world);
 
-    await service.start(startAction(1, "d1"));
-    await service.start(startAction(1, "d1"));
+    await service.start(startAction(1, "comment-1"));
+    await service.start(startAction(1, "comment-1"));
     await pipelineResult(harness, 1);
     const modelCalls = world.faux.state.callCount;
-    await service.start(startAction(1, "d1"));
+    await service.start(startAction(1, "comment-1"));
 
     expect(world.github.prs).toHaveLength(1);
     expect(world.faux.state.callCount).toBe(modelCalls);
     expect(world.github.commentsOn(REPO, 1)).toHaveLength(1);
-    expect(labels(world)).toEqual(["agent:pr-open"]);
+    expect(status(world)).toContain("Opened ");
   });
 
-  it("ignores agent:ready while a PR is open and removes the label", async () => {
+  it("ignores /mike while a PR is open and replies once with the PR link", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux);
     const { harness, service } = await launch(world);
-    await service.start(startAction(1, "d1"));
+    await service.start(startAction(1, "comment-1"));
     await pipelineResult(harness, 1);
     const modelCalls = world.faux.state.callCount;
 
-    await world.github.setAgentLabel(REPO, 1, "agent:ready");
-    await service.start(startAction(1, "d2"));
+    await service.start(startAction(1, "comment-2"));
+    await service.start(startAction(1, "comment-2"));
 
-    expect(labels(world)).toEqual(["agent:pr-open"]);
+    expect(status(world)).toContain("Opened ");
     expect(world.github.prs).toHaveLength(1);
     expect(world.faux.state.callCount).toBe(modelCalls);
-    expect(world.logs.some((entry) => entry.msg.includes("open agent PR"))).toBe(true);
+    const comments = world.github.commentsOn(REPO, 1);
+    expect(comments).toHaveLength(2);
+    expect(comments[1]!.body).toContain(`Not starting: ${world.github.prs[0]!.url}`);
   });
 
-  it("ends in agent:failed with the output when verify keeps failing", async () => {
+  it("fails with the output in the status comment when verify keeps failing", async () => {
     const world = createWorld({ dir, repo: { test: "echo 'boom: assertion failed' && exit 1", maxFixAttempts: 2 } });
     autopilot(world.faux);
     const { harness, service } = await launch(world);
 
-    await service.start(startAction(1, "d1"));
+    await service.start(startAction(1, "comment-1"));
     const outcome = await pipelineResult(harness, 1);
 
     expect(outcome.status).toBe("failed");
     expect(world.github.prs).toHaveLength(0);
-    expect(labels(world)).toEqual(["agent:failed"]);
+    expect(status(world)).toContain("could not finish");
     const [comment] = world.github.commentsOn(REPO, 1);
     expect(comment!.body).toContain("boom: assertion failed");
     expect(comment!.body).toContain("2 fix attempt");
@@ -112,7 +116,7 @@ describe("issue pipeline", () => {
     expect(state!.lastError).toContain("still fails");
   });
 
-  it("continues the same conversation and worktree when agent:ready is re-added after a failure", async () => {
+  it("continues the same conversation and worktree when /mike is sent again after a failure", async () => {
     const setupLog = join(dir, "setup.log");
     const world = createWorld({ dir, repo: { setup: `echo ran >> ${setupLog}`, test: "test -f fixed.txt", maxFixAttempts: 1 } });
     autopilot(world.faux, (messages) => {
@@ -125,12 +129,11 @@ describe("issue pipeline", () => {
     });
     const { harness, service } = await launch(world);
 
-    await service.start(startAction(1, "d1"));
+    await service.start(startAction(1, "comment-1"));
     expect((await pipelineResult(harness, 1)).status).toBe("failed");
     const first = await issueStateOf(harness, 1);
 
-    world.github.addComment(REPO, 1, "michaelholley", "second attempt: also add fixed.txt");
-    await service.start(startAction(1, "d2"));
+    await service.start(startAction(1, "comment-2", "second attempt: also add fixed.txt"));
     expect((await pipelineResult(harness, 1)).status).toBe("completed");
 
     const second = await issueStateOf(harness, 1);
@@ -138,7 +141,7 @@ describe("issue pipeline", () => {
     expect(readFileSync(setupLog, "utf8")).toBe("ran\n");
     expect(second!.pipelineTaskId).not.toBe(first!.pipelineTaskId);
     expect(world.github.prs).toHaveLength(1);
-    expect(labels(world)).toEqual(["agent:pr-open"]);
+    expect(status(world)).toContain("Opened ");
   });
 
   it("fails with 'no changes' when the agent changes nothing", async () => {
@@ -146,26 +149,26 @@ describe("issue pipeline", () => {
     autopilot(world.faux, () => fauxAssistantMessage("Nothing to do."));
     const { harness, service } = await launch(world);
 
-    await service.start(startAction(1, "d1"));
+    await service.start(startAction(1, "comment-1"));
     expect((await pipelineResult(harness, 1)).status).toBe("failed");
 
     expect(world.github.commentsOn(REPO, 1)[0]!.body).toContain("no changes");
-    expect(labels(world)).toEqual(["agent:failed"]);
+    expect(status(world)).toContain("could not finish");
   });
 
-  it("aborts on stop, keeps the worktree and leaves agent:stop", async () => {
+  it("aborts on stop, keeps the worktree and says so in the status comment", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux, () => fauxAssistantMessage(fauxToolCall("bash", { command: "sleep 60" }), { stopReason: "toolUse" }));
     const { harness, service } = await launch(world);
 
-    await service.start(startAction(1, "d1"));
+    await service.start(startAction(1, "comment-1"));
     await waitFor(() => world.faux.state.callCount >= 1);
     await new Promise((resolve) => setTimeout(resolve, 500));
-    await service.stop(stopAction(1, "d2"));
+    await service.stop(stopAction(1, "comment-2"));
     const outcome = await pipelineResult(harness, 1);
 
     expect(outcome.status).toBe("aborted");
-    expect(labels(world)).toEqual(["agent:stop"]);
+    expect(status(world)).toContain("Stopped");
     expect(existsSync(join(dir, "data", "worktrees", REPO, "issue-1"))).toBe(true);
     expect(world.github.prs).toHaveLength(0);
     expect(await issueStateOf(harness, 1)).toMatchObject({ phase: "aborted" });
@@ -181,7 +184,7 @@ describe("issue pipeline", () => {
     );
     const { harness, service } = await launch(world);
 
-    await service.start(startAction(1, "d1"));
+    await service.start(startAction(1, "comment-1"));
     await pipelineResult(harness, 1);
 
     const conversation = (await harness.conversation((await conversationIdOf(harness, 1))!, ctx))!;
@@ -196,13 +199,13 @@ describe("issue pipeline", () => {
     autopilot(world.faux, () => fauxAssistantMessage(fauxToolCall("bash", { command: "echo working" }), { stopReason: "toolUse" }));
     const { harness, service } = await launch(world);
 
-    await service.start(startAction(1, "d1"));
+    await service.start(startAction(1, "comment-1"));
     const outcome = await pipelineResult(harness, 1);
 
     expect(outcome.status).toBe("failed");
     expect(world.github.commentsOn(REPO, 1)[0]!.body).toContain("turn budget exhausted");
     expect(world.faux.state.callCount).toBeLessThanOrEqual(4);
-    expect(labels(world)).toEqual(["agent:failed"]);
+    expect(status(world)).toContain("could not finish");
   });
 
   it("fails the pipeline when the cost budget is exhausted", async () => {
@@ -210,7 +213,7 @@ describe("issue pipeline", () => {
     autopilot(world.faux);
     const { harness, service } = await launch(world);
 
-    await service.start(startAction(1, "d1"));
+    await service.start(startAction(1, "comment-1"));
     const outcome = await pipelineResult(harness, 1);
 
     expect(outcome.status).toBe("failed");
@@ -221,7 +224,7 @@ describe("issue pipeline", () => {
     const world = createWorld({ dir, repo: { setup: "echo 'install exploded' && exit 3" } });
     autopilot(world.faux);
     const { harness, service } = await launch(world);
-    await service.start(startAction(1, "d1"));
+    await service.start(startAction(1, "comment-1"));
     expect((await pipelineResult(harness, 1)).status).toBe("failed");
     expect(world.github.commentsOn(REPO, 1)[0]!.body).toContain("install exploded");
     expect(world.faux.state.callCount).toBe(0);
@@ -231,7 +234,7 @@ describe("issue pipeline", () => {
     const world = createWorld({ dir });
     autopilot(world.faux);
     const { harness, service } = await launch(world, [1, 2]);
-    await Promise.all([service.start(startAction(1, "d1")), service.start(startAction(2, "d2"))]);
+    await Promise.all([service.start(startAction(1, "comment-1")), service.start(startAction(2, "comment-2"))]);
     expect((await pipelineResult(harness, 1)).status).toBe("completed");
     expect((await pipelineResult(harness, 2)).status).toBe("completed");
     expect(world.github.prs.map((pr) => pr.head).sort()).toEqual(["agent/issue-1", "agent/issue-2"]);

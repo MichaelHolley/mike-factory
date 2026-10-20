@@ -1,8 +1,5 @@
 import type { RepoConfig } from "./config.ts";
 
-export const AGENT_LABELS = ["agent:ready", "agent:working", "agent:pr-open", "agent:failed", "agent:stop"] as const;
-export type AgentLabel = (typeof AGENT_LABELS)[number];
-
 export const branchName = (issue: number) => `agent/issue-${issue}`;
 export const issueKey = (owner: string, repo: string, issue: number) => `${owner}/${repo}#${issue}`;
 
@@ -34,10 +31,6 @@ export interface GitIdentity {
 export interface GitHubClient {
   getIssue(repo: string, issue: number): Promise<IssueData>;
   listIssueComments(repo: string, issue: number): Promise<IssueComment[]>;
-  /** Removes every other `agent:*` label and adds `label`; tolerates labels that are already absent or present. */
-  setAgentLabel(repo: string, issue: number, label: AgentLabel): Promise<void>;
-  /** Removes all `agent:*` labels. */
-  clearAgentLabels(repo: string, issue: number): Promise<void>;
   /** Creates the comment, or edits the existing one that carries the same hidden `marker`. */
   upsertComment(repo: string, issue: number, marker: string, body: string): Promise<void>;
   findOpenPr(repo: string, head: string): Promise<PullRequestRef | undefined>;
@@ -50,7 +43,7 @@ export interface GitHubClient {
 export interface WorktreeInfo {
   path: string;
   branch: string;
-  /** False when an existing worktree was reused (resume after crash or re-added `agent:ready`). */
+  /** False when an existing worktree was reused (resume after crash or a repeated `/mike` command). */
   created: boolean;
 }
 
@@ -70,8 +63,9 @@ export interface Worktrees {
 }
 
 export type WebhookAction =
-  | { kind: "start"; repo: string; issue: number; deliveryId: string }
-  | { kind: "stop"; repo: string; issue: number; deliveryId: string }
+  /** `requestId` is `comment-<id>` of the triggering comment, so a redelivered webhook maps to the same run. */
+  | { kind: "start"; repo: string; issue: number; requestId: string; instructions: string }
+  | { kind: "stop"; repo: string; issue: number; requestId: string }
   | { kind: "ignore"; reason: string };
 
 /** What the HTTP server calls. Implemented by the Pi Durable layer. */

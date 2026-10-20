@@ -1,6 +1,6 @@
 # mike-factory
 
-A small service that turns the `agent:ready` label on a GitHub issue into a pull request. A GitHub App webhook starts a durable [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable) run per issue (prepare, implement, verify, publish, report). State lives in SQLite on `/data`, so a restart resumes the run and still produces exactly one PR. See [PLAN.md](PLAN.md) for the design.
+A small service that turns a `/mike` comment on a GitHub issue into a pull request. `/mike <text>` adds extra instructions for the run, `/mike stop` aborts it, and the agent shows progress in one status comment on the issue that it edits in place. It adds no labels to your repos. A GitHub App webhook starts a durable [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable) run per issue (prepare, implement, verify, publish, report). State lives in SQLite on `/data`, so a restart resumes the run and still produces exactly one PR. See [PLAN.md](PLAN.md) for the design.
 
 ## Local development
 
@@ -20,7 +20,7 @@ Configuration is in `config/repos.yaml` (owner, allowed sender id, per-repo comm
 
 1. Create a GitHub App under the owner account. Webhook URL `https://<host>/webhooks/github`, plus a webhook secret.
 2. Repository permissions: Contents read/write, Issues read/write, Pull requests read/write, Metadata read.
-3. Subscribe to events: `issues`, `pull_request`.
+3. Subscribe to events: `Issue comment`, `Pull request`.
 4. Generate a private key. Install the app on the account with "Only select repositories".
 5. Add each repo to `config/repos.yaml`, and turn on "require a pull request" for its default branch.
 

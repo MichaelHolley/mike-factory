@@ -4,20 +4,20 @@ Oct 19, 2026 · Michael Holley
 
 ## Goal and scope
 
-The MVP turns an `agent:ready` label on any allowlisted repo under the `michaelholley` GitHub account into a pull request. It is written by a Pi Durable agent working in its own git worktree, and it runs as one Docker container.
+The MVP turns a `/mike` comment on an issue in any allowlisted repo under the `michaelholley` GitHub account into a pull request. It is written by a Pi Durable agent working in its own git worktree, and it runs as one Docker container.
 
 **In scope**
 
 - Several repos of the personal account `michaelholley`, configured in one file
 - One git worktree and one branch per issue, so issues never share a working directory
-- Label-driven lifecycle: start, progress, PR opened, failed, stop
+- Comment-driven start and stop (`/mike`, `/mike stop`), with one status comment per issue for progress, PR opened and failed. No labels.
 - Crash and restart safety through Pi Durable (resume mid-run, no duplicate PRs)
 - Run the repo's own test command before opening the PR
 - Clean up the worktree when the PR is merged or closed
 
 **Success criteria**
 
-- Labelling issues in two different repos produces two PRs, each linked with `Closes #n`
+- `/mike` on issues in two different repos produces two PRs, each linked with `Closes #n`
 - Two issues in the same repo run at the same time without touching each other's files
 - Killing the container mid-run and starting it again finishes the job with one PR, not two
 
@@ -25,7 +25,7 @@ The MVP turns an `agent:ready` label on any allowlisted repo under the `michaelh
 
 ```mermaid
 flowchart TB
-    GH["GitHub · michaelholley<br/>Selected repos via the GitHub App<br/>Issues, labels, branches, PRs"]
+    GH["GitHub · michaelholley<br/>Selected repos via the GitHub App<br/>Issues, comments, branches, PRs"]
     LLM["OpenAI · gpt-6.1-sol<br/>Key from .env<br/>Model per repo in repos.yaml"]
     NG["nginx on the VPS<br/>/webhooks/github public<br/>/status behind basic auth"]
 
@@ -41,7 +41,7 @@ flowchart TB
         end
     end
 
-    GH -- "label, PR closed" --> NG
+    GH -- "/mike comment, PR closed" --> NG
     NG -- "127.0.0.1:3000" --> WH
     WH -- start --> H
     H -- "push, open PR" --> GH
@@ -62,7 +62,7 @@ One GitHub App installed on your personal account serves every repo. A repo is w
 
 - Install on the personal account with "Only select repositories", so new repos are opt-in
 - Repository permissions: Contents read/write, Issues read/write, Pull requests read/write, Metadata read
-- Events: `issues` (labeled, unlabeled), `pull_request` (closed)
+- Events: `issue_comment` (created), `pull_request` (closed)
 - One webhook URL and one secret cover all installed repos
 - The app mints a short-lived installation token (valid 1 hour) for each git push and API call, so no long-lived personal token is used
 
@@ -90,12 +90,8 @@ repos:
 
 **Who may trigger**
 
-- The webhook handler accepts a label event only when `sender.id == allowedSenderId`. It compares the numeric id, because the login is `MichaelHolley` and a string match is case-sensitive. Collaborators are not supported in the MVP.
+- The webhook handler accepts a `/mike` comment only when `sender.id == allowedSenderId`. It compares the numeric id, because the login is `MichaelHolley` and a string match is case-sensitive. Collaborators are not supported in the MVP. This also keeps the bot's own comments from triggering anything.
 - Events from repos missing in `repos.yaml` are logged and ignored, even if the app can see them
-
-**Label setup**
-
-- A one-off `npm run setup-labels` creates the `agent:*` labels on every repo listed in `repos.yaml`
 
 ## Git worktree strategy
 
@@ -133,33 +129,34 @@ Each repo gets one bare clone. Each issue gets its own worktree from it, on bran
 
 ## End-to-end workflow
 
-A label starts one durable pipeline per issue. The labels on the issue show its state at all times.
+A `/mike` comment starts one durable pipeline per issue. One status comment by the agent, edited in place, shows its state at all times.
 
-1. You add `agent:ready` to issue #12 in `byok-imagen`.
-2. The webhook handler checks the signature, the sender and the allowlist. It then swaps the label to `agent:working`.
-3. It looks up or creates the conversation for `michaelholley/byok-imagen#12` and starts the `issue.pipeline` task. The `requestId` is the GitHub delivery id, so a redelivered webhook is a no-op.
+1. You comment `/mike` on issue #12 in `byok-imagen`, optionally followed by extra instructions (`/mike use zod for validation`, or more lines below).
+2. The webhook handler checks the signature, the command, the sender and the allowlist. It then sets the status comment to "working".
+3. It looks up or creates the conversation for `michaelholley/byok-imagen#12` and starts the `issue.pipeline` task. The `requestId` is `comment-<id>` of the triggering comment, so a redelivered webhook is a no-op.
 4. **prepare**: create or reuse the worktree, run `setup`.
-5. **implement**: submit the issue title, body and comments to the conversation, then wait until it settles.
+5. **implement**: submit the issue title, body and comments, plus the owner's instructions from the command (clearly labelled, still bound by the system prompt), to the conversation, then wait until it settles.
 6. **verify**: the pipeline itself runs `lint` and `test` in the worktree. Steps that aren't configured are skipped. On failure, the output goes back to the conversation, up to `maxFixAttempts` (default 2) times.
 7. **publish**: commit any leftovers, push `agent/issue-12`, open the PR with `Closes #12` and a summary.
-8. **report**: comment on the issue with the PR link and cost, and swap the label to `agent:pr-open`.
+8. **report**: set the status comment to the PR link and cost.
 
-Any phase that runs out of retries, turns or budget ends in **failed**. The agent comments with the reason and the last test output, and sets `agent:failed`.
+Any phase that runs out of retries, turns or budget ends in **failed**. The status comment then shows the reason and the last test output.
 
-**Labels**
+**Commands** (first non-empty line of a new issue comment; edits, deletes and PR comments are ignored)
 
-| Label | Set by | Meaning |
-| --- | --- | --- |
-| `agent:ready` | You | Start work on this issue |
-| `agent:working` | Agent | Pipeline running |
-| `agent:pr-open` | Agent | PR opened, waiting for your review |
-| `agent:failed` | Agent | Gave up; see the comment. Re-add `agent:ready` to retry |
-| `agent:stop` | You | Abort the run now; the worktree is kept for inspection |
+| Command | Meaning |
+| --- | --- |
+| `/mike [instructions]` | Start or continue work on this issue. Text after the command is passed to the model as instructions from you |
+| `/mike stop` | Abort the run now; the worktree is kept for inspection and the status comment says so |
 
-**Re-adding `agent:ready`**
+**Status comment**
 
-- After `agent:failed` or `agent:stop`, the run continues: same worktree, branch and conversation. A new `issue.pipeline` task starts, keyed by the new delivery id, and the model sees its earlier attempt plus the current issue text.
-- While the issue has an open agent PR (`agent:pr-open`), the label is ignored and logged, and the agent removes it. Feedback on open PRs waits for the later review loop.
+The agent keeps exactly one comment per issue (found by a hidden marker) and edits it as the run moves on: working, PR opened with cost, failed with reason and output, or stopped. The repos get no labels.
+
+**Sending `/mike` again**
+
+- After a failure or `/mike stop`, the run continues: same worktree, branch and conversation. A new `issue.pipeline` task starts, keyed by the new comment id, and the model sees its earlier attempt plus the current issue text and the new instructions.
+- While the issue has an open agent PR, the command is ignored and logged, and the agent replies once with a link to the PR. Feedback on open PRs waits for the later review loop.
 
 **Concurrency**
 
@@ -195,9 +192,9 @@ One harness over one SQLite file holds every repo's conversations. Each issue ha
 **Task `issue.pipeline`**
 
 - Phases: `queued → prepare → implement → verify → publish → report`, plus terminal `failed` or `aborted`
-- `implement` submits to the conversation with `requestId: <deliveryId>:implement`, then waits on it
-- `verify` retries submit with `requestId: <deliveryId>:fix-<attempt>`
-- `abort` (from `agent:stop`) aborts the conversation's work, keeps the worktree and sets the label
+- `implement` submits to the conversation with `requestId: comment-<id>:implement`, then waits on it
+- `verify` retries submit with `requestId: comment-<id>:fix-<attempt>`
+- `abort` (from `/mike stop`) aborts the conversation's work, keeps the worktree and sets the status comment to "stopped"
 
 **Document `app.issueState` (one per conversation)**
 
@@ -211,7 +208,7 @@ One harness over one SQLite file holds every repo's conversations. Each issue ha
 - **Starting the pipeline.** The webhook handler creates the task with `conversation.commit((tx) => tx.createTask(IssuePipeline, input, …))` and writes `app.issueState` in the same commit. The task definition is installed through an extension's `tasks`, and pending tasks resume only after that extension is installed again on startup.
 - **Phases rerun from the top after a crash.** Every phase must be idempotent (deterministic names, `requestId` on every submit, check-then-act for GitHub). Waiting on a submission inside a phase is fine. After a restart, the same `requestId` returns the same submission to wait on.
 - **No deadlock on self-submit.** A conversation is busy only while a model run is active. A non-run task owned by the conversation can submit input to it and wait.
-- **Abort.** `agent:stop` calls `harness.abortTask(pipelineTaskId)`, which aborts owned work bottom-up and then runs the task's `abort` handler. The task id is stored in `app.issueState`.
+- **Abort.** `/mike stop` calls `harness.abortTask(pipelineTaskId)`, which aborts owned work bottom-up and then runs the task's `abort` handler. The task id is stored in `app.issueState`.
 - **Turn and cost budgets are not built in.** The `guards` extension enforces them with a `GenerationTask` hook (`afterTools` / `onYield`) that counts turns and reads `docs["pi.usage"]`, and ends the run on a breach.
 - **Side-effect tools.** `push_branch` and `open_pr` are `replay: "safe"`. They read `api.conversationId`, then `app.issueState`, to find the worktree and branch, so they take no arguments. `bash` is not replay-safe, so the model is told it was interrupted.
 - **Crash loops.** Parking (`settings.restartLimit`, `task_parked`, `retryTask`) is not in 1.3.0, only on `main`. Until then, every phase catches its own errors and routes them to `failed`, but a phase that kills the process on every attempt loops forever.
@@ -236,7 +233,6 @@ mike-factory/
     agent/extensions/       # repo-context, github, guards
     agent/tasks/issuePipeline.ts
     agent/docs.ts           # app.issueIndex, app.issueState
-    scripts/setup-labels.ts
   Dockerfile
   compose.yaml
 ```
@@ -293,9 +289,9 @@ The agent has a shell, so the container is the sandbox. For the MVP, the rules k
 
 There are two milestones. M1 delivers a restart-safe agent on one repo. M2 extends it to your whole account.
 
-### M1: One repo, label to PR, safe to restart
+### M1: One repo, comment to PR, safe to restart
 
-**Goal:** a label on a test repo yields exactly one PR, even if the container restarts mid-run.
+**Goal:** a `/mike` comment on a test repo yields exactly one PR, even if the container restarts mid-run.
 
 **Scope**
 
@@ -304,9 +300,9 @@ There are two milestones. M1 delivers a restart-safe agent on one repo. M2 exten
 - A bare clone and one worktree per issue. Runs are serial.
 - Harness on SQLite with `CodingTools`, `repo-context` and the bash guard hook
 - `issue.pipeline` with the phases prepare, implement, verify, publish and report, plus the `app.issueState` document
-- Idempotent side effects: the delivery id is the `requestId`; `push_branch` and `open_pr` return existing results; worktree creation reuses existing paths
-- Labels `agent:working`, `agent:pr-open`, `agent:failed` and `agent:stop`, `maxFixAttempts` (default 2) after a failed verify, and a cost budget
-- Sender gate on `allowedSenderId`, and re-adding `agent:ready` continues the run (ignored while a PR is open)
+- Idempotent side effects: the triggering comment id is the `requestId`; `push_branch` and `open_pr` return existing results; worktree creation reuses existing paths
+- `/mike` and `/mike stop` commands, one status comment per issue (no labels), `maxFixAttempts` (default 2) after a failed verify, and a cost budget
+- Sender gate on `allowedSenderId`, and a new `/mike` continues the run (ignored with a reply while a PR is open)
 - The installation token lives only inside the push and PR tools
 
 **How it is tested**
@@ -319,12 +315,12 @@ There are two milestones. M1 delivers a restart-safe agent on one repo. M2 exten
 
 **Exit criteria**
 
-- A real issue labelled `agent:ready` gets a PR with passing tests and `Closes #n`
+- A real issue with a `/mike` comment gets a PR with passing tests and `Closes #n`
 - All 5 `CRASH_AT` tests pass
 - A redelivered webhook starts nothing new
-- A failing verify ends in `agent:failed` with the output in the comment
+- A failing verify ends as failed with the output in the status comment
 - A push to `main` publishes a new image to Docker Hub
-- `agent:stop` aborts the run, and `git push origin main` from bash is blocked
+- `/mike stop` aborts the run, and `git push origin main` from bash is blocked
 
 **Removes the risk of:** unknowns in the Pi Durable API, in GitHub App authentication, and in pushing from a worktree, plus duplicate PRs after restarts.
 
@@ -336,7 +332,7 @@ There are two milestones. M1 delivers a restart-safe agent on one repo. M2 exten
 
 - `repos.yaml` with per-repo setup, test, lint, model and budget, plus the allowlist and sender gate
 - A per-repo mutex for operations on the shared `.git`, worktrees running in parallel, and a global concurrency limit with a queue
-- The `setup-labels` script, and toolchains for every listed repo in the image
+- Toolchains for every listed repo in the image
 - Cleanup when a PR closes, plus a nightly sweep and `git worktree prune`
 - A `/status` endpoint that reads from `app.issueState`
 
@@ -352,15 +348,15 @@ There are two milestones. M1 delivers a restart-safe agent on one repo. M2 exten
 
 The MVP is done when every box below is ticked on two of your real repos.
 
-- [ ] Label `agent:ready` in repo A produces a PR on `agent/issue-<n>` with `Closes #n`, green tests and a cost comment
+- [ ] `/mike` on an issue in repo A produces a PR on `agent/issue-<n>` with `Closes #n`, green tests and a cost comment
 - [ ] The same in repo B at the same time
 - [ ] Two issues in repo A run at once. Each PR contains only its own changes.
 - [ ] `docker compose restart` during implement: the run resumes and produces exactly one PR
 - [ ] Redelivering the webhook from GitHub's delivery log does not start a second run
-- [ ] A label from any account other than yours, or a repo missing from `repos.yaml`, is ignored and logged
-- [ ] `agent:ready` on an issue with an open agent PR is ignored and removed
-- [ ] `agent:stop` aborts within 30 seconds and keeps the worktree
-- [ ] A failing verify after `maxFixAttempts` (2) ends in `agent:failed` with the output in the comment
+- [ ] A `/mike` comment from any account other than yours (including the bot), or in a repo missing from `repos.yaml`, is ignored and logged
+- [ ] `/mike` on an issue with an open agent PR is ignored, with one reply linking the PR
+- [ ] `/mike stop` aborts within 30 seconds and keeps the worktree
+- [ ] A failing verify after `maxFixAttempts` (2) ends as failed with the output in the status comment
 - [ ] Merging or closing the PR removes the worktree and the local branch
 - [ ] A bash command `git push origin main` from the agent is blocked by the guard hook
 
@@ -386,9 +382,10 @@ The MVP is done when every box below is ticked on two of your real repos.
 - First repo: `byok-imagen`. Verify runs `pnpm check` and `pnpm lint`, because it has no test suite.
 - Model: OpenAI `gpt-6.1-sol` (checked in pi-ai 1.3.0), `maxCostUsd: 3`, `maxFixAttempts: 2`
 - Host: the VPS, as a Portainer stack behind nginx. The image comes from Docker Hub through CD on push to `main`.
-- PRs open as normal PRs, not drafts. `agent:pr-open` already means "waiting for review".
+- PRs open as normal PRs, not drafts. An open PR already means "waiting for review".
 - Trigger gate: your numeric GitHub user id only
-- Re-adding `agent:ready` continues the same worktree and conversation, and is ignored while a PR is open
+- A new `/mike` continues the same worktree and conversation, and is ignored while a PR is open
+- Trigger (Oct 20, 2026): moved from the `agent:ready` / `agent:stop` labels to a `/mike` issue comment (`/mike stop` to abort). One action instead of two, it carries extra instructions, and it paves the way for comment steering. `/mike` rather than `@mike`, because `@mike` is a real GitHub user. Status labels were dropped as well (Oct 20, 2026) to keep repos free of extra labels; one status comment per issue, edited in place, shows the state instead.
 - Local dev runs as plain node with the faux model only
 
 **Open questions**

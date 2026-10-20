@@ -24,7 +24,7 @@ export type IssueStateValue = {
   costUsd: number;
   lastError: string | null;
   pipelineTaskId: number | null;
-  deliveryId: string | null;
+  requestId: string | null;
   setupDone: boolean;
 };
 
@@ -45,7 +45,7 @@ export const IssueState = defineDoc<IssueStateValue>({
     costUsd: 0,
     lastError: null,
     pipelineTaskId: null,
-    deliveryId: null,
+    requestId: null,
     setupDone: false,
   }),
   checkpointWhen: () => false,

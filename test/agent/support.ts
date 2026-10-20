@@ -52,8 +52,6 @@ function persisted(github: FakeGitHub, file: string): FakeGitHub {
 const FAKE_CLIENT_METHODS: Record<keyof GitHubClient, true> = {
   getIssue: true,
   listIssueComments: true,
-  setAgentLabel: true,
-  clearAgentLabels: true,
   upsertComment: true,
   findOpenPr: true,
   createPr: true,
@@ -124,8 +122,8 @@ export function autopilot(faux: FauxProviderHandle, decide?: (messages: Message[
   faux.setResponses([respond]);
 }
 
-export const startAction = (issue: number, deliveryId: string) => ({ kind: "start", repo: REPO, issue, deliveryId }) as const;
-export const stopAction = (issue: number, deliveryId: string) => ({ kind: "stop", repo: REPO, issue, deliveryId }) as const;
+export const startAction = (issue: number, requestId: string, instructions = "") => ({ kind: "start", repo: REPO, issue, requestId, instructions }) as const;
+export const stopAction = (issue: number, requestId: string) => ({ kind: "stop", repo: REPO, issue, requestId }) as const;
 
 export async function conversationIdOf(harness: Harness, issue: number) {
   const index = await harness.snapshot(IssueIndex, issueKey(OWNER, REPO, issue), ctx);

@@ -47,7 +47,6 @@ describe("restart safety", () => {
     expect(github.prs[0]).toMatchObject({ head: "agent/issue-1", state: "open" });
     expect(github.prs[0]!.body).toContain("Closes #1");
     expect(github.calls.createPr).toBe(1);
-    expect(github.issues[0]!.labels).toEqual(["agent:pr-open"]);
     expect(github.comments).toHaveLength(1);
     expect(github.comments[0]!.body).toContain(github.prs[0]!.url);
     expect(git(join(dir, "remote.git"), "show", "agent/issue-1:hello.txt")).toBe("hello");

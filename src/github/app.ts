@@ -1,10 +1,9 @@
 import { App } from "@octokit/app";
-import { AGENT_LABELS, type AgentLabel, type GitHubClient, type GitIdentity, type IssueComment, type IssueData } from "../contracts.ts";
+import { type GitHubClient, type GitIdentity, type IssueComment, type IssueData } from "../contracts.ts";
 
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60_000;
 const PER_PAGE = 100;
 
-const isNotFound = (error: unknown) => (error as { status?: number } | null)?.status === 404;
 const labelName = (label: string | { name?: string }) => (typeof label === "string" ? label : (label.name ?? ""));
 const markerComment = (marker: string) => `<!-- ${marker} -->`;
 
@@ -39,16 +38,6 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
     }
   };
 
-  const currentAgentLabels = async (repo: string, issue: number) => {
-    const octokit = await octokitFor(repo);
-    const labels = await listAll((page) =>
-      octokit
-        .request("GET /repos/{owner}/{repo}/issues/{issue_number}/labels", { owner, repo, issue_number: issue, per_page: PER_PAGE, page })
-        .then((res) => res.data),
-    );
-    return labels.map((label) => label.name).filter((name): name is AgentLabel => AGENT_LABELS.includes(name as AgentLabel));
-  };
-
   const rawComments = async (repo: string, issue: number) => {
     const octokit = await octokitFor(repo);
     return listAll((page) =>
@@ -56,17 +45,6 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
         .request("GET /repos/{owner}/{repo}/issues/{issue_number}/comments", { owner, repo, issue_number: issue, per_page: PER_PAGE, page })
         .then((res) => res.data),
     );
-  };
-
-  const removeLabels = async (repo: string, issue: number, names: string[]) => {
-    const octokit = await octokitFor(repo);
-    for (const name of names) {
-      try {
-        await octokit.request("DELETE /repos/{owner}/{repo}/issues/{issue_number}/labels/{name}", { owner, repo, issue_number: issue, name });
-      } catch (error) {
-        if (!isNotFound(error)) throw error;
-      }
-    }
   };
 
   return {
@@ -85,17 +63,6 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
     async listIssueComments(repo, issue): Promise<IssueComment[]> {
       const comments = await rawComments(repo, issue);
       return comments.map((comment) => ({ author: comment.user?.login ?? "", body: comment.body ?? "", createdAt: comment.created_at }));
-    },
-
-    async setAgentLabel(repo, issue, label) {
-      const others = (await currentAgentLabels(repo, issue)).filter((name) => name !== label);
-      await removeLabels(repo, issue, others);
-      const octokit = await octokitFor(repo);
-      await octokit.request("POST /repos/{owner}/{repo}/issues/{issue_number}/labels", { owner, repo, issue_number: issue, labels: [label] });
-    },
-
-    async clearAgentLabels(repo, issue) {
-      await removeLabels(repo, issue, await currentAgentLabels(repo, issue));
     },
 
     async upsertComment(repo, issue, marker, body) {

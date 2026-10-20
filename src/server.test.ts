@@ -26,8 +26,8 @@ function setup() {
   const app = createServer({ config, service, webhookSecret: secret, log });
   const post = (senderId: number, signature?: string) => {
     const body = JSON.stringify({
-      action: "labeled",
-      label: { name: "agent:ready" },
+      action: "created",
+      comment: { id: 5, body: "/mike" },
       issue: { number: 12 },
       repository: { name: "byok-imagen", owner: { login: "michaelholley" } },
       sender: { id: senderId },
@@ -36,7 +36,7 @@ function setup() {
       method: "POST",
       body,
       headers: {
-        "x-github-event": "issues",
+        "x-github-event": "issue_comment",
         "x-github-delivery": "delivery-1",
         "x-hub-signature-256": signature ?? `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`,
       },
@@ -49,7 +49,7 @@ describe("webhook server", () => {
   it("starts the issue for a valid signed event", async () => {
     const { post, service } = setup();
     expect((await post(42)).status).toBe(202);
-    expect(service.start).toHaveBeenCalledWith({ kind: "start", repo: "byok-imagen", issue: 12, deliveryId: "delivery-1" });
+    expect(service.start).toHaveBeenCalledWith({ kind: "start", repo: "byok-imagen", issue: 12, requestId: "comment-5", instructions: "" });
   });
 
   it("acknowledges but ignores other senders", async () => {
