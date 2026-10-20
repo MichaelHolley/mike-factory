@@ -26,9 +26,10 @@ The MVP turns an `agent:ready` label on any allowlisted repo under the `michaelh
 ```mermaid
 flowchart TB
     GH["GitHub · michaelholley<br/>Selected repos via the GitHub App<br/>Issues, labels, branches, PRs"]
-    LLM["Model provider<br/>LLM API, key from .env<br/>Model per repo in repos.yaml"]
+    LLM["OpenAI · gpt-6.1-sol<br/>Key from .env<br/>Model per repo in repos.yaml"]
+    NG["nginx on the VPS<br/>/webhooks/github public<br/>/status behind basic auth"]
 
-    subgraph C["Docker container · 1 replica"]
+    subgraph C["Docker container · 1 replica · Portainer stack"]
         WH["Webhook server<br/>Checks signature<br/>Sender + repos.yaml gate"]
         H["Pi Durable harness<br/>1 conversation per issue<br/>issue.pipeline task"]
         WM["Worktree manager<br/>Add, reuse, remove<br/>One lock per repo"]
@@ -40,7 +41,8 @@ flowchart TB
         end
     end
 
-    GH -- "label, PR closed" --> WH
+    GH -- "label, PR closed" --> NG
+    NG -- "127.0.0.1:3000" --> WH
     WH -- start --> H
     H -- "push, open PR" --> GH
     H -- "model calls" --> LLM
@@ -50,7 +52,7 @@ flowchart TB
     WM -- git --> WT
 ```
 
-GitHub events enter through the webhook server. The harness runs one conversation per issue inside that issue's worktree. Everything that must survive a restart lives on the `/data` volume.
+GitHub events reach the webhook server through nginx on the VPS. The harness runs one conversation per issue inside that issue's worktree. Everything that must survive a restart lives on the `/data` volume.
 
 ## Multi-repo support for michaelholley
 
@@ -70,25 +72,25 @@ Each repo declares how to build and test it. The agent never guesses the test co
 
 ```yaml
 owner: michaelholley
+allowedSenderId: <your numeric GitHub user id>
 defaults:
-  model: { provider: anthropic, modelId: <your model> }
+  model: { provider: openai, modelId: gpt-6.1-sol }
   maxTurns: 60
   maxCostUsd: 3
+  maxFixAttempts: 2
 repos:
-  - name: api-service
-    defaultBranch: main
-    setup: npm ci
-    test: npm test
-    lint: npm run lint
-  - name: website
+  - name: byok-imagen
     defaultBranch: main
     setup: pnpm install --frozen-lockfile
-    test: pnpm test
+    test: pnpm check
+    lint: pnpm lint
 ```
+
+`test` and `lint` are both optional. byok-imagen has no test suite, so `pnpm check` (svelte-check) takes the `test` slot.
 
 **Who may trigger**
 
-- The webhook handler accepts a label event only when `sender.login == michaelholley`, or when the sender has write access to that repo
+- The webhook handler accepts a label event only when `sender.id == allowedSenderId`. It compares the numeric id, because the login is `MichaelHolley` and a string match is case-sensitive. Collaborators are not supported in the MVP.
 - Events from repos missing in `repos.yaml` are logged and ignored, even if the app can see them
 
 **Label setup**
@@ -103,13 +105,13 @@ Each repo gets one bare clone. Each issue gets its own worktree from it, on bran
 /data/
   agent.sqlite                      # Pi Durable storage
   repos/
-    api-service.git/                # bare clone, shared object store
-    website.git/
+    byok-imagen.git/                # bare clone, shared object store
+    <second-repo>.git/
   worktrees/
-    api-service/
+    byok-imagen/
       issue-12/                     # branch agent/issue-12
       issue-15/                     # branch agent/issue-15
-    website/
+    <second-repo>/
       issue-3/
 ```
 
@@ -125,20 +127,20 @@ Each repo gets one bare clone. Each issue gets its own worktree from it, on bran
 - **One lock per repo.** All git commands that change the shared `.git` (fetch, worktree add, remove, prune) run under an in-process mutex keyed by repo name. A single process owns the storage, so an in-memory lock is enough.
 - **Commits and edits inside a worktree need no lock.** Each worktree has its own index and HEAD.
 - **Deterministic names.** A path and branch derived from `repo` + issue number make every step safe to rerun after a crash.
-- **Clean commits.** Commit author is `pi-agent[bot]`. The agent commits inside its worktree. Pushing is done by a tool, not by bash (see Security).
-- **Dependencies per worktree.** `setup` from `repos.yaml` runs once per new worktree. pnpm or npm cache directories live on the volume so repeat installs are fast.
+- **Clean commits.** The commit author is the App's bot identity, `<app-slug>[bot]` with email `<bot-user-id>+<app-slug>[bot]@users.noreply.github.com`, so GitHub links the commits to the App. The agent commits inside its worktree. Pushing is done by a tool, not by bash (see Security).
+- **Dependencies per worktree.** `setup` from `repos.yaml` runs once per new worktree. The pnpm store lives on the volume, so repeat installs are fast.
 - **Cleanup.** A `pull_request.closed` webhook for an `agent/issue-*` branch removes the worktree. A nightly sweep removes worktrees whose issue is closed and runs `git worktree prune` on each repo.
 
 ## End-to-end workflow
 
 A label starts one durable pipeline per issue. The labels on the issue show its state at all times.
 
-1. You add `agent:ready` to issue #12 in `api-service`.
+1. You add `agent:ready` to issue #12 in `byok-imagen`.
 2. The webhook handler checks the signature, the sender and the allowlist. It then swaps the label to `agent:working`.
-3. It looks up or creates the conversation for `michaelholley/api-service#12` and starts the `issue.pipeline` task. The `requestId` is the GitHub delivery id, so a redelivered webhook is a no-op.
+3. It looks up or creates the conversation for `michaelholley/byok-imagen#12` and starts the `issue.pipeline` task. The `requestId` is the GitHub delivery id, so a redelivered webhook is a no-op.
 4. **prepare**: create or reuse the worktree, run `setup`.
 5. **implement**: submit the issue title, body and comments to the conversation, then wait until it settles.
-6. **verify**: the pipeline itself runs `lint` and `test` in the worktree. On failure, the output goes back to the conversation, at most 2 retries.
+6. **verify**: the pipeline itself runs `lint` and `test` in the worktree. Steps that aren't configured are skipped. On failure, the output goes back to the conversation, up to `maxFixAttempts` (default 2) times.
 7. **publish**: commit any leftovers, push `agent/issue-12`, open the PR with `Closes #12` and a summary.
 8. **report**: comment on the issue with the PR link and cost, and swap the label to `agent:pr-open`.
 
@@ -153,6 +155,11 @@ Any phase that runs out of retries, turns or budget ends in **failed**. The agen
 | `agent:pr-open` | Agent | PR opened, waiting for your review |
 | `agent:failed` | Agent | Gave up; see the comment. Re-add `agent:ready` to retry |
 | `agent:stop` | You | Abort the run now; the worktree is kept for inspection |
+
+**Re-adding `agent:ready`**
+
+- After `agent:failed` or `agent:stop`, the run continues: same worktree, branch and conversation. A new `issue.pipeline` task starts, keyed by the new delivery id, and the model sees its earlier attempt plus the current issue text.
+- While the issue has an open agent PR (`agent:pr-open`), the label is ignored and logged, and the agent removes it. Feedback on open PRs waits for the later review loop.
 
 **Concurrency**
 
@@ -213,10 +220,11 @@ One harness over one SQLite file holds every repo's conversations. Each issue ha
 
 ## Project structure and Docker
 
-A single TypeScript service in a single container with a single volume. Webhooks come in through a tunnel, so no ports have to be opened on your network.
+A single TypeScript service in a single container with a single volume. The code lives at the root of the `mike-factory` repo and uses pnpm and vitest. It runs on the VPS as a Portainer stack behind nginx.
 
 ```
-pi-issue-agent/
+mike-factory/
+  .github/workflows/docker.yml  # build and push to Docker Hub
   config/repos.yaml
   src/
     main.ts                 # open harness, resume, start server
@@ -233,23 +241,40 @@ pi-issue-agent/
   compose.yaml
 ```
 
-**Dependencies:** `@earendil-works/pi-durable`, `@earendil-works/pi-ai` and `@earendil-works/chord`, pinned to exactly `1.3.0`. Also `@octokit/app`, `@octokit/webhooks`, `hono` (or Fastify) and `yaml`.
+**Dependencies:** `@earendil-works/pi-durable`, `@earendil-works/pi-ai` and `@earendil-works/chord`, pinned to exactly `1.3.0`. Also `@octokit/app`, `@octokit/webhooks`, `hono` (or Fastify) and `yaml`. Dev: `vitest`.
 
 **Dockerfile essentials**
 
-- Base `node:22-bookworm-slim`, plus `git`, `ca-certificates` and the toolchains your repos need for tests
+- Base `node:22-bookworm-slim`, plus `git`, `ca-certificates`, pnpm through corepack, and any other toolchains your repos need for tests
 - Runs as a non-root user `agent`, with `WORKDIR /app` and the volume at `/data`
-- `git config --global user.name "pi-agent[bot]"` and a matching noreply email
+- At startup, `main.ts` looks up the App's bot user and sets the global git `user.name` and `user.email` to its identity
 
 **compose.yaml**
 
-- Service `agent`: `restart: unless-stopped`, `volumes: ./data:/data`, `env_file: .env`, `replicas: 1` (one process per storage)
-- Service `tunnel` (optional): `cloudflared` or `smee-client` forwarding to `agent:3000/webhooks/github`
+- Deployed as a Portainer stack on the VPS, using the image `<dockerhub-user>/mike-factory:latest`
+- Service `agent`: `restart: unless-stopped`, `ports: "127.0.0.1:3000:3000"`, `volumes: ./data:/data`, `env_file: .env`, `replicas: 1` (one process per storage)
+
+**nginx (on the VPS host)**
+
+- `location /webhooks/github` proxies to `127.0.0.1:3000` and is public. The webhook signature is the auth.
+- `location /status` proxies to `127.0.0.1:3000` behind basic auth
+- Everything else returns 404
+
+**CD: `.github/workflows/docker.yml`**
+
+- Runs on every push to `main`, builds `linux/amd64`, and pushes `<dockerhub-user>/mike-factory:latest` and `:sha-<short>` to Docker Hub
+- Uses the repo secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`
+- Deploying stays manual: pull and recreate the stack in Portainer. Pin a `sha-` tag to roll back.
+
+**Local development**
+
+- Plain node on your Mac (`pnpm dev`, `pnpm test`), without Docker
+- Only the scripted `fauxProvider` runs locally, so no real model gets a shell on your Mac. Real-model runs happen only in the container on the VPS.
 
 **.env**
 
 - `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY` (or a mounted file), `GITHUB_WEBHOOK_SECRET`
-- `ANTHROPIC_API_KEY` (or another provider's key), `MAX_CONCURRENT=3`
+- `OPENAI_API_KEY`, `MAX_CONCURRENT=3`
 
 ## Security and guardrails
 
@@ -260,9 +285,9 @@ The agent has a shell, so the container is the sandbox. For the MVP, the rules k
 - **Push only the issue's branch.** `push_branch` takes no arguments. It pushes `agent/issue-<n>` from the current conversation's worktree and refuses any other ref.
 - **Bash guard hook.** It blocks `git push`, `git remote`, `gh`, `curl` or `wget` to `api.github.com`, and paths outside `/data/worktrees/<repo>/issue-<n>`.
 - **Branch protection.** Turn on "require a pull request" for `main` in each repo, as a second line of defence.
-- **Issue text is data.** The system prompt says so. Only you, or users with write access, can trigger a run (see Multi-repo).
+- **Issue text is data.** The system prompt says so. Only your GitHub user id can trigger a run (see Multi-repo).
 - **Budgets.** `maxTurns` and `maxCostUsd` per issue, from `repos.yaml`. Breaching either ends the run in `failed`.
-- **Dedicated host.** Run the container on a machine or VPS that holds no other secrets. Per-issue sandbox containers are a later step.
+- **Dedicated host.** The container runs on the VPS, which should hold no other secrets. During local development only the faux model runs. Per-issue sandbox containers are a later step.
 
 ## Milestones
 
@@ -274,13 +299,14 @@ There are two milestones. M1 delivers a restart-safe agent on one repo. M2 exten
 
 **Scope**
 
-- GitHub App under `michaelholley`, installed on one test repo. The webhook reaches the container through smee or cloudflared.
-- Docker image, compose file and `/data` volume from day one
+- GitHub App under `michaelholley`, installed on `byok-imagen`. The webhook reaches the container through nginx on the VPS.
+- Docker image, compose file and `/data` volume from day one, plus the Docker Hub CD workflow and the Portainer stack
 - A bare clone and one worktree per issue. Runs are serial.
 - Harness on SQLite with `CodingTools`, `repo-context` and the bash guard hook
 - `issue.pipeline` with the phases prepare, implement, verify, publish and report, plus the `app.issueState` document
 - Idempotent side effects: the delivery id is the `requestId`; `push_branch` and `open_pr` return existing results; worktree creation reuses existing paths
-- Labels `agent:working`, `agent:pr-open`, `agent:failed` and `agent:stop`, one fix attempt after failing tests, and a cost budget
+- Labels `agent:working`, `agent:pr-open`, `agent:failed` and `agent:stop`, `maxFixAttempts` (default 2) after a failed verify, and a cost budget
+- Sender gate on `allowedSenderId`, and re-adding `agent:ready` continues the run (ignored while a PR is open)
 - The installation token lives only inside the push and PR tools
 
 **How it is tested**
@@ -289,14 +315,15 @@ There are two milestones. M1 delivers a restart-safe agent on one repo. M2 exten
 - A scripted stub model makes pipeline runs fast and repeatable
 - Each side-effect tool, called twice, produces one result
 - `CRASH_AT=<phase>` exits the process at that phase boundary. The test restarts the harness and asserts exactly one PR. There is one test per phase, 5 in total.
-- One manual end-to-end run on the real test repo with a trivial issue, plus one redelivery from GitHub's webhook log
+- One manual end-to-end run on the VPS against `byok-imagen` with a trivial issue, plus one redelivery from GitHub's webhook log
 
 **Exit criteria**
 
 - A real issue labelled `agent:ready` gets a PR with passing tests and `Closes #n`
 - All 5 `CRASH_AT` tests pass
 - A redelivered webhook starts nothing new
-- Failing tests end in `agent:failed` with the output in the comment
+- A failing verify ends in `agent:failed` with the output in the comment
+- A push to `main` publishes a new image to Docker Hub
 - `agent:stop` aborts the run, and `git push origin main` from bash is blocked
 
 **Removes the risk of:** unknowns in the Pi Durable API, in GitHub App authentication, and in pushing from a worktree, plus duplicate PRs after restarts.
@@ -330,9 +357,10 @@ The MVP is done when every box below is ticked on two of your real repos.
 - [ ] Two issues in repo A run at once. Each PR contains only its own changes.
 - [ ] `docker compose restart` during implement: the run resumes and produces exactly one PR
 - [ ] Redelivering the webhook from GitHub's delivery log does not start a second run
-- [ ] A label from a non-collaborator account, or a repo missing from `repos.yaml`, is ignored and logged
+- [ ] A label from any account other than yours, or a repo missing from `repos.yaml`, is ignored and logged
+- [ ] `agent:ready` on an issue with an open agent PR is ignored and removed
 - [ ] `agent:stop` aborts within 30 seconds and keeps the worktree
-- [ ] A failing test suite after 2 retries ends in `agent:failed` with the test output in the comment
+- [ ] A failing verify after `maxFixAttempts` (2) ends in `agent:failed` with the output in the comment
 - [ ] Merging or closing the PR removes the worktree and the local branch
 - [ ] A bash command `git push origin main` from the agent is blocked by the guard hook
 
@@ -342,7 +370,8 @@ The MVP is done when every box below is ticked on two of your real repos.
 
 - Steering from issue or PR comments (`whenBusy: "steer"`), and a review-feedback loop on open PRs
 - One sandbox container or VM per issue through a custom execution environment
-- Repos outside `michaelholley` (orgs), and Postgres storage or sharding
+- Repos outside `michaelholley` (orgs), collaborators as triggers, and Postgres storage or sharding
+- Automatic deploys from CD to Portainer
 - A web UI. `/status` and the issue comments cover the MVP.
 
 **Risks**
@@ -352,12 +381,19 @@ The MVP is done when every box below is ticked on two of your real repos.
 - Disk use grows with dependencies per worktree. Cleanup and a shared package cache keep it in check.
 - Model output quality varies on vague issues. Good issue templates help more than prompt tuning.
 
+**Decisions (interview, Oct 20, 2026)**
+
+- First repo: `byok-imagen`. Verify runs `pnpm check` and `pnpm lint`, because it has no test suite.
+- Model: OpenAI `gpt-6.1-sol` (checked in pi-ai 1.3.0), `maxCostUsd: 3`, `maxFixAttempts: 2`
+- Host: the VPS, as a Portainer stack behind nginx. The image comes from Docker Hub through CD on push to `main`.
+- PRs open as normal PRs, not drafts. `agent:pr-open` already means "waiting for review".
+- Trigger gate: your numeric GitHub user id only
+- Re-adding `agent:ready` continues the same worktree and conversation, and is ignored while a PR is open
+- Local dev runs as plain node with the faux model only
+
 **Open questions**
 
-- [ ] Which repos go into `repos.yaml` first?
-- [ ] Which model provider and model, and what budget per issue?
-- [ ] Where does it run: home server or a VPS? This decides the tunnel choice.
-- [ ] Should PRs open as drafts until you look at them?
+- [ ] Which second repo is used for M2 and the acceptance checklist?
 
 ## Sources
 
