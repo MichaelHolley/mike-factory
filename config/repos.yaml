@@ -1,0 +1,13 @@
+owner: michaelholley
+allowedSenderId: 47337897
+defaults:
+  model: { provider: openai, modelId: gpt-6.1-sol }
+  maxTurns: 60
+  maxCostUsd: 3
+  maxFixAttempts: 2
+repos:
+  - name: byok-imagen
+    defaultBranch: main
+    setup: pnpm install --frozen-lockfile
+    test: pnpm check
+    lint: pnpm lint

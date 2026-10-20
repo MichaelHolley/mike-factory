@@ -1,0 +1,113 @@
+import { execFile } from "node:child_process";
+import { access, mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { promisify } from "node:util";
+import type { RepoConfig } from "../config.ts";
+import { branchName, type GitIdentity, type Worktrees } from "../contracts.ts";
+
+const execFileAsync = promisify(execFile);
+
+const exists = (path: string) => access(path).then(() => true, () => false);
+
+export function createWorktrees(opts: {
+  dataDir: string;
+  owner: string;
+  remoteUrl?: (repo: string) => string;
+  token?: (repo: string) => Promise<string>;
+  identity?: () => Promise<GitIdentity>;
+}): Worktrees {
+  const { dataDir, owner } = opts;
+  const remoteUrl = opts.remoteUrl ?? ((repo) => `https://github.com/${owner}/${repo}.git`);
+  const locks = new Map<string, Promise<unknown>>();
+
+  const barePath = (repo: string) => join(dataDir, "repos", `${repo}.git`);
+  const worktreePath = (repo: string, issue: number) => join(dataDir, "worktrees", repo, `issue-${issue}`);
+
+  const git = async (cwd: string, args: string[], env: Record<string, string> = {}) => {
+    const { stdout } = await execFileAsync("git", args, { cwd, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...env } });
+    return stdout.trim();
+  };
+
+  const authEnv = async (repo: string): Promise<Record<string, string>> => {
+    if (!opts.token) return {};
+    const basic = Buffer.from(`x-access-token:${await opts.token(repo)}`).toString("base64");
+    return {
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+      GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${basic}`,
+    };
+  };
+
+  const withLock = <T>(repo: string, task: () => Promise<T>): Promise<T> => {
+    const run = (locks.get(repo) ?? Promise.resolve()).then(task);
+    locks.set(repo, run.catch(() => undefined));
+    return run;
+  };
+
+  const fetchOrigin = async (repo: string) => git(barePath(repo), ["fetch", "--prune", "origin"], await authEnv(repo));
+
+  const ensureRepo = async (repo: string) => {
+    const bare = barePath(repo);
+    if (!(await exists(join(bare, "HEAD")))) {
+      await mkdir(dirname(bare), { recursive: true });
+      await git(dataDir, ["clone", "--bare", remoteUrl(repo), bare], await authEnv(repo));
+      await git(bare, ["config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"]);
+    }
+  };
+
+  const branchExists = (repo: string, branch: string) =>
+    git(barePath(repo), ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]).then(() => true, () => false);
+
+  return {
+    worktreePath,
+
+    prepare: (repo: RepoConfig, issue) =>
+      withLock(repo.name, async () => {
+        const path = worktreePath(repo.name, issue);
+        const branch = branchName(issue);
+        await ensureRepo(repo.name);
+        if (await exists(path)) return { path, branch, created: false };
+
+        await fetchOrigin(repo.name);
+        await mkdir(dirname(path), { recursive: true });
+        await git(barePath(repo.name), ["worktree", "prune"]);
+        if (await branchExists(repo.name, branch)) {
+          await git(barePath(repo.name), ["worktree", "add", path, branch]);
+        } else {
+          await git(barePath(repo.name), ["worktree", "add", "-b", branch, path, `origin/${repo.defaultBranch}`]);
+        }
+        return { path, branch, created: true };
+      }),
+
+    async commitAll(repo, issue, message) {
+      const cwd = worktreePath(repo, issue);
+      await git(cwd, ["add", "-A"]);
+      const staged = await git(cwd, ["diff", "--cached", "--name-only"]);
+      if (!staged) return false;
+      const identity = await opts.identity?.();
+      const identityArgs = identity ? ["-c", `user.name=${identity.name}`, "-c", `user.email=${identity.email}`] : [];
+      await git(cwd, [...identityArgs, "commit", "-m", message]);
+      return true;
+    },
+
+    async push(repo, issue) {
+      const ref = `refs/heads/${branchName(issue)}`;
+      await git(worktreePath(repo, issue), ["push", "origin", `${ref}:${ref}`], await authEnv(repo));
+    },
+
+    async commitsAhead(repo, issue) {
+      const count = await git(worktreePath(repo.name, issue), ["rev-list", "--count", `origin/${repo.defaultBranch}..${branchName(issue)}`]);
+      return Number(count);
+    },
+
+    remove: (repo, issue) =>
+      withLock(repo, async () => {
+        const bare = barePath(repo);
+        if (!(await exists(join(bare, "HEAD")))) return;
+        const path = worktreePath(repo, issue);
+        if (await exists(path)) await git(bare, ["worktree", "remove", "--force", path]);
+        await git(bare, ["worktree", "prune"]);
+        if (await branchExists(repo, branchName(issue))) await git(bare, ["branch", "-D", branchName(issue)]);
+      }),
+  };
+}

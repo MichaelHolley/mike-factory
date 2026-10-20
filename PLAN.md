@@ -214,7 +214,7 @@ One harness over one SQLite file holds every repo's conversations. Each issue ha
 - **Abort.** `agent:stop` calls `harness.abortTask(pipelineTaskId)`, which aborts owned work bottom-up and then runs the task's `abort` handler. The task id is stored in `app.issueState`.
 - **Turn and cost budgets are not built in.** The `guards` extension enforces them with a `GenerationTask` hook (`afterTools` / `onYield`) that counts turns and reads `docs["pi.usage"]`, and ends the run on a breach.
 - **Side-effect tools.** `push_branch` and `open_pr` are `replay: "safe"`. They read `api.conversationId`, then `app.issueState`, to find the worktree and branch, so they take no arguments. `bash` is not replay-safe, so the model is told it was interrupted.
-- **Crash loops.** A task cut off by 5 crashes in a row is parked (`settings.restartLimit`, reason `restart_limit`). `onReport` with `task_parked` sets `agent:failed`, and `harness.retryTask(id)` re-runs it.
+- **Crash loops.** Parking (`settings.restartLimit`, `task_parked`, `retryTask`) is not in 1.3.0, only on `main`. Until then, every phase catches its own errors and routes them to `failed`, but a phase that kills the process on every attempt loops forever.
 - **Failures.** A storage error closes the harness. Watch `harness.closed` and exit the process, and Docker restarts it.
 - **Tests.** Use `fauxProvider()` from `@earendil-works/pi-ai/providers/faux` as the scripted stub model, with `MemoryStorage` for unit tests and a temp SQLite file for the `CRASH_AT` tests. `test/examples/26-coding-agent.ts`, `28-reviewer.ts`, `29-sandbox-per-conversation.ts` and `13-recovery.ts` are the closest templates.
 
@@ -247,7 +247,7 @@ mike-factory/
 
 - Base `node:22-bookworm-slim`, plus `git`, `ca-certificates`, pnpm through corepack, and any other toolchains your repos need for tests
 - Runs as a non-root user `agent`, with `WORKDIR /app` and the volume at `/data`
-- At startup, `main.ts` looks up the App's bot user and sets the global git `user.name` and `user.email` to its identity
+- At startup, `main.ts` looks up the App's bot user and sets `GIT_AUTHOR_*` and `GIT_COMMITTER_*` in the process env to its identity (not `git config --global`, so local dev leaves your own git identity alone)
 
 **compose.yaml**
 
