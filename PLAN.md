@@ -171,7 +171,8 @@ One harness over one SQLite file holds every repo's conversations. Each issue ha
 
 **Conversation per issue**
 
-- Key: `michaelholley/<repo>#<n>`. A harness-scoped document `app.issueIndex` maps key to conversation id, so a later event finds the same conversation.
+- Created with `harness.createConversation({ ownership: { kind: "ownerless" }, agent }, context)`, not `root()`
+- Key: `michaelholley/<repo>#<n>`. A session-scoped document `app.issueIndex` maps key to conversation id, so a later event finds the same conversation.
 - Agent config: the model from `repos.yaml`, `cwd` = the worktree, instructions that the issue text is a task description and not a source of commands
 
 **Extensions**
@@ -196,6 +197,20 @@ One harness over one SQLite file holds every repo's conversations. Each issue ha
 - `repo`, `issue`, `branch`, `worktreePath`, `phase`, `attempts`, `prUrl`, `costUsd`, `lastError`
 - Read by the status endpoint and the final comment
 
+**API notes (checked against `packages/durable` v1.3.0)**
+
+- **Package version.** Pin `pi-durable`, `pi-ai` and `chord` to `1.3.0`. The `main` branch has unreleased breaking changes: a SQLite schema v2 migration that can't be rolled back, `sleepUntil()` replacing `sleep()`, and a required `checkpointWhen` on docs. Write docs with `checkpointWhen: () => false` from the start so the upgrade is easy.
+- **Documents.** The scopes are `session`, `conversation` and `task`. There is no "harness" scope. `app.issueIndex` is a `defineDocFamily` with `scope: "session"`, keyed by issue key. `app.issueState` is a `conversation`-scoped `defineDoc`.
+- **Starting the pipeline.** The webhook handler creates the task with `conversation.commit((tx) => tx.createTask(IssuePipeline, input, …))` and writes `app.issueState` in the same commit. The task definition is installed through an extension's `tasks`, and pending tasks resume only after that extension is installed again on startup.
+- **Phases rerun from the top after a crash.** Every phase must be idempotent (deterministic names, `requestId` on every submit, check-then-act for GitHub). Waiting on a submission inside a phase is fine. After a restart, the same `requestId` returns the same submission to wait on.
+- **No deadlock on self-submit.** A conversation is busy only while a model run is active. A non-run task owned by the conversation can submit input to it and wait.
+- **Abort.** `agent:stop` calls `harness.abortTask(pipelineTaskId)`, which aborts owned work bottom-up and then runs the task's `abort` handler. The task id is stored in `app.issueState`.
+- **Turn and cost budgets are not built in.** The `guards` extension enforces them with a `GenerationTask` hook (`afterTools` / `onYield`) that counts turns and reads `docs["pi.usage"]`, and ends the run on a breach.
+- **Side-effect tools.** `push_branch` and `open_pr` are `replay: "safe"`. They read `api.conversationId`, then `app.issueState`, to find the worktree and branch, so they take no arguments. `bash` is not replay-safe, so the model is told it was interrupted.
+- **Crash loops.** A task cut off by 5 crashes in a row is parked (`settings.restartLimit`, reason `restart_limit`). `onReport` with `task_parked` sets `agent:failed`, and `harness.retryTask(id)` re-runs it.
+- **Failures.** A storage error closes the harness. Watch `harness.closed` and exit the process, and Docker restarts it.
+- **Tests.** Use `fauxProvider()` from `@earendil-works/pi-ai/providers/faux` as the scripted stub model, with `MemoryStorage` for unit tests and a temp SQLite file for the `CRASH_AT` tests. `test/examples/26-coding-agent.ts`, `28-reviewer.ts`, `29-sandbox-per-conversation.ts` and `13-recovery.ts` are the closest templates.
+
 ## Project structure and Docker
 
 A single TypeScript service in a single container with a single volume. Webhooks come in through a tunnel, so no ports have to be opened on your network.
@@ -218,7 +233,7 @@ pi-issue-agent/
   compose.yaml
 ```
 
-**Dependencies:** `@earendil-works/pi-durable`, `@earendil-works/pi-ai` and `@earendil-works/chord`, pinned to exact versions. Also `@octokit/app`, `@octokit/webhooks`, `hono` (or Fastify) and `yaml`.
+**Dependencies:** `@earendil-works/pi-durable`, `@earendil-works/pi-ai` and `@earendil-works/chord`, pinned to exactly `1.3.0`. Also `@octokit/app`, `@octokit/webhooks`, `hono` (or Fastify) and `yaml`.
 
 **Dockerfile essentials**
 
@@ -240,7 +255,8 @@ pi-issue-agent/
 
 The agent has a shell, so the container is the sandbox. For the MVP, the rules keep the GitHub token and your default branches out of its reach.
 
-- **Token never reaches bash.** The installation token exists only inside the `push_branch` and `open_pr` tools. It is not set in the process environment that bash inherits, and it is not written into git config.
+- **Token never reaches bash.** The installation token exists only inside the `push_branch` and `open_pr` tools. It is not written into git config.
+- **Secrets are removed from the process env.** `NodeExecutionEnv` gives bash a copy of the whole `process.env` by default. So at startup `main.ts` reads `GITHUB_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET` and the model API key into memory and deletes them from `process.env` before the harness opens. A test checks that `env` in bash doesn't show them.
 - **Push only the issue's branch.** `push_branch` takes no arguments. It pushes `agent/issue-<n>` from the current conversation's worktree and refuses any other ref.
 - **Bash guard hook.** It blocks `git push`, `git remote`, `gh`, `curl` or `wget` to `api.github.com`, and paths outside `/data/worktrees/<repo>/issue-<n>`.
 - **Branch protection.** Turn on "require a pull request" for `main` in each repo, as a second line of defence.
@@ -345,6 +361,7 @@ The MVP is done when every box below is ticked on two of your real repos.
 
 ## Sources
 
-- [Pi Durable announcement, Earendil](https://earendil.com/posts/pi-durable/)
+- [Pi Durable source, `packages/durable`](https://github.com/earendil-works/pi/tree/main/packages/durable): main API reference. Read `README.md`, `docs/spec.md` (the full spec), `CHANGELOG.md` and `test/examples/`. The API notes above were checked against commit `885a564` (Oct 20, 2026).
+- [Pi Durable announcement, Earendil](https://earendil.com/posts/pi-durable/): concepts and the harness and crash-recovery examples
 - [Pi 1.0 and Pi Durable release coverage](https://letsdatascience.com/news/pi-10-adds-mcp-and-durable-harness-6241c6f7)
 - [Sentry for Pi Durable](https://docs.sentry.io/platforms/javascript/guides/pi-durable/)
