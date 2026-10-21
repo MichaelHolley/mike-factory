@@ -11,11 +11,12 @@ import { findRepo, type AppConfig, type RepoConfig } from "../../config.ts";
 import type { GitHubClient, IssueComment, IssueData, Worktrees } from "../../contracts.ts";
 import { IssueState, type IssueStateValue } from "../docs.ts";
 import { budgetBreach, lastAssistantText, spentOf, totalCostUsd } from "../extensions/guards.ts";
-import { createMutex } from "../mutex.ts";
+import { createSlots } from "../slots.ts";
 
 export type PipelineInput = { repo: string; issue: number; requestId: string; instructions: string };
 
 export type PipelineState =
+  | { phase: "queued" }
   | { phase: "prepare" }
   | { phase: "implement" }
   | { phase: "verify"; attempt: number }
@@ -31,6 +32,8 @@ export interface PipelineDeps {
   github: GitHubClient;
   worktrees: Worktrees;
   log?: (msg: string, data?: object) => void;
+  /** Pipelines that may run at once across all repos; the rest wait in `queued`. */
+  maxConcurrent?: number;
   /** Phase at whose start the process exits once per pipeline task, to test restart safety. */
   crashAt?: string;
 }
@@ -45,6 +48,7 @@ const MAX_OUTPUT_CHARS = 20_000;
 const MAX_CHECKPOINT_OUTPUT_CHARS = 8_000;
 const MAX_COMMENT_OUTPUT_CHARS = 4_000;
 const MAX_SUMMARY_CHARS = 3_000;
+export const DEFAULT_MAX_CONCURRENT = 3;
 
 /** One comment per issue, edited in place, shows the run's state instead of labels. */
 export const STATUS_MARKER = "agent-status";
@@ -94,7 +98,7 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 export function createIssuePipeline(deps: PipelineDeps) {
   const { github, worktrees } = deps;
   const log = deps.log ?? (() => {});
-  const serial = createMutex();
+  const slots = createSlots(deps.maxConcurrent ?? DEFAULT_MAX_CONCURRENT);
 
   const repoOf = (name: string): RepoConfig => {
     const repo = findRepo(deps.config, name);
@@ -102,12 +106,17 @@ export function createIssuePipeline(deps: PipelineDeps) {
     return repo;
   };
 
-  const advance = (rt: Rt, context: Context, next: NextTaskState<PipelineState, PipelineResult>, patch: Partial<IssueStateValue>) =>
-    rt.commit(async (tx) => {
+  const advance = async (rt: Rt, context: Context, next: NextTaskState<PipelineState, PipelineResult>, patch: Partial<IssueStateValue>) => {
+    await rt.commit(async (tx) => {
       const doc = (await tx.doc(IssueState, rt.conversationId)) as Record<string, unknown>;
       for (const [key, value] of Object.entries(patch)) doc[key] = value;
       return next;
     }, context);
+    if (next.status === "terminal") {
+      slots.release(rt.taskId);
+      log("pipeline slot released", { taskId: rt.taskId });
+    }
+  };
 
   const go = (rt: Rt, context: Context, checkpoint: PipelineState, patch: Partial<IssueStateValue> = {}) =>
     advance(rt, context, { status: "running", checkpoint }, { phase: checkpoint.phase, ...patch });
@@ -152,24 +161,29 @@ export function createIssuePipeline(deps: PipelineDeps) {
 
   const step =
     <P extends PhaseName>(phase: P, body: (task: Running<P>, rt: Rt, context: Context) => Promise<void>): Handler<P> =>
-    (task, rt, context) =>
-      serial.run(async () => {
-        try {
-          await crashOnce(phase, rt, context);
-          await body(task, rt, context);
-        } catch (error) {
-          if (rt.signal.aborted) throw error;
-          log("pipeline phase failed", { phase, repo: task.input.repo, issue: task.input.issue, error: messageOf(error) });
-          const output = error instanceof PipelineFailure ? error.output : null;
-          await go(rt, context, { phase: "failed", reason: messageOf(error), output }, { lastError: messageOf(error) });
-        }
-      }, rt.signal);
+    async (task, rt, context) => {
+      await slots.acquire(rt.taskId, rt.signal);
+      log("pipeline slot acquired", { taskId: rt.taskId, phase, repo: task.input.repo, issue: task.input.issue });
+      try {
+        await crashOnce(phase, rt, context);
+        await body(task, rt, context);
+      } catch (error) {
+        if (rt.signal.aborted) throw error;
+        log("pipeline phase failed", { phase, repo: task.input.repo, issue: task.input.issue, error: messageOf(error) });
+        const output = error instanceof PipelineFailure ? error.output : null;
+        await go(rt, context, { phase: "failed", reason: messageOf(error), output }, { lastError: messageOf(error) });
+      }
+    };
 
   return defineTask<PipelineInput, PipelineState, PipelineResult, object>({
     name: "issue.pipeline",
     version: 1,
-    initial: () => ({ phase: "prepare" }),
+    initial: () => ({ phase: "queued" }),
     phases: {
+      queued: step("queued", async (_task, rt, context) => {
+        await go(rt, context, { phase: "prepare" });
+      }),
+
       prepare: step("prepare", async (task, rt, context) => {
         const { repo, issue } = task.input;
         const config = repoOf(repo);

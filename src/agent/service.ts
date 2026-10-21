@@ -1,8 +1,8 @@
 import type { Context } from "@earendil-works/chord";
-import type { Harness, TaskId } from "@earendil-works/pi-durable";
+import type { ConversationId, Cursor, Harness, Storage, TaskId } from "@earendil-works/pi-durable";
 import { findRepo } from "../config.ts";
 import { branchName, issueKey, type IssueService } from "../contracts.ts";
-import { asConversationId, IssueIndex, IssueState } from "./docs.ts";
+import { asConversationId, IssueIndex, IssueState, type IssueStateValue } from "./docs.ts";
 import type { AgentDeps } from "./harness.ts";
 import { createMutex } from "./mutex.ts";
 import { STATUS_MARKER, type IssuePipeline } from "./tasks/issuePipeline.ts";
@@ -14,8 +14,10 @@ const INSTRUCTIONS = [
   "Edit files with the tools and commit to the local branch if you like. Never push, never open pull requests, never contact GitHub and never touch paths outside the worktree: the pipeline verifies, pushes and opens the pull request itself.",
 ].join("\n");
 
-export function createIssueService(opts: { harness: Harness; pipeline: IssuePipeline; deps: AgentDeps; context: Context }): IssueService {
-  const { harness, pipeline, deps, context } = opts;
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+export function createIssueService(opts: { harness: Harness; storage: Storage; pipeline: IssuePipeline; deps: AgentDeps; context: Context }): IssueService {
+  const { harness, storage, pipeline, deps, context } = opts;
   const { config, github, worktrees } = deps;
   const log = deps.log ?? (() => {});
   const mutex = createMutex();
@@ -31,6 +33,18 @@ export function createIssueService(opts: { harness: Harness; pipeline: IssuePipe
   const isLive = async (taskId: number) => {
     const task = await harness.getTask(taskId as TaskId, context);
     return task !== undefined && task.state.status !== "terminal";
+  };
+
+  const hasLivePipeline = async (repo: string, issue: number) => {
+    const { state } = await lookup(repo, issue);
+    return state?.pipelineTaskId != null && (await isLive(state.pipelineTaskId));
+  };
+
+  const cleanup = async (repo: string, issue: number) => {
+    const key = issueKey(config.owner, repo, issue);
+    if (await hasLivePipeline(repo, issue)) return log("cleanup skipped: pipeline still running", { key });
+    await worktrees.remove(repo, issue);
+    log("worktree removed", { key });
   };
 
   return {
@@ -73,7 +87,7 @@ export function createIssueService(opts: { harness: Harness; pipeline: IssuePipe
             issue,
             branch: branchName(issue),
             worktreePath,
-            phase: "prepare",
+            phase: "queued",
             attempts: 0,
             lastError: null,
             pipelineTaskId: taskId,
@@ -90,5 +104,36 @@ export function createIssueService(opts: { harness: Harness; pipeline: IssuePipe
         const outcome = await harness.abortTask(state.pipelineTaskId as TaskId, context);
         log("pipeline abort requested", { key, outcome });
       }),
+
+    cleanup: ({ repo, issue }) => mutex.run(() => cleanup(repo, issue)),
+
+    async sweep() {
+      for (const { name: repo } of config.repos) {
+        for (const issue of await worktrees.issues(repo)) {
+          try {
+            if ((await github.getIssue(repo, issue)).state !== "closed") continue;
+            if (await github.findOpenPr(repo, branchName(issue))) continue;
+            await mutex.run(() => cleanup(repo, issue));
+          } catch (error) {
+            log("sweep failed for issue", { key: issueKey(config.owner, repo, issue), error: messageOf(error) });
+          }
+        }
+        await worktrees.prune(repo);
+      }
+    },
+
+    async status() {
+      const states: IssueStateValue[] = [];
+      let cursor: Cursor | undefined;
+      do {
+        const page = await storage.scanConversations({}, 100, cursor, context);
+        for (const { id } of page.items) {
+          const state = await harness.snapshot(IssueState, id as ConversationId, context);
+          if (state?.repo) states.push(state);
+        }
+        cursor = page.next;
+      } while (cursor);
+      return states;
+    },
   };
 }

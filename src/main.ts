@@ -7,12 +7,14 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 import { fauxProvider } from "@earendil-works/pi-ai/providers/faux";
 import { openAgentHarness } from "./agent/harness.ts";
+import { DEFAULT_MAX_CONCURRENT } from "./agent/tasks/issuePipeline.ts";
 import { loadConfig, type AppConfig } from "./config.ts";
 import { createGitHubClient } from "./github/app.ts";
 import { createWorktrees } from "./git/worktrees.ts";
 import { createServer } from "./server.ts";
 import { takeSecrets } from "./secrets.ts";
 
+const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 const log = (msg: string, data: object = {}) => console.log(JSON.stringify({ time: new Date().toISOString(), msg, ...data }));
 
@@ -42,6 +44,8 @@ async function main() {
   const port = Number(process.env.PORT ?? 3000);
   const hostname = process.env.HOST ?? "127.0.0.1";
   const useFaux = process.env.MODEL === "faux";
+  const maxConcurrent = Number(process.env.MAX_CONCURRENT ?? DEFAULT_MAX_CONCURRENT);
+  if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1) throw new Error("MAX_CONCURRENT must be a positive integer");
 
   const secrets = takeSecrets();
 
@@ -61,7 +65,7 @@ async function main() {
   await mkdir(dataDir, { recursive: true });
   const storage = await openNodeSqliteStorage(join(dataDir, "agent.sqlite"));
   const { harness, service } = await openAgentHarness(
-    { storage, models, deps: { config: effectiveConfig, github, worktrees, log }, crashAt: process.env.CRASH_AT },
+    { storage, models, deps: { config: effectiveConfig, github, worktrees, log, maxConcurrent }, crashAt: process.env.CRASH_AT },
     BACKGROUND_CONTEXT,
   );
 
@@ -71,6 +75,10 @@ async function main() {
     log("harness closed unexpectedly", { end: end.reason === "failed" ? String(end.error) : end.reason });
     process.exit(1);
   });
+
+  const sweep = () => service.sweep().catch((error) => log("sweep failed", { error: String(error) }));
+  void sweep();
+  setInterval(sweep, SWEEP_INTERVAL_MS).unref();
 
   const app = createServer({ config: effectiveConfig, service, webhookSecret: secrets.webhookSecret, log });
   const server = serve({ fetch: app.fetch, port, hostname }, (info) =>

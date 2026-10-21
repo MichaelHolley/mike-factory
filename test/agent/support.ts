@@ -17,15 +17,16 @@ import { FakeGitHub, type FakeGitHubState } from "../fakes/github.ts";
 
 export const OWNER = "michaelholley";
 export const REPO = "demo";
+export const OTHER_REPO = "other";
 export const ctx = BACKGROUND_CONTEXT;
 
 export const git = (cwd: string, ...args: string[]) =>
   execFileSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, GIT_AUTHOR_NAME: "seed", GIT_AUTHOR_EMAIL: "s@e.x", GIT_COMMITTER_NAME: "seed", GIT_COMMITTER_EMAIL: "s@e.x" } }).trim();
 
-function seedRemote(dir: string) {
-  const remote = join(dir, "remote.git");
+function seedRemote(dir: string, repo: string) {
+  const remote = join(dir, repo === REPO ? "remote.git" : `${repo}.git`);
   if (existsSync(remote)) return remote;
-  const seed = join(dir, "seed");
+  const seed = join(dir, `seed-${repo}`);
   mkdirSync(seed, { recursive: true });
   git(seed, "init", "--initial-branch=main");
   writeFileSync(join(seed, "README.md"), "# demo\n");
@@ -62,6 +63,7 @@ const FAKE_CLIENT_METHODS: Record<keyof GitHubClient, true> = {
 export interface World {
   dir: string;
   remote: string;
+  remotes: Record<string, string>;
   github: FakeGitHub;
   config: AppConfig;
   repo: RepoConfig;
@@ -71,8 +73,11 @@ export interface World {
   logs: { msg: string; data?: object }[];
 }
 
-export function createWorld(opts: { dir: string; repo?: Partial<RepoConfig>; githubFile?: string }): World {
-  const remote = seedRemote(opts.dir);
+/** `extraRepos` adds more repos with the same settings as `repo`, each with its own remote. */
+export function createWorld(opts: { dir: string; repo?: Partial<RepoConfig>; extraRepos?: string[]; githubFile?: string; maxConcurrent?: number }): World {
+  const names = [REPO, ...(opts.extraRepos ?? [])];
+  const remotes = Object.fromEntries(names.map((name) => [name, seedRemote(opts.dir, name)]));
+  const remote = remotes[REPO]!;
   const repo: RepoConfig = {
     name: REPO,
     defaultBranch: "main",
@@ -82,7 +87,7 @@ export function createWorld(opts: { dir: string; repo?: Partial<RepoConfig>; git
     maxFixAttempts: 2,
     ...opts.repo,
   };
-  const config: AppConfig = { owner: OWNER, allowedSenderId: 1, repos: [repo] };
+  const config: AppConfig = { owner: OWNER, allowedSenderId: 1, repos: names.map((name) => ({ ...repo, name })) };
   const fake =
     opts.githubFile && existsSync(opts.githubFile)
       ? FakeGitHub.fromJSON(JSON.parse(readFileSync(opts.githubFile, "utf8")) as FakeGitHubState)
@@ -91,18 +96,18 @@ export function createWorld(opts: { dir: string; repo?: Partial<RepoConfig>; git
   const worktrees = createWorktrees({
     dataDir: join(opts.dir, "data"),
     owner: OWNER,
-    remoteUrl: () => remote,
+    remoteUrl: (name) => remotes[name]!,
     identity: () => github.botIdentity(),
   });
   const faux = fauxProvider({ models: [{ id: "faux-1", cost: { input: 10, output: 10, cacheRead: 0, cacheWrite: 0 } }] });
   const models = createModels();
   models.setProvider(faux.provider);
   const logs: World["logs"] = [];
-  const deps: AgentDeps = { config, github, worktrees, log: (msg, data) => logs.push({ msg, data }) };
-  return { dir: opts.dir, remote, github: fake, config, repo, faux, models, deps, logs };
+  const deps: AgentDeps = { config, github, worktrees, log: (msg, data) => logs.push({ msg, data }), maxConcurrent: opts.maxConcurrent };
+  return { dir: opts.dir, remote, remotes, github: fake, config, repo, faux, models, deps, logs };
 }
 
-const textOf = (message: Message | undefined) =>
+export const textOf = (message: Message | undefined) =>
   message?.role === "user" ? (typeof message.content === "string" ? message.content : message.content.map((part) => (part.type === "text" ? part.text : "")).join("")) : "";
 
 /**
@@ -122,21 +127,21 @@ export function autopilot(faux: FauxProviderHandle, decide?: (messages: Message[
   faux.setResponses([respond]);
 }
 
-export const startAction = (issue: number, requestId: string, instructions = "") => ({ kind: "start", repo: REPO, issue, requestId, instructions }) as const;
+export const startAction = (issue: number, requestId: string, instructions = "", repo = REPO) => ({ kind: "start", repo, issue, requestId, instructions }) as const;
 export const stopAction = (issue: number, requestId: string) => ({ kind: "stop", repo: REPO, issue, requestId }) as const;
 
-export async function conversationIdOf(harness: Harness, issue: number) {
-  const index = await harness.snapshot(IssueIndex, issueKey(OWNER, REPO, issue), ctx);
+export async function conversationIdOf(harness: Harness, issue: number, repo = REPO) {
+  const index = await harness.snapshot(IssueIndex, issueKey(OWNER, repo, issue), ctx);
   return index?.conversationId == null ? undefined : asConversationId(index.conversationId);
 }
 
-export async function issueStateOf(harness: Harness, issue: number) {
-  const conversationId = await conversationIdOf(harness, issue);
+export async function issueStateOf(harness: Harness, issue: number, repo = REPO) {
+  const conversationId = await conversationIdOf(harness, issue, repo);
   return conversationId && harness.snapshot(IssueState, conversationId, ctx);
 }
 
-export async function pipelineResult(harness: Harness, issue: number) {
-  const state = await issueStateOf(harness, issue);
+export async function pipelineResult(harness: Harness, issue: number, repo = REPO) {
+  const state = await issueStateOf(harness, issue, repo);
   if (state?.pipelineTaskId == null) throw new Error("no pipeline task");
   return (await harness.waitForTask(state.pipelineTaskId as TaskId, ctx)).state.outcome;
 }

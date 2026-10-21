@@ -12,6 +12,7 @@ export interface AgentDeps {
   github: GitHubClient;
   worktrees: Worktrees;
   log?: (msg: string, data?: object) => void;
+  maxConcurrent?: number;
 }
 
 /** Opens the harness over `storage`, installs the agent, and resumes unfinished work before returning. */
@@ -38,7 +39,7 @@ export async function openAgentHarness(
     context,
   );
   holder.harness = harness;
-  const service = createIssueService({ harness, pipeline, deps: opts.deps, context });
+  const service = createIssueService({ harness, storage: opts.storage, pipeline, deps: opts.deps, context });
   harness.resume();
   return { harness, service };
 }

@@ -21,7 +21,13 @@ const config: AppConfig = {
 };
 
 function setup() {
-  const service: IssueService = { start: vi.fn(async () => {}), stop: vi.fn(async () => {}) };
+  const service: IssueService = {
+    start: vi.fn(async () => {}),
+    stop: vi.fn(async () => {}),
+    cleanup: vi.fn(async () => {}),
+    sweep: vi.fn(async () => {}),
+    status: vi.fn(async () => []),
+  };
   const log = vi.fn();
   const app = createServer({ config, service, webhookSecret: secret, log });
   const post = (senderId: number, signature?: string) => {
@@ -65,9 +71,16 @@ describe("webhook server", () => {
     expect(service.start).not.toHaveBeenCalled();
   });
 
+  it("serves the issue states on /status", async () => {
+    const { app } = setup();
+    const response = await app.request("/status");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([]);
+  });
+
   it("returns 404 for everything else", async () => {
     const { app } = setup();
-    expect((await app.request("/status")).status).toBe(404);
+    expect((await app.request("/")).status).toBe(404);
     expect((await app.request("/webhooks/github")).status).toBe(404);
   });
 });

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, mkdir } from "node:fs/promises";
+import { access, mkdir, readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import type { RepoConfig } from "../config.ts";
@@ -90,10 +90,12 @@ export function createWorktrees(opts: {
       return true;
     },
 
-    async push(repo, issue) {
-      const ref = `refs/heads/${branchName(issue)}`;
-      await git(worktreePath(repo, issue), ["push", "origin", `${ref}:${ref}`], await authEnv(repo));
-    },
+    // Under the repo lock because a push also updates the shared remote-tracking refs.
+    push: (repo, issue) =>
+      withLock(repo, async () => {
+        const ref = `refs/heads/${branchName(issue)}`;
+        await git(worktreePath(repo, issue), ["push", "origin", `${ref}:${ref}`], await authEnv(repo));
+      }),
 
     async commitsAhead(repo, issue) {
       const count = await git(worktreePath(repo.name, issue), ["rev-list", "--count", `origin/${repo.defaultBranch}..${branchName(issue)}`]);
@@ -108,6 +110,28 @@ export function createWorktrees(opts: {
         if (await exists(path)) await git(bare, ["worktree", "remove", "--force", path]);
         await git(bare, ["worktree", "prune"]);
         if (await branchExists(repo, branchName(issue))) await git(bare, ["branch", "-D", branchName(issue)]);
+      }),
+
+    async issues(repo) {
+      const numbers = new Set<number>();
+      const dirs = await readdir(join(dataDir, "worktrees", repo)).catch(() => []);
+      for (const dir of dirs) {
+        const match = /^issue-(\d+)$/.exec(dir);
+        if (match) numbers.add(Number(match[1]));
+      }
+      if (await exists(join(barePath(repo), "HEAD"))) {
+        const branches = await git(barePath(repo), ["branch", "--list", "agent/issue-*", "--format=%(refname:short)"]);
+        for (const branch of branches.split("\n")) {
+          const match = /^agent\/issue-(\d+)$/.exec(branch);
+          if (match) numbers.add(Number(match[1]));
+        }
+      }
+      return [...numbers].sort((a, b) => a - b);
+    },
+
+    prune: (repo) =>
+      withLock(repo, async () => {
+        if (await exists(join(barePath(repo), "HEAD"))) await git(barePath(repo), ["worktree", "prune"]);
       }),
   };
 }

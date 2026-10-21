@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { FakeGitHubState } from "../fakes/github.ts";
-import { git, REPO } from "./support.ts";
+import { git, OTHER_REPO, REPO } from "./support.ts";
 
 const runner = fileURLToPath(new URL("./crash-runner.ts", import.meta.url));
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
@@ -34,22 +34,30 @@ beforeEach(async () => {
 afterEach(() => rm(dir, { recursive: true, force: true }));
 
 describe("restart safety", () => {
-  it.each(["prepare", "implement", "verify", "publish", "report"])("survives a hard exit at the start of %s", async (phase) => {
+  it.each(["prepare", "implement", "verify", "publish", "report"])("survives a hard exit at the start of %s with concurrent runs in two repos", async (phase) => {
     const first = await runProcess(dir, "first", phase);
     expect(first.code, first.stderr).toBe(137);
 
     const second = await runProcess(dir, "second");
     expect(second.code, second.stderr).toBe(0);
-    expect(second.stdout).toContain('"outcome":"completed"');
+    expect(second.stdout).toContain('"outcomes":["completed","completed","completed","completed"]');
 
     const github = JSON.parse(readFileSync(join(dir, "github.json"), "utf8")) as FakeGitHubState;
-    expect(github.prs).toHaveLength(1);
-    expect(github.prs[0]).toMatchObject({ head: "agent/issue-1", state: "open" });
-    expect(github.prs[0]!.body).toContain("Closes #1");
-    expect(github.calls.createPr).toBe(1);
-    expect(github.comments).toHaveLength(1);
-    expect(github.comments[0]!.body).toContain(github.prs[0]!.url);
+    expect(github.prs.map((pr) => `${pr.repo}:${pr.head}:${pr.state}`).sort()).toEqual([
+      `${REPO}:agent/issue-1:open`,
+      `${REPO}:agent/issue-2:open`,
+      `${REPO}:agent/issue-3:open`,
+      `${OTHER_REPO}:agent/issue-1:open`,
+    ]);
+    expect(github.calls.createPr).toBe(4);
+    for (const pr of github.prs) {
+      expect(pr.body).toContain(`Closes #${pr.head.split("-").at(-1)}`);
+      const statusComments = github.comments.filter((comment) => comment.repo === pr.repo && comment.issue === Number(pr.head.split("-").at(-1)));
+      expect(statusComments).toHaveLength(1);
+      expect(statusComments[0]!.body).toContain(pr.url);
+    }
     expect(git(join(dir, "remote.git"), "show", "agent/issue-1:hello.txt")).toBe("hello");
+    expect(git(join(dir, `${OTHER_REPO}.git`), "show", "agent/issue-1:hello.txt")).toBe("hello");
     expect(existsSync(join(dir, "data", "worktrees", REPO, "issue-1"))).toBe(true);
   });
 });

@@ -50,6 +50,29 @@ describe("verifyWebhook", () => {
     expect(parseCommand(body)).toEqual(expected);
   });
 
+  const closedPr = (overrides: { action?: string; ref?: string; headRepo?: string; repo?: string } = {}) => {
+    const repo = overrides.repo ?? "byok-imagen";
+    return {
+      action: overrides.action ?? "closed",
+      pull_request: { head: { ref: overrides.ref ?? "agent/issue-12", repo: { full_name: overrides.headRepo ?? `MichaelHolley/${repo}` } } },
+      repository: { name: repo, full_name: `MichaelHolley/${repo}`, owner: { login: "MichaelHolley" } },
+    };
+  };
+
+  it("cleans up when an agent PR closes", async () => {
+    expect(await run(closedPr(), { event: "pull_request" })).toEqual({ kind: "cleanup", repo: "byok-imagen", issue: 12 });
+  });
+
+  it.each([
+    ["opened PR", closedPr({ action: "opened" }), /action/],
+    ["non-agent branch", closedPr({ ref: "feature/x" }), /agent branch/],
+    ["fork PR", closedPr({ headRepo: "someone/byok-imagen" }), /fork/],
+    ["unlisted repo", closedPr({ repo: "other" }), /repos\.yaml/],
+  ])("ignores a pull_request event for a %s", async (_name, body, reason) => {
+    const action = await run(body, { event: "pull_request" });
+    expect(action.kind === "ignore" && action.reason).toMatch(reason);
+  });
+
   it.each([
     ["other event", payload(), { event: "issues" }, /event/],
     ["edited comment", payload({ action: "edited" }), {}, /action/],

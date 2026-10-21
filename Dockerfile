@@ -26,6 +26,9 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3000 \
     DATA_DIR=/data
+# On the volume, so worktrees hard-link from the pnpm store and both caches survive a container recreate.
+ENV pnpm_config_store_dir=/data/pnpm-store \
+    COREPACK_HOME=/data/corepack
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./

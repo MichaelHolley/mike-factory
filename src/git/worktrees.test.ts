@@ -109,4 +109,15 @@ describe("createWorktrees", () => {
     expect(await git(join(dataDir, "repos", "demo.git"), "branch", "--list", "agent/issue-1")).toBe("");
     expect((await worktrees.prepare(repo, 1)).created).toBe(true);
   });
+
+  it("lists issues that have a worktree or only a branch left", async () => {
+    expect(await worktrees.issues("demo")).toEqual([]);
+    await worktrees.prepare(repo, 2);
+    const { path } = await worktrees.prepare(repo, 10);
+    await rm(path, { recursive: true });
+    await worktrees.prune("demo");
+    expect(await worktrees.issues("demo")).toEqual([2, 10]);
+    await worktrees.remove("demo", 10);
+    expect(await worktrees.issues("demo")).toEqual([2]);
+  });
 });

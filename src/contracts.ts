@@ -1,3 +1,4 @@
+import type { IssueStateValue } from "./agent/docs.ts";
 import type { RepoConfig } from "./config.ts";
 
 export const branchName = (issue: number) => `agent/issue-${issue}`;
@@ -60,16 +61,27 @@ export interface Worktrees {
   commitsAhead(repo: RepoConfig, issue: number): Promise<number>;
   /** Idempotent: removes worktree and local branch, then prunes. */
   remove(repo: string, issue: number): Promise<void>;
+  /** Issues that still have a local worktree or `agent/issue-<n>` branch. */
+  issues(repo: string): Promise<number[]>;
+  /** Runs `git worktree prune` on the bare clone, if there is one. */
+  prune(repo: string): Promise<void>;
 }
 
 export type WebhookAction =
   /** `requestId` is `comment-<id>` of the triggering comment, so a redelivered webhook maps to the same run. */
   | { kind: "start"; repo: string; issue: number; requestId: string; instructions: string }
   | { kind: "stop"; repo: string; issue: number; requestId: string }
+  /** An agent PR was merged or closed. */
+  | { kind: "cleanup"; repo: string; issue: number }
   | { kind: "ignore"; reason: string };
 
 /** What the HTTP server calls. Implemented by the Pi Durable layer. */
 export interface IssueService {
   start(action: Extract<WebhookAction, { kind: "start" }>): Promise<void>;
   stop(action: Extract<WebhookAction, { kind: "stop" }>): Promise<void>;
+  /** Removes the issue's worktree and local branch unless a pipeline is still running for it. */
+  cleanup(action: Extract<WebhookAction, { kind: "cleanup" }>): Promise<void>;
+  /** Removes worktrees and branches of closed issues, then prunes every repo. */
+  sweep(): Promise<void>;
+  status(): Promise<IssueStateValue[]>;
 }

@@ -68,6 +68,13 @@ export class FakeGitHub implements GitHubClient {
     this.commentList.push({ id: this.nextId++, repo, issue, author, body, createdAt: new Date().toISOString() });
   }
 
+  /** Closes the issue and its open agent PR, as merging a PR with `Closes #n` does. */
+  closeIssue(repo: string, issue: number): void {
+    this.issue(repo, issue).state = "closed";
+    const pr = this.openPr(repo, `agent/issue-${issue}`);
+    if (pr) pr.state = "closed";
+  }
+
   commentsOn(repo: string, issue: number): FakeComment[] {
     return this.commentList.filter((comment) => comment.repo === repo && comment.issue === issue);
   }

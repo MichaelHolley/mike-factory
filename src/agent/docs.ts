@@ -1,6 +1,6 @@
 import { defineDoc, defineDocFamily, type ConversationId } from "@earendil-works/pi-durable";
 
-export type IssuePhase = "prepare" | "implement" | "verify" | "fix" | "publish" | "report" | "done" | "failed" | "aborted";
+export type IssuePhase = "queued" | "prepare" | "implement" | "verify" | "fix" | "publish" | "report" | "done" | "failed" | "aborted";
 
 export type IssueIndexValue = { conversationId: number | null };
 

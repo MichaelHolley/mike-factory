@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openAgentHarness } from "../../src/agent/harness.ts";
 import { STATUS_MARKER } from "../../src/agent/tasks/issuePipeline.ts";
 import type { GitHubClient } from "../../src/contracts.ts";
-import { autopilot, conversationIdOf, createWorld, ctx, git, issueStateOf, pipelineResult, REPO, startAction, stopAction, type World } from "./support.ts";
+import { autopilot, conversationIdOf, createWorld, ctx, git, issueStateOf, OTHER_REPO, pipelineResult, REPO, startAction, stopAction, textOf, type World } from "./support.ts";
 
 let dir: string;
 let open: Harness[];
@@ -35,7 +35,6 @@ async function launch(world: World, issueNumbers: number[] = [1]) {
 
 const status = (world: World, issue = 1) =>
   world.github.commentsOn(REPO, issue).find((comment) => comment.body.startsWith(`<!-- ${STATUS_MARKER} -->`))?.body;
-const remoteBranch = (world: World, issue = 1) => git(world.remote, "rev-parse", "--verify", "--quiet", `refs/heads/agent/issue-${issue}`);
 
 describe("issue pipeline", () => {
   it("turns an issue into exactly one pull request", async () => {
@@ -230,17 +229,69 @@ describe("issue pipeline", () => {
     expect(world.faux.state.callCount).toBe(0);
   });
 
-  it("serves two issues one after the other", async () => {
+  it("runs issues of two repos in parallel up to the limit, each PR holding only its own change", async () => {
+    const world = createWorld({ dir, extraRepos: [OTHER_REPO], maxConcurrent: 3, repo: { setup: "sleep 0.2" } });
+    autopilot(world.faux, (messages) => {
+      const task = /^Implement GitHub issue #(\d+) of [^/]+\/(\S+) /.exec(textOf(messages.at(-1)));
+      if (!task) return undefined;
+      return fauxAssistantMessage(fauxToolCall("write", { path: `${task[2]}-${task[1]}.txt`, content: "x\n" }), { stopReason: "toolUse" });
+    });
+    const { harness, service } = await launch(world, [1, 2, 3]);
+    world.github.addIssue(OTHER_REPO, { number: 1, title: "Add other", body: "Please." });
+    const runs = [...[1, 2, 3].map((issue) => ({ repo: REPO, issue })), { repo: OTHER_REPO, issue: 1 }];
+
+    await Promise.all(runs.map(({ repo, issue }) => service.start(startAction(issue, `comment-${repo}-${issue}`, "", repo))));
+    for (const { repo, issue } of runs) expect((await pipelineResult(harness, issue, repo)).status).toBe("completed");
+
+    expect(maxSlotsHeld(world)).toBe(3);
+    expect(world.github.prs).toHaveLength(4);
+    for (const { repo, issue } of runs) {
+      expect(git(world.remotes[repo]!, "diff", "--name-only", "main", `agent/issue-${issue}`)).toBe(`${repo}-${issue}.txt`);
+    }
+    const states = await service.status();
+    expect(states.map(({ repo, issue, phase }) => `${repo}#${issue}:${phase}`).sort()).toEqual(["demo#1:done", "demo#2:done", "demo#3:done", "other#1:done"]);
+  });
+
+  it("removes the worktree and local branch when the PR closes", async () => {
+    const world = createWorld({ dir });
+    autopilot(world.faux);
+    const { harness, service } = await launch(world);
+    await service.start(startAction(1, "comment-1"));
+    await pipelineResult(harness, 1);
+
+    await service.cleanup({ kind: "cleanup", repo: REPO, issue: 1 });
+
+    expect(existsSync(world.deps.worktrees.worktreePath(REPO, 1))).toBe(false);
+    expect(await world.deps.worktrees.issues(REPO)).toEqual([]);
+  });
+
+  it("sweeps only the worktrees of closed issues", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux);
     const { harness, service } = await launch(world, [1, 2]);
     await Promise.all([service.start(startAction(1, "comment-1")), service.start(startAction(2, "comment-2"))]);
-    expect((await pipelineResult(harness, 1)).status).toBe("completed");
-    expect((await pipelineResult(harness, 2)).status).toBe("completed");
-    expect(world.github.prs.map((pr) => pr.head).sort()).toEqual(["agent/issue-1", "agent/issue-2"]);
-    expect(remoteBranch(world, 1)).not.toBe(remoteBranch(world, 2));
+    await pipelineResult(harness, 1);
+    await pipelineResult(harness, 2);
+
+    world.github.closeIssue(REPO, 1);
+    await service.sweep();
+
+    expect(await world.deps.worktrees.issues(REPO)).toEqual([2]);
   });
 });
+
+/** Highest number of pipelines that held a slot at the same time, from the slot logs. */
+function maxSlotsHeld(world: World) {
+  const held = new Set<unknown>();
+  let max = 0;
+  for (const { msg, data } of world.logs) {
+    const taskId = (data as { taskId?: unknown } | undefined)?.taskId;
+    if (msg === "pipeline slot acquired") held.add(taskId);
+    if (msg === "pipeline slot released") held.delete(taskId);
+    max = Math.max(max, held.size);
+  }
+  return max;
+}
 
 async function waitFor(predicate: () => boolean, timeoutMs = 10_000) {
   const deadline = Date.now() + timeoutMs;

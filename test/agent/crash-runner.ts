@@ -2,14 +2,15 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { openAgentHarness } from "../../src/agent/harness.ts";
-import { autopilot, createWorld, ctx, pipelineResult, REPO, startAction } from "./support.ts";
+import { autopilot, createWorld, ctx, OTHER_REPO, pipelineResult, REPO, startAction } from "./support.ts";
 
 const dir = process.env.STATE_DIR!;
 const githubFile = join(dir, "github.json");
-const world = createWorld({ dir, githubFile });
+const world = createWorld({ dir, githubFile, extraRepos: [OTHER_REPO], maxConcurrent: 3 });
+const runs = [...[1, 2, 3].map((issue) => ({ repo: REPO, issue })), { repo: OTHER_REPO, issue: 1 }];
 
 if (process.env.MODE === "first") {
-  world.github.addIssue(REPO, { number: 1, title: "Add hello", body: "Please add hello.txt." });
+  for (const { repo, issue } of runs) world.github.addIssue(repo, { number: issue, title: "Add hello", body: "Please add hello.txt." });
   writeFileSync(githubFile, JSON.stringify(world.github.toJSON()));
 }
 autopilot(world.faux);
@@ -19,8 +20,8 @@ const { harness, service } = await openAgentHarness(
   { storage, models: world.models, deps: world.deps, crashAt: process.env.CRASH_AT },
   ctx,
 );
-await service.start(startAction(1, "comment-1"));
-const outcome = await pipelineResult(harness, 1);
-console.log(JSON.stringify({ outcome: outcome.status }));
+await Promise.all(runs.map(({ repo, issue }) => service.start(startAction(issue, `comment-${repo}-${issue}`, "", repo))));
+const outcomes = await Promise.all(runs.map(({ repo, issue }) => pipelineResult(harness, issue, repo)));
+console.log(JSON.stringify({ outcomes: outcomes.map((outcome) => outcome.status) }));
 await harness.close(ctx);
 process.exit(0);

@@ -35,9 +35,12 @@ export function createServer({ config, service, webhookSecret, log }: ServerDeps
 
     if (action.kind === "ignore") log("webhook ignored", { deliveryId, reason: action.reason });
     else if (action.kind === "start") await service.start(action);
-    else await service.stop(action);
+    else if (action.kind === "stop") await service.stop(action);
+    else await service.cleanup(action);
     return c.body(null, 202);
   });
+
+  app.get("/status", async (c) => c.json(await service.status()));
 
   app.notFound((c) => c.text("not found", 404));
   app.onError((error, c) => {
