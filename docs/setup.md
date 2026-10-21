@@ -12,9 +12,11 @@ pnpm typecheck
 
 `MODEL=faux` swaps every repo's model for the scripted faux provider, so no real model runs on your machine. Without it, `OPENAI_API_KEY` is required.
 
+To work on the status UI (`web/`), run the server as above and `pnpm -C web dev` next to it. Vite serves the UI on http://localhost:5173 with HMR and proxies `/status` to the server on :3000. `pnpm dev` alone serves no UI until `pnpm -C web build` has produced `web/dist`.
+
 ## Configuration
 
-Configuration is in `config/repos.yaml` (owner, allowed sender id, per-repo commands and budgets). Environment variables are listed in `.env.example`. Secrets are read once at startup and removed from `process.env` before any tool shell can inherit them.
+Configuration is in `config/repos.yaml` (owner, allowed sender id, per-repo commands and budgets). Environment variables are listed in `.env.example`; `PUBLIC_URL` (optional) is the public base URL, e.g. `https://factory.example.com`, used for the run link in status comments. Secrets are read once at startup and removed from `process.env` before any tool shell can inherit them.
 
 ## GitHub App
 
@@ -27,4 +29,6 @@ Create the app under your account and install it with "Only select repositories"
 
 `docker-compose.prod.yml` is the Portainer stack. Set `MAX_CONCURRENT` (default 3) to limit how many issues run at once; the rest wait as `queued`. Worktrees of closed issues are also swept at startup and every 24 hours.
 
-`GET /status` returns every issue's state as JSON. It has no auth of its own, so expose it only behind the basic auth in `deploy/nginx.conf`.
+The image also builds the status UI and serves it from `/`, with each run at `/runs/<repo>/<issue>`. `GET /status` returns the runs as a public projection (repo, issue, issueUrl, branch, phase, attempts, costUsd, prUrl, lastError, startedAt, updatedAt) without worktree paths or other internals. Neither the UI nor `/status` has auth, so anything in a run's state is public; that's fine as long as every configured repo is public.
+
+`deploy/nginx.conf` forwards `/webhooks/github` and everything else to the app on `127.0.0.1:3000`, with no basic auth. Set `PUBLIC_URL` to the host nginx serves so status comments link to it. The old `mike-factory.htpasswd` file is no longer used and can be deleted.

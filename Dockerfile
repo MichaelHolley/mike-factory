@@ -4,6 +4,7 @@ WORKDIR /app
 
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY web/package.json ./web/
 RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
@@ -11,9 +12,15 @@ COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
 RUN pnpm build
 
+FROM deps AS web
+COPY web ./web
+COPY src/runStatus.ts ./src/
+RUN pnpm -C web build
+
 FROM base AS prod-deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile --prod
+COPY web/package.json ./web/
+RUN pnpm install --frozen-lockfile --prod --filter mike-factory
 
 FROM base AS runtime
 RUN apt-get update \
@@ -31,6 +38,7 @@ ENV pnpm_config_store_dir=/data/pnpm-store \
     COREPACK_HOME=/data/corepack
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY --from=web /app/web/dist ./web/dist
 COPY package.json ./
 COPY config ./config
 USER agent

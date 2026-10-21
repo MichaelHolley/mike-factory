@@ -13,6 +13,7 @@ export interface AgentDeps {
   worktrees: Worktrees;
   log?: (msg: string, data?: object) => void;
   maxConcurrent?: number;
+  publicUrl?: string;
 }
 
 /** Opens the harness over `storage`, installs the agent, and resumes unfinished work before returning. */

@@ -11,7 +11,7 @@
     "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && pnpm -C web typecheck",
     "test": "vitest run"
   },
   "dependencies": {

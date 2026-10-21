@@ -34,6 +34,8 @@ export interface PipelineDeps {
   log?: (msg: string, data?: object) => void;
   /** Pipelines that may run at once across all repos; the rest wait in `queued`. */
   maxConcurrent?: number;
+  /** Base URL of the status page; status comments link to the run when set. */
+  publicUrl?: string;
   /** Phase at whose start the process exits once per pipeline task, to test restart safety. */
   crashAt?: string;
 }
@@ -52,6 +54,10 @@ export const DEFAULT_MAX_CONCURRENT = 3;
 
 /** One comment per issue, edited in place, shows the run's state instead of labels. */
 export const STATUS_MARKER = "agent-status";
+
+/** Upserts the issue's status comment, ending it with the run's page link when `publicUrl` is set. */
+export const upsertStatus = (deps: Pick<PipelineDeps, "github" | "publicUrl">, repo: string, issue: number, body: string) =>
+  deps.github.upsertComment(repo, issue, STATUS_MARKER, deps.publicUrl ? `${body}\n\n${deps.publicUrl}/runs/${repo}/${issue}` : body);
 
 class PipelineFailure extends Error {
   constructor(
@@ -109,7 +115,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
   const advance = async (rt: Rt, context: Context, next: NextTaskState<PipelineState, PipelineResult>, patch: Partial<IssueStateValue>) => {
     await rt.commit(async (tx) => {
       const doc = (await tx.doc(IssueState, rt.conversationId)) as Record<string, unknown>;
-      for (const [key, value] of Object.entries(patch)) doc[key] = value;
+      for (const [key, value] of Object.entries({ ...patch, updatedAt: new Date().toISOString() })) doc[key] = value;
       return next;
     }, context);
     if (next.status === "terminal") {
@@ -254,14 +260,14 @@ export function createIssuePipeline(deps: PipelineDeps) {
         const { repo, issue } = task.input;
         const { prUrl } = task.state.checkpoint;
         const costUsd = await spentCostUsd(rt, context);
-        await github.upsertComment(repo, issue, STATUS_MARKER, `Opened ${prUrl}\n\nCost: $${costUsd.toFixed(4)}`);
+        await upsertStatus(deps, repo, issue, `Opened ${prUrl}\n\nCost: $${costUsd.toFixed(4)}`);
         await advance(rt, context, { status: "terminal", outcome: { status: "completed", result: { prUrl } } }, { phase: "done", costUsd });
       }),
 
       failed: async (task, rt, context) => {
         const { repo, issue } = task.input;
         const { reason, output } = task.state.checkpoint;
-        await github.upsertComment(repo, issue, STATUS_MARKER, failureComment(reason, output));
+        await upsertStatus(deps, repo, issue, failureComment(reason, output));
         await advance(
           rt,
           context,
@@ -274,9 +280,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
     abort: async (task, rt, context) => {
       const { repo, issue } = task.input;
       await (await rt.conversation(rt.conversationId, context))?.abort(context);
-      await github
-        .upsertComment(repo, issue, STATUS_MARKER, "Stopped. The worktree is kept; comment `/mike` to continue.")
-        .catch((error) => log("could not update the status comment", { error: messageOf(error) }));
+      await upsertStatus(deps, repo, issue, "Stopped. The worktree is kept; comment `/mike` to continue.").catch((error) => log("could not update the status comment", { error: messageOf(error) }));
       await advance(rt, context, { status: "terminal", outcome: { status: "aborted", reason: "/mike stop" } }, { phase: "aborted" });
     },
   });

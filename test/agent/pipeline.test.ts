@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { ToolResultEntry, MemoryStorage, type Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openAgentHarness } from "../../src/agent/harness.ts";
 import { STATUS_MARKER } from "../../src/agent/tasks/issuePipeline.ts";
 import type { GitHubClient } from "../../src/contracts.ts";
@@ -58,6 +58,36 @@ describe("issue pipeline", () => {
     expect(comments[0]!.body).toMatch(/Cost: \$\d+\.\d{4}/);
     const state = await issueStateOf(harness, 1);
     expect(state).toMatchObject({ phase: "done", prUrl: pr.url, branch: "agent/issue-1" });
+  });
+
+  it("stamps startedAt on start and moves updatedAt on every phase change", async () => {
+    const world = createWorld({ dir });
+    autopilot(world.faux);
+    const { harness, service } = await launch(world);
+
+    await service.start(startAction(1, "comment-1"));
+    const started = await issueStateOf(harness, 1);
+    expect(started!.startedAt).toEqual(expect.any(String));
+
+    await pipelineResult(harness, 1);
+    const done = await issueStateOf(harness, 1);
+    expect(done!.startedAt).toBe(started!.startedAt);
+    expect(Date.parse(done!.updatedAt!)).toBeGreaterThan(Date.parse(started!.startedAt!));
+
+    const [run] = await service.status();
+    expect(run).toEqual({
+      repo: REPO,
+      issue: 1,
+      issueUrl: `https://github.com/${world.config.owner}/${REPO}/issues/1`,
+      branch: "agent/issue-1",
+      phase: "done",
+      attempts: 0,
+      costUsd: done!.costUsd,
+      prUrl: world.github.prs[0]!.url,
+      lastError: null,
+      startedAt: done!.startedAt,
+      updatedAt: done!.updatedAt,
+    });
   });
 
   it("starts nothing new for a redelivered webhook", async () => {
@@ -171,6 +201,58 @@ describe("issue pipeline", () => {
     expect(existsSync(join(dir, "data", "worktrees", REPO, "issue-1"))).toBe(true);
     expect(world.github.prs).toHaveLength(0);
     expect(await issueStateOf(harness, 1)).toMatchObject({ phase: "aborted" });
+  });
+
+  describe("run link in status comments", () => {
+    const PUBLIC_URL = "https://factory.example.com";
+    const statusBodies = (world: World) => {
+      const upsert = vi.spyOn(world.github, "upsertComment");
+      return () => upsert.mock.calls.filter(([, , marker]) => marker === STATUS_MARKER).map(([, , , body]) => body);
+    };
+
+    it("ends every status comment with the run page when PUBLIC_URL is set", async () => {
+      const done = createWorld({ dir, repo: { test: "exit 1", maxFixAttempts: 0 } });
+      done.deps.publicUrl = PUBLIC_URL;
+      const failedBodies = statusBodies(done);
+      autopilot(done.faux);
+      const failed = await launch(done);
+      await failed.service.start(startAction(1, "comment-1"));
+      await pipelineResult(failed.harness, 1);
+
+      const stopped = createWorld({ dir: join(dir, "stop") });
+      stopped.deps.publicUrl = PUBLIC_URL;
+      const stoppedBodies = statusBodies(stopped);
+      autopilot(stopped.faux, () => fauxAssistantMessage(fauxToolCall("bash", { command: "sleep 60" }), { stopReason: "toolUse" }));
+      const stoppedRun = await launch(stopped);
+      await stoppedRun.service.start(startAction(1, "comment-1"));
+      await waitFor(() => stopped.faux.state.callCount >= 1);
+      await stoppedRun.service.stop(stopAction(1, "comment-2"));
+      await pipelineResult(stoppedRun.harness, 1);
+
+      const link = `${PUBLIC_URL}/runs/${REPO}/1`;
+      const bodies = [...failedBodies(), ...stoppedBodies()];
+      expect(bodies).toHaveLength(4);
+      for (const body of bodies) expect(body.endsWith(`\n\n${link}`)).toBe(true);
+    });
+
+    it("links the opened PR comment and adds no link without PUBLIC_URL", async () => {
+      const linked = createWorld({ dir });
+      linked.deps.publicUrl = PUBLIC_URL;
+      autopilot(linked.faux);
+      const first = await launch(linked);
+      await first.service.start(startAction(1, "comment-1"));
+      await pipelineResult(first.harness, 1);
+      expect(status(linked)).toMatch(/^<!-- agent-status -->\nOpened .*\n\nhttps:\/\/factory\.example\.com\/runs\/demo\/1$/s);
+
+      const plain = createWorld({ dir: join(dir, "plain") });
+      const bodies = statusBodies(plain);
+      autopilot(plain.faux);
+      const second = await launch(plain);
+      await second.service.start(startAction(1, "comment-1"));
+      await pipelineResult(second.harness, 1);
+      expect(bodies()).toHaveLength(2);
+      for (const body of bodies()) expect(body).not.toContain("/runs/");
+    });
   });
 
   it("blocks a bash git push", async () => {

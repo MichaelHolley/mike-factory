@@ -1,4 +1,4 @@
-import type { IssueStateValue } from "./agent/docs.ts";
+import type { RunStatus } from "./runStatus.ts";
 import type { RepoConfig } from "./config.ts";
 
 export const branchName = (issue: number) => `agent/issue-${issue}`;
@@ -83,5 +83,5 @@ export interface IssueService {
   cleanup(action: Extract<WebhookAction, { kind: "cleanup" }>): Promise<void>;
   /** Removes worktrees and branches of closed issues, then prunes every repo. */
   sweep(): Promise<void>;
-  status(): Promise<IssueStateValue[]>;
+  status(): Promise<RunStatus[]>;
 }

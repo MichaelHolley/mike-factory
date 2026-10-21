@@ -47,6 +47,8 @@ async function main() {
   const maxConcurrent = Number(process.env.MAX_CONCURRENT ?? DEFAULT_MAX_CONCURRENT);
   if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1) throw new Error("MAX_CONCURRENT must be a positive integer");
 
+  const publicUrl = process.env.PUBLIC_URL?.replace(/\/+$/, "") || undefined;
+
   const secrets = takeSecrets();
 
   const github = createGitHubClient({ appId: secrets.appId, privateKey: secrets.privateKey, owner: config.owner });
@@ -65,7 +67,7 @@ async function main() {
   await mkdir(dataDir, { recursive: true });
   const storage = await openNodeSqliteStorage(join(dataDir, "agent.sqlite"));
   const { harness, service } = await openAgentHarness(
-    { storage, models, deps: { config: effectiveConfig, github, worktrees, log, maxConcurrent }, crashAt: process.env.CRASH_AT },
+    { storage, models, deps: { config: effectiveConfig, github, worktrees, log, maxConcurrent, publicUrl }, crashAt: process.env.CRASH_AT },
     BACKGROUND_CONTEXT,
   );
 

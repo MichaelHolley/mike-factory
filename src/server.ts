@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import type { AppConfig } from "./config.ts";
 import type { IssueService } from "./contracts.ts";
@@ -8,9 +11,12 @@ export interface ServerDeps {
   service: IssueService;
   webhookSecret: string;
   log: (msg: string, data?: object) => void;
+  uiDir?: string;
 }
 
-export function createServer({ config, service, webhookSecret, log }: ServerDeps): Hono {
+const DEFAULT_UI_DIR = fileURLToPath(new URL("../web/dist", import.meta.url));
+
+export function createServer({ config, service, webhookSecret, log, uiDir = DEFAULT_UI_DIR }: ServerDeps): Hono {
   const app = new Hono();
 
   app.post("/webhooks/github", async (c) => {
@@ -41,6 +47,11 @@ export function createServer({ config, service, webhookSecret, log }: ServerDeps
   });
 
   app.get("/status", async (c) => c.json(await service.status()));
+
+  if (existsSync(uiDir)) {
+    app.use("/assets/*", serveStatic({ root: uiDir }));
+    app.get("*", serveStatic({ root: uiDir, path: "index.html" }));
+  }
 
   app.notFound((c) => c.text("not found", 404));
   app.onError((error, c) => {

@@ -2,10 +2,11 @@ import type { Context } from "@earendil-works/chord";
 import type { ConversationId, Cursor, Harness, Storage, TaskId } from "@earendil-works/pi-durable";
 import { findRepo } from "../config.ts";
 import { branchName, issueKey, type IssueService } from "../contracts.ts";
-import { asConversationId, IssueIndex, IssueState, type IssueStateValue } from "./docs.ts";
+import type { RunStatus } from "../runStatus.ts";
+import { asConversationId, IssueIndex, IssueState } from "./docs.ts";
 import type { AgentDeps } from "./harness.ts";
 import { createMutex } from "./mutex.ts";
-import { STATUS_MARKER, type IssuePipeline } from "./tasks/issuePipeline.ts";
+import { upsertStatus, type IssuePipeline } from "./tasks/issuePipeline.ts";
 
 const INSTRUCTIONS = [
   "You are an autonomous coding agent working on one GitHub issue inside a git worktree, which is your current working directory.",
@@ -64,7 +65,7 @@ export function createIssueService(opts: { harness: Harness; storage: Storage; p
           return github.upsertComment(repo, issue, `agent-pr-open:${requestId}`, `Not starting: ${openPr.url} is still open. Merge or close it first.`);
         }
 
-        await github.upsertComment(repo, issue, STATUS_MARKER, "Working on this. Comment `/mike stop` to abort.");
+        await upsertStatus(deps, repo, issue, "Working on this. Comment `/mike stop` to abort.");
         const worktreePath = worktrees.worktreePath(repo, issue);
         const conversation = conversationId
           ? await harness.conversation(conversationId, context)
@@ -80,6 +81,7 @@ export function createIssueService(opts: { harness: Harness; storage: Storage; p
             );
         if (!conversation) throw new Error(`conversation ${conversationId} for ${key} is missing`);
 
+        const now = new Date().toISOString();
         await conversation.commit(async (tx) => {
           const taskId = await tx.createTask(pipeline, { repo, issue, requestId, instructions }, { ownership: { kind: "conversation" }, background: true });
           Object.assign(await tx.doc(IssueState, conversation.id), {
@@ -92,6 +94,8 @@ export function createIssueService(opts: { harness: Harness; storage: Storage; p
             lastError: null,
             pipelineTaskId: taskId,
             requestId,
+            startedAt: now,
+            updatedAt: now,
           });
         }, context);
         log("pipeline started", { key, requestId });
@@ -123,13 +127,26 @@ export function createIssueService(opts: { harness: Harness; storage: Storage; p
     },
 
     async status() {
-      const states: IssueStateValue[] = [];
+      const states: RunStatus[] = [];
       let cursor: Cursor | undefined;
       do {
         const page = await storage.scanConversations({}, 100, cursor, context);
         for (const { id } of page.items) {
           const state = await harness.snapshot(IssueState, id as ConversationId, context);
-          if (state?.repo) states.push(state);
+          if (!state?.repo) continue;
+          states.push({
+            repo: state.repo,
+            issue: state.issue,
+            issueUrl: `https://github.com/${config.owner}/${state.repo}/issues/${state.issue}`,
+            branch: state.branch,
+            phase: state.phase,
+            attempts: state.attempts,
+            costUsd: state.costUsd,
+            prUrl: state.prUrl,
+            lastError: state.lastError,
+            startedAt: state.startedAt ?? null,
+            updatedAt: state.updatedAt ?? null,
+          });
         }
         cursor = page.next;
       } while (cursor);

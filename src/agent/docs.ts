@@ -1,6 +1,7 @@
 import { defineDoc, defineDocFamily, type ConversationId } from "@earendil-works/pi-durable";
+import type { IssuePhase } from "../runStatus.ts";
 
-export type IssuePhase = "queued" | "prepare" | "implement" | "verify" | "fix" | "publish" | "report" | "done" | "failed" | "aborted";
+export type { IssuePhase };
 
 export type IssueIndexValue = { conversationId: number | null };
 
@@ -26,6 +27,8 @@ export type IssueStateValue = {
   pipelineTaskId: number | null;
   requestId: string | null;
   setupDone: boolean;
+  startedAt?: string | null;
+  updatedAt?: string | null;
 };
 
 export const IssueState = defineDoc<IssueStateValue>({
@@ -47,6 +50,8 @@ export const IssueState = defineDoc<IssueStateValue>({
     pipelineTaskId: null,
     requestId: null,
     setupDone: false,
+    startedAt: null,
+    updatedAt: null,
   }),
   checkpointWhen: () => false,
 });

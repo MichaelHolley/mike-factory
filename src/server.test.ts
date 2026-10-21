@@ -1,7 +1,11 @@
 import { createHmac } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppConfig } from "./config.ts";
 import type { IssueService } from "./contracts.ts";
+import type { RunStatus } from "./runStatus.ts";
 import { createServer } from "./server.ts";
 
 const secret = "test-secret";
@@ -20,7 +24,7 @@ const config: AppConfig = {
   ],
 };
 
-function setup() {
+function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui")) {
   const service: IssueService = {
     start: vi.fn(async () => {}),
     stop: vi.fn(async () => {}),
@@ -29,7 +33,7 @@ function setup() {
     status: vi.fn(async () => []),
   };
   const log = vi.fn();
-  const app = createServer({ config, service, webhookSecret: secret, log });
+  const app = createServer({ config, service, webhookSecret: secret, log, uiDir });
   const post = (senderId: number, signature?: string) => {
     const body = JSON.stringify({
       action: "created",
@@ -78,9 +82,59 @@ describe("webhook server", () => {
     expect(await response.json()).toEqual([]);
   });
 
+  it("serves only the public projection on /status", async () => {
+    const { app, service } = setup();
+    const run: RunStatus = {
+      repo: "byok-imagen",
+      issue: 12,
+      issueUrl: "https://github.com/michaelholley/byok-imagen/issues/12",
+      branch: "agent/issue-12",
+      phase: "done",
+      attempts: 1,
+      costUsd: 0.5,
+      prUrl: "https://github.com/michaelholley/byok-imagen/pull/13",
+      lastError: null,
+      startedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: null,
+    };
+    vi.mocked(service.status).mockResolvedValue([run]);
+    expect(await (await app.request("/status")).json()).toEqual([run]);
+  });
+
   it("returns 404 for everything else", async () => {
     const { app } = setup();
     expect((await app.request("/")).status).toBe(404);
     expect((await app.request("/webhooks/github")).status).toBe(404);
+  });
+});
+
+describe("web UI", () => {
+  let uiDir: string | undefined;
+  afterEach(() => {
+    if (uiDir) rmSync(uiDir, { recursive: true, force: true });
+    uiDir = undefined;
+  });
+
+  function builtUi() {
+    uiDir = mkdtempSync(join(tmpdir(), "ui-"));
+    mkdirSync(join(uiDir, "assets"));
+    writeFileSync(join(uiDir, "index.html"), "<!doctype html><title>runs</title>");
+    writeFileSync(join(uiDir, "assets", "app.js"), "console.log(1)");
+    return uiDir;
+  }
+
+  it("serves index.html for client routes and files under /assets", async () => {
+    const { app } = setup(builtUi());
+    const page = await app.request("/runs/x/1");
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("<title>runs</title>");
+    expect(await (await app.request("/assets/app.js")).text()).toBe("console.log(1)");
+  });
+
+  it("keeps the webhook and /status routes ahead of the UI", async () => {
+    const { app, post, service } = setup(builtUi());
+    expect((await post(42)).status).toBe(202);
+    expect(service.start).toHaveBeenCalled();
+    expect(await (await app.request("/status")).json()).toEqual([]);
   });
 });
