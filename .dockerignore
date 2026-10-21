@@ -7,6 +7,6 @@ data
 *.sqlite*
 test
 deploy
-compose.yaml
+docker-compose.prod.yml
 Dockerfile
 *.md
