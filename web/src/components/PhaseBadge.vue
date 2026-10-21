@@ -1,49 +1,45 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { IssuePhase } from "../../../src/runStatus.ts";
+import { phaseTone } from "../phase.ts";
 
-defineProps<{ phase: IssuePhase }>();
+const props = defineProps<{ phase: IssuePhase }>();
+const tone = computed(() => phaseTone(props.phase));
 </script>
 
 <template>
-  <span class="badge" :class="phase">{{ phase }}</span>
+  <span class="badge" :class="tone">{{ phase }}</span>
 </template>
 
 <style scoped>
 .badge {
-  display: inline-block;
-  padding: 0.1rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.875rem;
   font-weight: 600;
-  background: #6b728022;
-  color: #4b5563;
+  color: var(--tone);
 }
-.queued {
-  background: #6b728022;
-  color: #6b7280;
+.badge::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
 }
-.prepare,
-.implement,
-.fix {
-  background: #2563eb22;
-  color: #2563eb;
+.idle {
+  --tone: var(--muted);
 }
-.verify,
-.publish,
-.report {
-  background: #d9770622;
-  color: #d97706;
+.run {
+  --tone: var(--run);
 }
-.done {
-  background: #16a34a22;
-  color: #16a34a;
+.ok {
+  --tone: var(--ok);
 }
-.failed {
-  background: #dc262622;
-  color: #dc2626;
+.bad {
+  --tone: var(--bad);
 }
-.aborted {
-  background: #7c3aed22;
-  color: #7c3aed;
+.halt {
+  --tone: var(--halt);
 }
 </style>

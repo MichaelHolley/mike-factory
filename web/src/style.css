@@ -1,0 +1,90 @@
+:root {
+  color-scheme: light dark;
+  --bg: #edf0f3;
+  --surface: #ffffff;
+  --ink: #18212b;
+  --muted: #5d6a78;
+  --line: #d7dde3;
+  --chrome: #18212b;
+  --chrome-ink: #e9edf1;
+  --hazard: #f2b705;
+  --run: #2f4dd8;
+  --ok: #1e8556;
+  --bad: #c2362e;
+  --halt: #6e6a86;
+  --idle: #c3cbd3;
+
+  --font-ui: "Barlow", system-ui, sans-serif;
+  --font-head: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
+  --font-code: "IBM Plex Mono", ui-monospace, monospace;
+
+  font-family: var(--font-ui);
+  font-size: 100%;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14181e;
+    --surface: #1c2129;
+    --ink: #e6eaee;
+    --muted: #94a0ad;
+    --line: #2c333d;
+    --chrome: #0e1216;
+    --run: #8195ff;
+    --ok: #4cc28a;
+    --bad: #f0706a;
+    --halt: #a9a3c9;
+    --idle: #38414c;
+  }
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+h1,
+h2 {
+  margin: 0;
+  font-family: var(--font-head);
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+a {
+  color: var(--run);
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--run);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+code,
+pre {
+  font-family: var(--font-code);
+  font-size: 0.8125rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.notice {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--bad);
+  background: var(--surface);
+  color: var(--bad);
+}
