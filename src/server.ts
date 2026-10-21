@@ -48,6 +48,13 @@ export function createServer({ config, service, webhookSecret, log, uiDir = DEFA
 
   app.get("/status", async (c) => c.json(await service.status()));
 
+  app.get("/status/:repo/:issue/conversation", async (c) => {
+    const issue = Number(c.req.param("issue"));
+    if (!Number.isInteger(issue)) return c.text("not found", 404);
+    const transcript = await service.transcript(c.req.param("repo"), issue);
+    return transcript ? c.json(transcript) : c.text("not found", 404);
+  });
+
   if (existsSync(uiDir)) {
     app.use("/assets/*", serveStatic({ root: uiDir }));
     app.get("*", serveStatic({ root: uiDir, path: "index.html" }));

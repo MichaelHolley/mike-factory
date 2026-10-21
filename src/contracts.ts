@@ -1,4 +1,4 @@
-import type { RunStatus } from "./runStatus.ts";
+import type { RunStatus, TranscriptItem } from "./runStatus.ts";
 import type { RepoConfig } from "./config.ts";
 
 export const branchName = (issue: number) => `agent/issue-${issue}`;
@@ -84,4 +84,6 @@ export interface IssueService {
   /** Removes worktrees and branches of closed issues, then prunes every repo. */
   sweep(): Promise<void>;
   status(): Promise<RunStatus[]>;
+  /** The issue's conversation as a public projection, or undefined when the issue has none. */
+  transcript(repo: string, issue: number): Promise<TranscriptItem[] | undefined>;
 }

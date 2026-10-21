@@ -31,6 +31,7 @@ function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui")) {
     cleanup: vi.fn(async () => {}),
     sweep: vi.fn(async () => {}),
     status: vi.fn(async () => []),
+    transcript: vi.fn(async () => undefined),
   };
   const log = vi.fn();
   const app = createServer({ config, service, webhookSecret: secret, log, uiDir });
@@ -99,6 +100,18 @@ describe("webhook server", () => {
     };
     vi.mocked(service.status).mockResolvedValue([run]);
     expect(await (await app.request("/status")).json()).toEqual([run]);
+  });
+
+  it("serves a run's conversation, and 404s when there is none", async () => {
+    const { app, service } = setup();
+    expect((await app.request("/status/byok-imagen/12/conversation")).status).toBe(404);
+    expect((await app.request("/status/byok-imagen/abc/conversation")).status).toBe(404);
+
+    vi.mocked(service.transcript).mockResolvedValue([{ kind: "assistant", text: "Done." }]);
+    const response = await app.request("/status/byok-imagen/12/conversation");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([{ kind: "assistant", text: "Done." }]);
+    expect(service.transcript).toHaveBeenLastCalledWith("byok-imagen", 12);
   });
 
   it("returns 404 for everything else", async () => {

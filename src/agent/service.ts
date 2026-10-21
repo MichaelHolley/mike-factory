@@ -7,6 +7,7 @@ import { asConversationId, IssueIndex, IssueState } from "./docs.ts";
 import type { AgentDeps } from "./harness.ts";
 import { createMutex } from "./mutex.ts";
 import { upsertStatus, type IssuePipeline } from "./tasks/issuePipeline.ts";
+import { toTranscript } from "./transcript.ts";
 
 const INSTRUCTIONS = [
   "You are an autonomous coding agent working on one GitHub issue inside a git worktree, which is your current working directory.",
@@ -151,6 +152,12 @@ export function createIssueService(opts: { harness: Harness; storage: Storage; p
         cursor = page.next;
       } while (cursor);
       return states;
+    },
+
+    async transcript(repo, issue) {
+      const { conversationId } = await lookup(repo, issue);
+      const conversation = conversationId === undefined ? undefined : await harness.conversation(conversationId, context);
+      return conversation && toTranscript((await conversation.context(context)).messages);
     },
   };
 }

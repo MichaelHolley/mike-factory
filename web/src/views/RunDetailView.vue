@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
+import ConversationLog from "../components/ConversationLog.vue";
 import PhaseTrack from "../components/PhaseTrack.vue";
 import { useRuns } from "../composables/useRuns.ts";
 import { formatCost, formatDate, timeAgo } from "../format.ts";
@@ -62,6 +63,8 @@ const run = computed(() =>
       <h2>Last error</h2>
       <pre>{{ run.lastError }}</pre>
     </section>
+
+    <ConversationLog :repo="run.repo" :issue="String(run.issue)" />
   </template>
   <p v-else-if="loaded && !error" class="muted">
     No run found for {{ route.params.repo }} #{{ route.params.issue }}. It may not have started yet.
