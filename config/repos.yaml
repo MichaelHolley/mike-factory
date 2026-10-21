@@ -11,3 +11,8 @@ repos:
     setup: pnpm install --frozen-lockfile
     test: pnpm check
     lint: pnpm lint
+  - name: Tshopper
+    defaultBranch: main
+    setup: pnpm install --frozen-lockfile
+    test: pnpm run check
+    lint: pnpm run lint

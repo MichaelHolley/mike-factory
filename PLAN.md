@@ -234,7 +234,7 @@ mike-factory/
     agent/tasks/issuePipeline.ts
     agent/docs.ts           # app.issueIndex, app.issueState
   Dockerfile
-  compose.yaml
+  docker-compose.prod.yml
 ```
 
 **Dependencies:** `@earendil-works/pi-durable`, `@earendil-works/pi-ai` and `@earendil-works/chord`, pinned to exactly `1.3.0`. Also `@octokit/app`, `@octokit/webhooks`, `hono` (or Fastify) and `yaml`. Dev: `vitest`.
@@ -245,10 +245,10 @@ mike-factory/
 - Runs as a non-root user `agent`, with `WORKDIR /app` and the volume at `/data`
 - At startup, `main.ts` looks up the App's bot user and sets `GIT_AUTHOR_*` and `GIT_COMMITTER_*` in the process env to its identity (not `git config --global`, so local dev leaves your own git identity alone)
 
-**compose.yaml**
+**docker-compose.prod.yml**
 
 - Deployed as a Portainer stack on the VPS, using the image `<dockerhub-user>/mike-factory:latest`
-- Service `agent`: `restart: unless-stopped`, `ports: "127.0.0.1:3000:3000"`, named volume `agent-data:/data` (created owned by the container user), `env_file: stack.env` (Portainer writes the stack's environment variables there), one replica (one process per storage)
+- Service `agent`: `restart: unless-stopped`, `ports: "3000:3000"`, named volume `agent-data:/data` (created owned by the container user), `env_file: stack.env` (Portainer writes the stack's environment variables there), one replica (one process per storage)
 
 **nginx (on the VPS host)**
 
@@ -387,10 +387,11 @@ The MVP is done when every box below is ticked on two of your real repos.
 - A new `/mike` continues the same worktree and conversation, and is ignored while a PR is open
 - Trigger (Oct 20, 2026): moved from the `agent:ready` / `agent:stop` labels to a `/mike` issue comment (`/mike stop` to abort). One action instead of two, it carries extra instructions, and it paves the way for comment steering. `/mike` rather than `@mike`, because `@mike` is a real GitHub user. Status labels were dropped as well (Oct 20, 2026) to keep repos free of extra labels; one status comment per issue, edited in place, shows the state instead.
 - Local dev runs as plain node with the faux model only
+- Second repo (Oct 21, 2026): `Tshopper` (SvelteKit, pnpm 11.7.0). Verify runs `pnpm run check` and `pnpm run lint`, as its AGENTS.md prescribes. Its strictest engine range is Node `>=22.17`, so the Node 22 image needs no extra toolchain.
 
 **Open questions**
 
-- [ ] Which second repo is used for M2 and the acceptance checklist?
+- [x] Which second repo is used for M2 and the acceptance checklist? `Tshopper`
 
 ## Sources
 
