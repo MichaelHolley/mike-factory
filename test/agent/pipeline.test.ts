@@ -77,7 +77,7 @@ describe("issue pipeline", () => {
     const transcript = (await service.transcript(REPO, 1))!;
     expect(transcript[0]).toMatchObject({ kind: "user", text: expect.stringContaining("Implement GitHub issue #1") });
     expect(transcript).toContainEqual({ kind: "assistant", text: "Done: wrote hello.txt." });
-    expect(transcript.some((item) => item.kind === "tool-call" && item.name === "write")).toBe(true);
+    expect(transcript.some((item) => item.kind === "tool" && item.name === "write")).toBe(true);
     expect(await service.transcript(REPO, 99)).toBeUndefined();
 
     const [run] = await service.status();
