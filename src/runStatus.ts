@@ -2,8 +2,7 @@ export type IssuePhase = "queued" | "prepare" | "implement" | "verify" | "fix" |
 
 export type TranscriptItem =
   | { kind: "user" | "assistant"; text: string }
-  | { kind: "tool-call"; name: string; args: string }
-  | { kind: "tool-result"; name: string; text: string; isError: boolean };
+  | { kind: "tool"; name: string; summary: string; args: string; result?: { text: string; isError: boolean } };
 
 export type RunStatus = {
   repo: string;

@@ -29,8 +29,18 @@ describe("toTranscript", () => {
     expect(toTranscript(messages)).toEqual([
       { kind: "user", text: "Implement it" },
       { kind: "assistant", text: "Writing the file." },
-      { kind: "tool-call", name: "write", args: JSON.stringify({ path: "a.txt" }, null, 2) },
-      { kind: "tool-result", name: "write", text: "ok", isError: false },
+      { kind: "tool", name: "write", summary: "a.txt", args: JSON.stringify({ path: "a.txt" }, null, 2), result: { text: "ok", isError: false } },
+    ]);
+  });
+
+  it("leaves a tool call without a result while it is still running", () => {
+    const command = "pnpm test\npnpm lint";
+    const messages = [
+      { role: "assistant", content: [{ type: "toolCall", id: "1", name: "bash", arguments: { command } }], timestamp: 1 },
+    ] as unknown as Message[];
+
+    expect(toTranscript(messages)).toEqual([
+      { kind: "tool", name: "bash", summary: "pnpm test", args: JSON.stringify({ command }, null, 2) },
     ]);
   });
 
