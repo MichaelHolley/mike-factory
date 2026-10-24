@@ -16,9 +16,8 @@ export function createRepoContext(config: AppConfig) {
         return [
           `Repository: ${config.owner}/${repo.name} (default branch ${repo.defaultBranch}), working on issue #${state.issue} on branch ${state.branch}.`,
           `Install: ${repo.setup ?? "none"}`,
-          `Lint: ${repo.lint ?? "none"}`,
-          `Test: ${repo.test ?? "none"}`,
-          "The pipeline runs lint and test itself after you finish and sends you any failure output.",
+          `Checks: ${repo.checks?.join(" && ") || "none"}`,
+          "The pipeline runs the checks itself after you finish and sends you any failure output.",
         ].join("\n");
       }),
       section("project-instructions", async (input, context) => {

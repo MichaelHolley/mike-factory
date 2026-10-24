@@ -214,8 +214,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
         const { attempt } = task.state.checkpoint;
         const config = repoOf(repo);
         const cwd = worktrees.worktreePath(repo, issue);
-        for (const command of [config.lint, config.test]) {
-          if (!command) continue;
+        for (const command of config.checks ?? []) {
           const result = await run(rt, context, command, cwd);
           if (result.ok) continue;
           const output = `$ ${command}\n${result.output}`;

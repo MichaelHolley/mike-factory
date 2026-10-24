@@ -133,7 +133,7 @@ describe("issue pipeline", () => {
   });
 
   it("fails with the output in the status comment when verify keeps failing", async () => {
-    const world = createWorld({ dir, repo: { test: "echo 'boom: assertion failed' && exit 1", maxFixAttempts: 2 } });
+    const world = createWorld({ dir, repo: { checks: ["echo 'boom: assertion failed' && exit 1"], maxFixAttempts: 2 } });
     autopilot(world.faux);
     const { harness, service } = await launch(world);
 
@@ -153,7 +153,7 @@ describe("issue pipeline", () => {
 
   it("continues the same conversation and worktree when /mike is sent again after a failure", async () => {
     const setupLog = join(dir, "setup.log");
-    const world = createWorld({ dir, repo: { setup: `echo ran >> ${setupLog}`, test: "test -f fixed.txt", maxFixAttempts: 1 } });
+    const world = createWorld({ dir, repo: { setup: `echo ran >> ${setupLog}`, checks: ["test -f fixed.txt"], maxFixAttempts: 1 } });
     autopilot(world.faux, (messages) => {
       const last = messages.at(-1);
       const prompt = JSON.stringify(messages.filter((message) => message.role === "user").at(-1));
@@ -217,7 +217,7 @@ describe("issue pipeline", () => {
     };
 
     it("ends every status comment with the run page when PUBLIC_URL is set", async () => {
-      const done = createWorld({ dir, repo: { test: "exit 1", maxFixAttempts: 0 } });
+      const done = createWorld({ dir, repo: { checks: ["exit 1"], maxFixAttempts: 0 } });
       done.deps.publicUrl = PUBLIC_URL;
       const failedBodies = statusBodies(done);
       autopilot(done.faux);

@@ -10,8 +10,7 @@ export interface RepoConfig {
   name: string;
   defaultBranch: string;
   setup?: string;
-  test?: string;
-  lint?: string;
+  checks?: string[];
   model: ModelChoice;
   maxTurns: number;
   maxCostUsd: number;

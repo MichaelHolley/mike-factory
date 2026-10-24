@@ -9,10 +9,12 @@ repos:
   - name: byok-imagen
     defaultBranch: main
     setup: pnpm install --frozen-lockfile
-    test: pnpm check
-    lint: pnpm lint
+    checks: [pnpm lint, pnpm check]
   - name: Tshopper
     defaultBranch: main
     setup: pnpm install --frozen-lockfile
-    test: pnpm run check
-    lint: pnpm run lint
+    checks: [pnpm run lint, pnpm run check]
+  - name: mike-factory
+    defaultBranch: main
+    setup: pnpm install --frozen-lockfile
+    checks: [pnpm typecheck, pnpm test]

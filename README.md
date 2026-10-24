@@ -12,7 +12,7 @@ A self-hosted coding agent that turns a GitHub issue into a pull request. Commen
 - A public, read-only status page lists every run and refreshes itself; each run's page also shows the agent's conversation. When `PUBLIC_URL` is set, the status comment ends with a link to that run's page.
 - Each issue gets one durable [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable) run, triggered by a GitHub App webhook: prepare, implement, verify, publish, report.
 - State lives in SQLite, so a restart resumes the run and still produces exactly one PR.
-- Only an allowed sender can trigger runs, and each repo has its own setup/test/lint commands and turn and cost budgets.
+- Only an allowed sender can trigger runs, and each repo has its own setup command and ordered `checks` (e.g. lint, typecheck, test) and turn and cost budgets.
 
 ## Docs
 
