@@ -14,8 +14,8 @@
   --halt: #6e6a86;
   --idle: #c3cbd3;
 
-  --font-ui: "Barlow", system-ui, sans-serif;
-  --font-head: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
+  --font-ui: "Poppins", system-ui, sans-serif;
+  --font-head: var(--font-ui);
   --font-code: "IBM Plex Mono", ui-monospace, monospace;
 
   font-family: var(--font-ui);
