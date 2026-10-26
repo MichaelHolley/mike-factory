@@ -18,3 +18,7 @@ repos:
     defaultBranch: main
     setup: pnpm install --frozen-lockfile
     checks: [pnpm typecheck, pnpm test]
+  - name: zone-0
+    defaultBranch: main
+    setup: pnpm install --frozen-lockfile
+    checks: [pnpm run lint, pnpm run check]
