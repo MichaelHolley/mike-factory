@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import type { AppConfig } from "../config.ts";
+import { findRepo, loadConfig, type AppConfig } from "../config.ts";
 import { InvalidSignatureError, parseCommand, verifyWebhook } from "./webhooks.ts";
 
 const secret = "s3cret";
@@ -35,6 +36,23 @@ describe("verifyWebhook", () => {
   it("starts on /mike and stops on /mike stop, keyed by the comment id", async () => {
     expect(await run(payload())).toEqual({ kind: "start", repo: "byok-imagen", issue: 12, requestId: "comment-99", instructions: "" });
     expect(await run(payload({ comment: { id: 99, body: "/mike stop" } }))).toEqual({ kind: "stop", repo: "byok-imagen", issue: 12, requestId: "comment-99" });
+  });
+
+  it("accepts zone-0 using the shipped SvelteKit configuration", async () => {
+    const shippedConfig = await loadConfig(fileURLToPath(new URL("../../config/repos.yaml", import.meta.url)));
+    expect(shippedConfig.owner).toBe("michaelholley");
+    expect(findRepo(shippedConfig, "zone-0")).toMatchObject({
+      defaultBranch: "main",
+      setup: "pnpm install --frozen-lockfile",
+      checks: ["pnpm run lint", "pnpm run check"],
+    });
+    const rawBody = JSON.stringify(payload({
+      sender: { id: shippedConfig.allowedSenderId },
+      repository: { name: "zone-0", owner: { login: "MichaelHolley" } },
+    }));
+    expect(await verifyWebhook({
+      event: "issue_comment", signature: sign(rawBody), rawBody, secret, config: shippedConfig,
+    })).toEqual({ kind: "start", repo: "zone-0", issue: 12, requestId: "comment-99", instructions: "" });
   });
 
   it.each([

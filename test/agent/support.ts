@@ -112,7 +112,7 @@ export const textOf = (message: Message | undefined) =>
 
 /**
  * A model that never runs out of responses, so a restarted process can keep going. It writes hello.txt for a task,
- * says it tried for a failed verification, and wraps up after any tool result.
+ * retries a failed/interrupted write, says it tried for a failed verification, and wraps up after a successful tool result.
  */
 export function autopilot(faux: FauxProviderHandle, decide?: (messages: Message[]) => AssistantMessage | undefined) {
   const respond = (context: { messages: Message[] }): AssistantMessage => {
@@ -120,7 +120,7 @@ export function autopilot(faux: FauxProviderHandle, decide?: (messages: Message[
     const custom = decide?.(context.messages);
     if (custom) return custom;
     const last = context.messages.at(-1);
-    if (last?.role === "toolResult") return fauxAssistantMessage("Done: wrote hello.txt.");
+    if (last?.role === "toolResult" && !last.isError) return fauxAssistantMessage("Done: wrote hello.txt.");
     if (textOf(last).startsWith("Verification failed")) return fauxAssistantMessage("Tried a fix.");
     return fauxAssistantMessage(fauxToolCall("write", { path: "hello.txt", content: "hello\n" }), { stopReason: "toolUse" });
   };

@@ -11,8 +11,10 @@ A self-hosted coding agent that turns a GitHub issue into a pull request. Commen
 - Progress shows up in a single status comment on the issue, edited in place. No labels are added to your repos.
 - A public, read-only status page lists every run and refreshes itself; each run's page also shows the agent's conversation. When `PUBLIC_URL` is set, the status comment ends with a link to that run's page.
 - Each issue gets one durable [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable) run, triggered by a GitHub App webhook: prepare, implement, verify, publish, report.
-- State lives in SQLite, so a restart resumes the run and still produces exactly one PR.
+- State lives in SQLite, so a restart resumes the run and still produces exactly one PR. Commits use the GitHub App bot's identity.
 - Only an allowed sender can trigger runs, and each repo has its own setup command and ordered `checks` (e.g. lint, typecheck, test) and turn and cost budgets.
+
+Configured repos: `byok-imagen`, `Tshopper`, `zone-0` (SvelteKit), and `mike-factory`. See `config/repos.yaml` for their setup and checks.
 
 ## Docs
 

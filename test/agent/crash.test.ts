@@ -40,7 +40,7 @@ describe("restart safety", () => {
 
     const second = await runProcess(dir, "second");
     expect(second.code, second.stderr).toBe(0);
-    expect(second.stdout).toContain('"outcomes":["completed","completed","completed","completed"]');
+    expect(second.stdout, second.stderr).toContain('"outcomes":["completed","completed","completed","completed"]');
 
     const github = JSON.parse(readFileSync(join(dir, "github.json"), "utf8")) as FakeGitHubState;
     expect(github.prs.map((pr) => `${pr.repo}:${pr.head}:${pr.state}`).sort()).toEqual([

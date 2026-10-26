@@ -14,6 +14,10 @@ repos:
     defaultBranch: main
     setup: pnpm install --frozen-lockfile
     checks: [pnpm run lint, pnpm run check]
+  - name: zone-0
+    defaultBranch: main
+    setup: pnpm install --frozen-lockfile
+    checks: [pnpm run lint, pnpm run check]
   - name: mike-factory
     defaultBranch: main
     setup: pnpm install --frozen-lockfile

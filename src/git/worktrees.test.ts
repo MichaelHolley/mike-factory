@@ -3,7 +3,7 @@ import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RepoConfig } from "../config.ts";
 import { createWorktrees } from "./worktrees.ts";
 
@@ -40,7 +40,10 @@ beforeEach(async () => {
   worktrees = createWorktrees({ dataDir, owner: "o", remoteUrl: () => remote, identity: async () => identity });
 });
 
-afterEach(() => rm(root, { recursive: true, force: true }));
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  await rm(root, { recursive: true, force: true });
+});
 
 describe("createWorktrees", () => {
   it("creates a bare clone and a worktree on agent/issue-<n>", async () => {
@@ -81,12 +84,17 @@ describe("createWorktrees", () => {
   });
 
   it("commits only when there are changes, as the given identity", async () => {
+    vi.stubEnv("GIT_AUTHOR_NAME", "inherited author");
+    vi.stubEnv("GIT_AUTHOR_EMAIL", "author@example.com");
+    vi.stubEnv("GIT_COMMITTER_NAME", "inherited committer");
+    vi.stubEnv("GIT_COMMITTER_EMAIL", "committer@example.com");
     const { path } = await worktrees.prepare(repo, 1);
     expect(await worktrees.commitAll("demo", 1, "nothing")).toBe(false);
     await writeFile(join(path, "new.txt"), "x");
     expect(await worktrees.commitAll("demo", 1, "feat: new")).toBe(true);
     expect(await worktrees.commitAll("demo", 1, "again")).toBe(false);
     expect(await git(path, "log", "-1", "--format=%an <%ae>|%s")).toBe(`${identity.name} <${identity.email}>|feat: new`);
+    expect(await git(path, "log", "-1", "--format=%cn <%ce>")).toBe(`${identity.name} <${identity.email}>`);
     expect(await worktrees.commitsAhead(repo, 1)).toBe(1);
   });
 

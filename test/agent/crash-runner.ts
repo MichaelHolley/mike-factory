@@ -23,5 +23,8 @@ const { harness, service } = await openAgentHarness(
 await Promise.all(runs.map(({ repo, issue }) => service.start(startAction(issue, `comment-${repo}-${issue}`, "", repo))));
 const outcomes = await Promise.all(runs.map(({ repo, issue }) => pipelineResult(harness, issue, repo)));
 console.log(JSON.stringify({ outcomes: outcomes.map((outcome) => outcome.status) }));
+if (outcomes.some((outcome) => outcome.status !== "completed")) {
+  console.error(JSON.stringify({ outcomes, logs: world.logs }));
+}
 await harness.close(ctx);
 process.exit(0);
