@@ -85,8 +85,13 @@ export function createWorktrees(opts: {
       const staged = await git(cwd, ["diff", "--cached", "--name-only"]);
       if (!staged) return false;
       const identity = await opts.identity?.();
-      const identityArgs = identity ? ["-c", `user.name=${identity.name}`, "-c", `user.email=${identity.email}`] : [];
-      await git(cwd, [...identityArgs, "commit", "-m", message]);
+      const identityEnv: Record<string, string> = identity ? {
+        GIT_AUTHOR_NAME: identity.name,
+        GIT_AUTHOR_EMAIL: identity.email,
+        GIT_COMMITTER_NAME: identity.name,
+        GIT_COMMITTER_EMAIL: identity.email,
+      } : {};
+      await git(cwd, ["commit", "-m", message], identityEnv);
       return true;
     },
 

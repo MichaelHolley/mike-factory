@@ -11,7 +11,7 @@ type Entry = { kind: "message"; message: Message } | { kind: "tools"; calls: Cal
 const MAX_MARKS = 32;
 
 const props = defineProps<{ repo: string; issue: string }>();
-const { items, error, loaded } = useTranscript(
+const { items, error, loaded, downloadUrl } = useTranscript(
   () => props.repo,
   () => props.issue,
 );
@@ -36,7 +36,10 @@ const tone = (call: Call) => (call.result ? (call.result.isError ? "failed" : "d
 
 <template>
   <section class="log">
-    <h2>Conversation</h2>
+    <header class="log-head">
+      <h2>Conversation</h2>
+      <a v-if="loaded && !error" :href="downloadUrl" download>Download JSON</a>
+    </header>
     <p v-if="error && !items.length" class="muted">Couldn't load the conversation: {{ error }}.</p>
     <p v-else-if="loaded && !items.length" class="muted">No messages yet.</p>
     <ol v-else>
@@ -70,8 +73,18 @@ const tone = (call: Call) => (call.result ? (call.result.isError ? "failed" : "d
 .log {
   margin-top: 2rem;
 }
-h2 {
+.log-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
   margin-bottom: 0.75rem;
+}
+.log-head a {
+  font-size: 0.875rem;
+}
+h2 {
   font-size: 1.125rem;
 }
 ol {
