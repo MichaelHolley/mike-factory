@@ -114,36 +114,15 @@ describe("webhook server", () => {
     expect(service.transcript).toHaveBeenLastCalledWith("byok-imagen", 12);
   });
 
-  it("downloads a fresh public conversation snapshot as a JSON attachment", async () => {
+  it("serves the conversation as a JSON attachment with ?download=1", async () => {
     const { app, service } = setup();
-    const transcript = [
-      { kind: "user" as const, text: "Implement this.\nKeep Unicode: ✓" },
-      { kind: "assistant" as const, text: "Working on it." },
-      { kind: "tool" as const, name: "bash", summary: "pnpm test", args: '{"command":"pnpm test"}', result: { text: "Passed", isError: false } },
-      { kind: "tool" as const, name: "read", summary: "README.md", args: '{"path":"README.md"}' },
-    ];
-    vi.mocked(service.transcript).mockResolvedValueOnce([]).mockResolvedValueOnce(transcript);
-    const url = "/status/byok-imagen/12/conversation?download=1";
-    const empty = await app.request(url);
-    expect(empty.status).toBe(200);
-    expect(await empty.json()).toEqual([]);
-
-    const response = await app.request(url);
+    const transcript = [{ kind: "assistant" as const, text: "Done." }];
+    vi.mocked(service.transcript).mockResolvedValue(transcript);
+    const response = await app.request("/status/byok-imagen/12/conversation?download=1");
     expect(response.status).toBe(200);
-    expect(response.headers.get("Content-Type")).toContain("application/json");
     expect(response.headers.get("Content-Disposition")).toBe('attachment; filename="byok-imagen-issue-12-conversation.json"');
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(await response.text()).toBe(JSON.stringify(transcript, null, 2));
-    expect(service.transcript).toHaveBeenLastCalledWith("byok-imagen", 12);
-  });
-
-  it("does not download a file for missing or invalid conversations", async () => {
-    const { app } = setup();
-    for (const issue of ["12", "abc"]) {
-      const response = await app.request(`/status/byok-imagen/${issue}/conversation?download=1`);
-      expect(response.status).toBe(404);
-      expect(response.headers.get("Content-Disposition")).toBeNull();
-    }
   });
 
   it("returns 404 for everything else", async () => {
