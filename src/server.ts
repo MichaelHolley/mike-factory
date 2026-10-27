@@ -52,7 +52,14 @@ export function createServer({ config, service, webhookSecret, log, uiDir = DEFA
     const issue = Number(c.req.param("issue"));
     if (!Number.isInteger(issue)) return c.text("not found", 404);
     const transcript = await service.transcript(c.req.param("repo"), issue);
-    return transcript ? c.json(transcript) : c.text("not found", 404);
+    if (!transcript) return c.text("not found", 404);
+    if (c.req.query("download") === "1") {
+      const repo = c.req.param("repo").replace(/[^a-zA-Z0-9._-]/g, "_");
+      c.header("Content-Disposition", `attachment; filename="${repo}-issue-${issue}-conversation.json"`);
+      c.header("Cache-Control", "no-store");
+      return c.body(JSON.stringify(transcript, null, 2), 200, { "Content-Type": "application/json; charset=UTF-8" });
+    }
+    return c.json(transcript);
   });
 
   if (existsSync(uiDir)) {

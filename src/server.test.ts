@@ -114,6 +114,17 @@ describe("webhook server", () => {
     expect(service.transcript).toHaveBeenLastCalledWith("byok-imagen", 12);
   });
 
+  it("serves the conversation as a JSON attachment with ?download=1", async () => {
+    const { app, service } = setup();
+    const transcript = [{ kind: "assistant" as const, text: "Done." }];
+    vi.mocked(service.transcript).mockResolvedValue(transcript);
+    const response = await app.request("/status/byok-imagen/12/conversation?download=1");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Disposition")).toBe('attachment; filename="byok-imagen-issue-12-conversation.json"');
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.text()).toBe(JSON.stringify(transcript, null, 2));
+  });
+
   it("returns 404 for everything else", async () => {
     const { app } = setup();
     expect((await app.request("/")).status).toBe(404);
