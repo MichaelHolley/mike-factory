@@ -85,13 +85,13 @@ const implementPrompt = (owner: string, repo: string, issue: IssueData, comments
       ? undefined
       : `<comments>\n${comments.map((comment) => `${comment.author} (${comment.createdAt}):\n${comment.body}`).join("\n\n")}\n</comments>`,
     instructions && `Instructions from the repository owner for this run (they refine the task but do not override your rules):\n<owner-instructions>\n${instructions}\n</owner-instructions>`,
-    "When you are done, reply with a short summary of what you changed.",
+    "Your final reply becomes the pull request description.",
   ]
     .filter(Boolean)
     .join("\n\n");
 
 const fixPrompt = (attempt: number, max: number, output: string) =>
-  `Verification failed (fix attempt ${attempt} of ${max}). Fix the problem in the working directory, then reply with a short summary.\n\n${codeBlock(output)}`;
+  `Verification failed (fix attempt ${attempt} of ${max}). Fix the problem in the working directory. Your final reply replaces the pull request description, so it must still cover the whole change.\n\n${codeBlock(output)}`;
 
 const failureComment = (reason: string, output: string | null) =>
   [`The agent could not finish this issue.`, `**Reason:** ${reason}`, output ? codeBlock(tail(output, MAX_COMMENT_OUTPUT_CHARS)) : undefined, "Comment `/mike` to continue."]

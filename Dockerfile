@@ -41,6 +41,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=web /app/web/dist ./web/dist
 COPY package.json ./
 COPY config ./config
+COPY skills ./skills
 USER agent
 VOLUME ["/data"]
 EXPOSE 3000

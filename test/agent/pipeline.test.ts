@@ -60,6 +60,29 @@ describe("issue pipeline", () => {
     expect(state).toMatchObject({ phase: "done", prUrl: pr.url, branch: "agent/issue-1" });
   });
 
+  it("serves the bundled skills, overridden by the repo's own .agents/skills", async () => {
+    const world = createWorld({ dir });
+    const override = "---\nname: pull-request\ndescription: Repo-specific PR rules.\n---\n\nRepo rules win.\n";
+    const steps = [
+      fauxToolCall("skills", { command: "read pull-request" }),
+      fauxToolCall("write", { path: ".agents/skills/pull-request/SKILL.md", content: override }),
+      fauxToolCall("skills", { command: "read pull-request" }),
+    ];
+    autopilot(world.faux, (messages) => {
+      const step = steps[messages.filter((message) => message.role === "toolResult").length];
+      return step && fauxAssistantMessage(step, { stopReason: "toolUse" });
+    });
+    const { harness, service } = await launch(world);
+
+    await service.start(startAction(1, "comment-1"));
+    expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+    const skillReads = (await service.transcript(REPO, 1))!.flatMap((item) => (item.kind === "tool" && item.name === "skills" ? [item.result?.text] : []));
+    expect(skillReads).toHaveLength(2);
+    expect(skillReads[0]).toContain("Write the PR description");
+    expect(skillReads[1]).toContain("Repo rules win.");
+  });
+
   it("stamps startedAt on start and moves updatedAt on every phase change", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux);
