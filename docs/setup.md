@@ -18,6 +18,12 @@ To work on the status UI (`web/`), run the server as above and `pnpm -C web dev`
 
 Configuration is in `config/repos.yaml` (owner, allowed sender id, per-repo `setup` and ordered `checks` commands, run in sequence after the agent finishes, plus budgets). Environment variables are listed in `.env.example`; `PUBLIC_URL` (optional) is the public base URL, e.g. `https://factory.example.com`, used for the run link in status comments. Secrets are read once at startup and removed from `process.env` before any tool shell can inherit them. When committing, the configured bot identity takes precedence over inherited `GIT_AUTHOR_*` and `GIT_COMMITTER_*` names and emails.
 
+## Commit and PR writing
+
+No external skill installation is needed. Implementation and verification-fix prompts ask the agent to follow the repo's commit conventions (otherwise use specific, imperative subjects such as `fix(parser): handle empty input`) and update relevant docs. The final reply becomes the PR body: `Summary` explains the full change and why, `Testing` lists commands and observed results (or says not run), and optional `Notes` covers risks, breaking changes or setup steps. These are model instructions, not format validation.
+
+The pipeline appends `Closes #<issue>` and uses the issue title as the PR title. Any uncommitted changes are committed with the fallback message `chore(agent): <issue title> (#<issue>)`.
+
 ## GitHub App
 
 Create the app under your account and install it with "Only select repositories". Every repo must also be listed in `config/repos.yaml`.
