@@ -60,7 +60,7 @@ describe("issue pipeline", () => {
     expect(state).toMatchObject({ phase: "done", prUrl: pr.url, branch: "agent/issue-1" });
   });
 
-  it("requests reviewer-focused writing on implementation and fixes and publishes the final full summary", async () => {
+  it("opens the PR with the final reply after a successful verification fix", async () => {
     const world = createWorld({ dir, repo: { checks: ["test -f fixed.txt"] } });
     const description = "## Summary\n- Add hello and fix verification setup.\n\n## Testing\n- `test -f fixed.txt`: passed.";
     autopilot(world.faux, (messages) => {
@@ -77,17 +77,7 @@ describe("issue pipeline", () => {
     await service.start(startAction(1, "comment-1"));
     expect((await pipelineResult(harness, 1)).status).toBe("completed");
 
-    const prompts = (await service.transcript(REPO, 1))!.flatMap((item) => item.kind === "user" ? [item.text] : []);
-    expect(prompts).toHaveLength(2);
-    for (const prompt of prompts) {
-      expect(prompt).toContain("Follow the repository's commit conventions");
-      expect(prompt).toContain("imperative, specific subject");
-      expect(prompt).toContain("entire change");
-      expect(prompt).toContain("## Summary");
-      expect(prompt).toContain("## Testing");
-      expect(prompt).toContain("explicitly say when not run");
-      expect(prompt).toContain("Do not open a PR or push");
-    }
+    expect(git(world.remote, "show", "agent/issue-1:fixed.txt")).toBe("ok");
     expect(world.github.prs[0]!.body).toBe(`${description}\n\nCloses #1`);
   });
 

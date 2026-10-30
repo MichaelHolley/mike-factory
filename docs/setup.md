@@ -20,9 +20,7 @@ Configuration is in `config/repos.yaml` (owner, allowed sender id, per-repo `set
 
 ## Commit and PR writing
 
-No external skill installation is needed. Implementation and verification-fix prompts ask the agent to follow the repo's commit conventions (otherwise use specific, imperative subjects such as `fix(parser): handle empty input`) and update relevant docs. The final reply becomes the PR body: `Summary` explains the full change and why, `Testing` lists commands and observed results (or says not run), and optional `Notes` covers risks, breaking changes or setup steps. These are model instructions, not format validation.
-
-The pipeline appends `Closes #<issue>` and uses the issue title as the PR title. Any uncommitted changes are committed with the fallback message `chore(agent): <issue title> (#<issue>)`.
+The agent's final reply, including after a verification fix, becomes the PR body, followed by `Closes #<issue>`; the issue title becomes the PR title. Writing guidance lives in the prompts in `src/agent/tasks/issuePipeline.ts`. Uncommitted changes are committed as `chore(agent): <issue title> (#<issue>)`.
 
 ## GitHub App
 
