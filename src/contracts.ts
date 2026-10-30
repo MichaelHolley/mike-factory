@@ -59,6 +59,8 @@ export interface Worktrees {
   push(repo: string, issue: number): Promise<void>;
   /** Number of commits on the issue branch that are not on `origin/<defaultBranch>`. */
   commitsAhead(repo: RepoConfig, issue: number): Promise<number>;
+  /** Subject of the latest commit on the issue branch. */
+  latestCommitSubject(repo: string, issue: number): Promise<string>;
   /** Idempotent: removes worktree and local branch, then prunes. */
   remove(repo: string, issue: number): Promise<void>;
   /** Issues that still have a local worktree or `agent/issue-<n>` branch. */

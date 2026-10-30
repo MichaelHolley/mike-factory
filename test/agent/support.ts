@@ -119,17 +119,22 @@ export function autopilot(faux: FauxProviderHandle, decide?: (messages: Message[
     const custom = decide?.(context.messages);
     if (custom) return custom;
     const last = context.messages.at(-1);
-    if (last?.role === "toolResult") return fauxAssistantMessage("Done: wrote hello.txt.");
+    if (last?.role === "toolResult") {
+      if (last.isError && last.content.some((part) => part.type === "text" && part.text.includes("was interrupted"))) {
+        return commitFile("hello.txt", "hello");
+      }
+      return fauxAssistantMessage("Done: wrote hello.txt.");
+    }
     if (textOf(last).startsWith("Verification failed")) return fauxAssistantMessage("Tried a fix.");
     return commitFile("hello.txt", "hello");
   };
   faux.setResponses([respond]);
 }
 
-/** A bash tool call that writes `path` and commits only that file, as an agent following the commit rules would. */
-export const commitFile = (path: string, content: string) =>
+/** Writes and commits only `path`; safe to retry after a hard exit interrupted the tool result. */
+export const commitFile = (path: string, content: string, subject = `feat: add ${path}`) =>
   fauxAssistantMessage(
-    fauxToolCall("bash", { command: `printf %s '${content}' > ${path} && git add ${path} && git -c user.name=agent -c user.email=agent@example.com commit -qm 'feat: add ${path}'` }),
+    fauxToolCall("bash", { command: `printf %s '${content}' > ${path} && git add ${path} && (git diff --cached --quiet || git -c user.name=agent -c user.email=agent@example.com commit -qm '${subject}')` }),
     { stopReason: "toolUse" },
   );
 
