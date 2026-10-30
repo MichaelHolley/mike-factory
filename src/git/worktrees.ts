@@ -3,7 +3,7 @@ import { access, mkdir, readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import type { RepoConfig } from "../config.ts";
-import { branchName, type GitIdentity, type Worktrees } from "../contracts.ts";
+import { branchName, type Worktrees } from "../contracts.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -14,7 +14,6 @@ export function createWorktrees(opts: {
   owner: string;
   remoteUrl?: (repo: string) => string;
   token?: (repo: string) => Promise<string>;
-  identity?: () => Promise<GitIdentity>;
 }): Worktrees {
   const { dataDir, owner } = opts;
   const remoteUrl = opts.remoteUrl ?? ((repo) => `https://github.com/${owner}/${repo}.git`);
@@ -79,21 +78,7 @@ export function createWorktrees(opts: {
         return { path, branch, created: true };
       }),
 
-    async commitAll(repo, issue, message) {
-      const cwd = worktreePath(repo, issue);
-      await git(cwd, ["add", "-A"]);
-      const staged = await git(cwd, ["diff", "--cached", "--name-only"]);
-      if (!staged) return false;
-      const identity = await opts.identity?.();
-      const identityEnv: Record<string, string> = identity ? {
-        GIT_AUTHOR_NAME: identity.name,
-        GIT_AUTHOR_EMAIL: identity.email,
-        GIT_COMMITTER_NAME: identity.name,
-        GIT_COMMITTER_EMAIL: identity.email,
-      } : {};
-      await git(cwd, ["commit", "-m", message], identityEnv);
-      return true;
-    },
+    uncommitted: (repo, issue) => git(worktreePath(repo, issue), ["status", "--porcelain", "--untracked-files=all"]),
 
     // Under the repo lock because a push also updates the shared remote-tracking refs.
     push: (repo, issue) =>

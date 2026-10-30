@@ -16,7 +16,7 @@ To work on the status UI (`web/`), run the server as above and `pnpm -C web dev`
 
 ## Configuration
 
-Configuration is in `config/repos.yaml` (owner, allowed sender id, per-repo `setup` and ordered `checks` commands, run in sequence after the agent finishes, plus budgets). Environment variables are listed in `.env.example`; `PUBLIC_URL` (optional) is the public base URL, e.g. `https://factory.example.com`, used for the run link in status comments. Secrets are read once at startup and removed from `process.env` before any tool shell can inherit them. When committing, the configured bot identity takes precedence over inherited `GIT_AUTHOR_*` and `GIT_COMMITTER_*` names and emails.
+Configuration is in `config/repos.yaml` (owner, allowed sender id, per-repo `setup` and ordered `checks` commands, run in sequence on a clean working tree after the agent finishes, plus budgets). Environment variables are listed in `.env.example`; `PUBLIC_URL` (optional) is the public base URL, e.g. `https://factory.example.com`, used for the run link in status comments. Secrets are read once at startup and removed from `process.env` before any tool shell can inherit them. When committing, the configured bot identity takes precedence over inherited `GIT_AUTHOR_*` and `GIT_COMMITTER_*` names and emails.
 
 ## Commit and PR writing
 

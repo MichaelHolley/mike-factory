@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openAgentHarness } from "../../src/agent/harness.ts";
 import { STATUS_MARKER } from "../../src/agent/tasks/issuePipeline.ts";
 import type { GitHubClient } from "../../src/contracts.ts";
-import { autopilot, conversationIdOf, createWorld, ctx, git, issueStateOf, OTHER_REPO, pipelineResult, REPO, startAction, stopAction, textOf, type World } from "./support.ts";
+import { autopilot, commitFile, conversationIdOf, createWorld, ctx, git, issueStateOf, OTHER_REPO, pipelineResult, REPO, startAction, stopAction, textOf, type World } from "./support.ts";
 
 let dir: string;
 let open: Harness[];
@@ -65,7 +65,7 @@ describe("issue pipeline", () => {
     const description = "## Summary\n- Add hello and fix verification setup.\n\n## Testing\n- `test -f fixed.txt`: passed.";
     autopilot(world.faux, (messages) => {
       if (textOf(messages.at(-1)).startsWith("Verification failed")) {
-        return fauxAssistantMessage(fauxToolCall("write", { path: "fixed.txt", content: "ok\n" }), { stopReason: "toolUse" });
+        return commitFile("fixed.txt", "ok");
       }
       if (messages.at(-1)?.role === "toolResult" && messages.some((message) => textOf(message).startsWith("Verification failed"))) {
         return fauxAssistantMessage(description);
@@ -98,7 +98,7 @@ describe("issue pipeline", () => {
     const transcript = (await service.transcript(REPO, 1))!;
     expect(transcript[0]).toMatchObject({ kind: "user", text: expect.stringContaining("Implement GitHub issue #1") });
     expect(transcript).toContainEqual({ kind: "assistant", text: "Done: wrote hello.txt." });
-    expect(transcript.some((item) => item.kind === "tool" && item.name === "write")).toBe(true);
+    expect(transcript.some((item) => item.kind === "tool" && item.name === "bash")).toBe(true);
     expect(await service.transcript(REPO, 99)).toBeUndefined();
 
     const [run] = await service.status();
@@ -179,7 +179,7 @@ describe("issue pipeline", () => {
       const last = messages.at(-1);
       const prompt = JSON.stringify(messages.filter((message) => message.role === "user").at(-1));
       if (last?.role !== "toolResult" && prompt.includes("second attempt")) {
-        return fauxAssistantMessage(fauxToolCall("write", { path: "fixed.txt", content: "ok\n" }), { stopReason: "toolUse" });
+        return commitFile("fixed.txt", "ok");
       }
       return undefined;
     });
@@ -198,6 +198,42 @@ describe("issue pipeline", () => {
     expect(second!.pipelineTaskId).not.toBe(first!.pipelineTaskId);
     expect(world.github.prs).toHaveLength(1);
     expect(status(world)).toContain("Opened ");
+  });
+
+  it("verifies and publishes only committed changes, sending leftover files back to the agent", async () => {
+    const world = createWorld({ dir, repo: { checks: ["test -f hello.txt"] } });
+    const helper = (command: string) => fauxAssistantMessage(fauxToolCall("bash", { command }), { stopReason: "toolUse" });
+    autopilot(world.faux, (messages) => {
+      const last = messages.at(-1);
+      if (textOf(last).startsWith("Implement GitHub issue")) return helper("echo 'test -f hello.txt' > verify.sh");
+      if (last?.role === "toolResult" && messages.filter((message) => message.role === "assistant").length === 1) return commitFile("hello.txt", "hello");
+      if (textOf(last).startsWith("Verification failed")) return helper("rm verify.sh");
+      return undefined;
+    });
+    const { harness, service } = await launch(world);
+
+    await service.start(startAction(1, "comment-1"));
+    expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+    const fix = (await service.transcript(REPO, 1))!.find((item) => item.kind === "user" && item.text.startsWith("Verification failed"));
+    expect(fix).toMatchObject({ text: expect.stringContaining("?? verify.sh") });
+    expect(git(world.remote, "diff", "--name-only", "main", "agent/issue-1")).toBe("hello.txt");
+    expect(await issueStateOf(harness, 1)).toMatchObject({ phase: "done", attempts: 1 });
+  });
+
+  it("fails without publishing when uncommitted changes remain", async () => {
+    const world = createWorld({ dir, repo: { maxFixAttempts: 0 } });
+    autopilot(world.faux, (messages) =>
+      messages.at(-1)?.role === "toolResult" ? undefined : fauxAssistantMessage(fauxToolCall("write", { path: "hello.txt", content: "hello\n" }), { stopReason: "toolUse" }),
+    );
+    const { harness, service } = await launch(world);
+
+    await service.start(startAction(1, "comment-1"));
+    expect((await pipelineResult(harness, 1)).status).toBe("failed");
+
+    expect(status(world)).toContain("uncommitted changes remain after 0 fix attempt(s)");
+    expect(status(world)).toContain("?? hello.txt");
+    expect(world.github.prs).toHaveLength(0);
   });
 
   it("fails with 'no changes' when the agent changes nothing", async () => {
@@ -343,7 +379,7 @@ describe("issue pipeline", () => {
     autopilot(world.faux, (messages) => {
       const task = /^Implement GitHub issue #(\d+) of [^/]+\/(\S+) /.exec(textOf(messages.at(-1)));
       if (!task) return undefined;
-      return fauxAssistantMessage(fauxToolCall("write", { path: `${task[2]}-${task[1]}.txt`, content: "x\n" }), { stopReason: "toolUse" });
+      return commitFile(`${task[2]}-${task[1]}.txt`, "x");
     });
     const { harness, service } = await launch(world, [1, 2, 3]);
     world.github.addIssue(OTHER_REPO, { number: 1, title: "Add other", body: "Please." });
