@@ -20,7 +20,7 @@ Configuration is in `config/repos.yaml` (owner, allowed sender id, per-repo `set
 
 ## Commit and PR writing
 
-The agent's final reply, including after a verification fix, becomes the PR body, followed by `Closes #<issue>`; the issue title becomes the PR title. Writing guidance lives in the prompts in `src/agent/tasks/issuePipeline.ts`. Uncommitted changes are committed as `chore(agent): <issue title> (#<issue>)`.
+The agent's final reply, including after a verification fix, becomes the PR body, followed by `Closes #<issue>`; the issue title becomes the PR title. Commit and writing guidance lives in the prompts in `src/agent/service.ts` and `src/agent/tasks/issuePipeline.ts`. Only the agent's own commits are pushed: it commits changes that serve the issue (with their tests and docs), and any uncommitted leftovers, such as verification helpers, fail verification and go back to the agent before checks run.
 
 ## GitHub App
 

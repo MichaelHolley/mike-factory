@@ -53,8 +53,8 @@ export interface Worktrees {
   worktreePath(repo: string, issue: number): string;
   /** Idempotent: create, or reuse the existing path or branch. */
   prepare(repo: RepoConfig, issue: number): Promise<WorktreeInfo>;
-  /** Stages everything and commits if there is anything to commit. Returns whether a commit was made. */
-  commitAll(repo: string, issue: number, message: string): Promise<boolean>;
+  /** `git status --porcelain` output; empty when the worktree is clean. */
+  uncommittedChanges(repo: string, issue: number): Promise<string>;
   /** Pushes `agent/issue-<n>` (and only that ref) to origin. Idempotent. */
   push(repo: string, issue: number): Promise<void>;
   /** Number of commits on the issue branch that are not on `origin/<defaultBranch>`. */

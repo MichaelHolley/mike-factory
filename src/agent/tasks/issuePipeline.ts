@@ -223,17 +223,23 @@ export function createIssuePipeline(deps: PipelineDeps) {
         const { attempt } = task.state.checkpoint;
         const config = repoOf(repo);
         const cwd = worktrees.worktreePath(repo, issue);
-        for (const command of config.checks ?? []) {
-          const result = await run(rt, context, command, cwd);
-          if (result.ok) continue;
-          const output = `$ ${command}\n${result.output}`;
-          if (attempt >= config.maxFixAttempts) {
-            throw new PipelineFailure(`\`${command}\` still fails after ${attempt} fix attempt(s)`, output);
+        // Checks must see exactly what gets pushed, so leftovers fail before any check runs.
+        const findFailure = async () => {
+          const uncommitted = await worktrees.uncommittedChanges(repo, issue);
+          if (uncommitted) return { reason: "uncommitted changes remain", output: `$ git status --porcelain\n${uncommitted}` };
+          for (const command of config.checks ?? []) {
+            const result = await run(rt, context, command, cwd);
+            if (!result.ok) return { reason: `\`${command}\` still fails`, output: `$ ${command}\n${result.output}` };
           }
-          await go(rt, context, { phase: "fix", attempt: attempt + 1, output: tail(output, MAX_CHECKPOINT_OUTPUT_CHARS) }, { attempts: attempt + 1 });
+          return undefined;
+        };
+        const failure = await findFailure();
+        if (!failure) {
+          await go(rt, context, { phase: "publish" });
           return;
         }
-        await go(rt, context, { phase: "publish" });
+        if (attempt >= config.maxFixAttempts) throw new PipelineFailure(`${failure.reason} after ${attempt} fix attempt(s)`, failure.output);
+        await go(rt, context, { phase: "fix", attempt: attempt + 1, output: tail(failure.output, MAX_CHECKPOINT_OUTPUT_CHARS) }, { attempts: attempt + 1 });
       }),
 
       fix: step("fix", async (task, rt, context) => {
@@ -247,7 +253,6 @@ export function createIssuePipeline(deps: PipelineDeps) {
         const { repo, issue } = task.input;
         const config = repoOf(repo);
         const data = await github.getIssue(repo, issue);
-        await worktrees.commitAll(repo, issue, `chore(agent): ${data.title} (#${issue})`);
         if ((await worktrees.commitsAhead(config, issue)) === 0) throw new PipelineFailure("no changes: the agent produced no commits");
         await worktrees.push(repo, issue);
         const head = (await rt.snapshot(IssueState, rt.conversationId, context))?.branch ?? "";

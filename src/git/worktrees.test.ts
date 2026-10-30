@@ -3,13 +3,17 @@ import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { RepoConfig } from "../config.ts";
 import { createWorktrees } from "./worktrees.ts";
 
 const run = promisify(execFile);
 const git = async (cwd: string, ...args: string[]) => (await run("git", args, { cwd })).stdout.trim();
 const exists = (path: string) => access(path).then(() => true, () => false);
+const commit = async (cwd: string, message: string) => {
+  await git(cwd, "add", "-A");
+  await git(cwd, "-c", "user.name=bot", "-c", "user.email=bot@example.com", "commit", "-m", message);
+};
 
 const repo: RepoConfig = {
   name: "demo",
@@ -19,7 +23,6 @@ const repo: RepoConfig = {
   maxCostUsd: 1,
   maxFixAttempts: 1,
 };
-const identity = { name: "bot[bot]", email: "1+bot[bot]@users.noreply.github.com" };
 
 let root: string;
 let remote: string;
@@ -37,11 +40,10 @@ beforeEach(async () => {
   await git(seed, "add", "-A");
   await git(seed, "-c", "user.name=seed", "-c", "user.email=seed@example.com", "commit", "-m", "seed");
   await git(seed, "push", remote, "main");
-  worktrees = createWorktrees({ dataDir, owner: "o", remoteUrl: () => remote, identity: async () => identity });
+  worktrees = createWorktrees({ dataDir, owner: "o", remoteUrl: () => remote });
 });
 
 afterEach(async () => {
-  vi.unstubAllEnvs();
   await rm(root, { recursive: true, force: true });
 });
 
@@ -67,7 +69,7 @@ describe("createWorktrees", () => {
   it("re-adds the worktree from the existing branch when the path is gone", async () => {
     const { path } = await worktrees.prepare(repo, 1);
     await writeFile(join(path, "a.txt"), "a");
-    await worktrees.commitAll("demo", 1, "add a");
+    await commit(path, "add a");
     await rm(path, { recursive: true, force: true });
 
     const again = await worktrees.prepare(repo, 1);
@@ -83,25 +85,20 @@ describe("createWorktrees", () => {
     expect(await git(b.path, "rev-parse", "--abbrev-ref", "HEAD")).toBe("agent/issue-2");
   });
 
-  it("commits only when there are changes, as the given identity", async () => {
+  it("lists uncommitted changes, empty once committed", async () => {
     const { path } = await worktrees.prepare(repo, 1);
-    expect(await worktrees.commitAll("demo", 1, "nothing")).toBe(false);
-    vi.stubEnv("GIT_AUTHOR_NAME", "Inherited author");
-    vi.stubEnv("GIT_AUTHOR_EMAIL", "author@example.com");
-    vi.stubEnv("GIT_COMMITTER_NAME", "Inherited committer");
-    vi.stubEnv("GIT_COMMITTER_EMAIL", "committer@example.com");
+    expect(await worktrees.uncommittedChanges("demo", 1)).toBe("");
     await writeFile(join(path, "new.txt"), "x");
-    expect(await worktrees.commitAll("demo", 1, "feat: new")).toBe(true);
-    expect(await worktrees.commitAll("demo", 1, "again")).toBe(false);
-    expect(await git(path, "log", "-1", "--format=%an <%ae>|%s")).toBe(`${identity.name} <${identity.email}>|feat: new`);
-    expect(await git(path, "log", "-1", "--format=%cn <%ce>")).toBe(`${identity.name} <${identity.email}>`);
+    expect(await worktrees.uncommittedChanges("demo", 1)).toBe("?? new.txt");
+    await commit(path, "feat: new");
+    expect(await worktrees.uncommittedChanges("demo", 1)).toBe("");
     expect(await worktrees.commitsAhead(repo, 1)).toBe(1);
   });
 
   it("pushes the issue branch to the remote, twice without error", async () => {
     const { path } = await worktrees.prepare(repo, 1);
     await writeFile(join(path, "new.txt"), "x");
-    await worktrees.commitAll("demo", 1, "feat: new");
+    await commit(path, "feat: new");
     await worktrees.push("demo", 1);
     await worktrees.push("demo", 1);
     expect(await git(remote, "rev-parse", "refs/heads/agent/issue-1")).toBe(await git(path, "rev-parse", "HEAD"));

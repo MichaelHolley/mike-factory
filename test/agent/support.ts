@@ -97,7 +97,6 @@ export function createWorld(opts: { dir: string; repo?: Partial<RepoConfig>; ext
     dataDir: join(opts.dir, "data"),
     owner: OWNER,
     remoteUrl: (name) => remotes[name]!,
-    identity: () => github.botIdentity(),
   });
   const faux = fauxProvider({ models: [{ id: "faux-1", cost: { input: 10, output: 10, cacheRead: 0, cacheWrite: 0 } }] });
   const models = createModels();
@@ -110,8 +109,15 @@ export function createWorld(opts: { dir: string; repo?: Partial<RepoConfig>; ext
 export const textOf = (message: Message | undefined) =>
   message?.role === "user" ? (typeof message.content === "string" ? message.content : message.content.map((part) => (part.type === "text" ? part.text : "")).join("")) : "";
 
+/** A tool call that writes `path` and commits it, as the agent is told to commit its own work. */
+export const commitFile = (path: string, content: string) =>
+  fauxAssistantMessage(
+    fauxToolCall("bash", { command: `printf '%s\\n' '${content}' > ${path} && git add ${path} && git -c user.name=bot -c user.email=bot@example.com commit -qm "feat: add ${path}"` }),
+    { stopReason: "toolUse" },
+  );
+
 /**
- * A model that never runs out of responses, so a restarted process can keep going. It writes hello.txt for a task,
+ * A model that never runs out of responses, so a restarted process can keep going. It commits hello.txt for a task,
  * says it tried for a failed verification, and wraps up after any tool result.
  */
 export function autopilot(faux: FauxProviderHandle, decide?: (messages: Message[]) => AssistantMessage | undefined) {
@@ -122,7 +128,7 @@ export function autopilot(faux: FauxProviderHandle, decide?: (messages: Message[
     const last = context.messages.at(-1);
     if (last?.role === "toolResult") return fauxAssistantMessage("Done: wrote hello.txt.");
     if (textOf(last).startsWith("Verification failed")) return fauxAssistantMessage("Tried a fix.");
-    return fauxAssistantMessage(fauxToolCall("write", { path: "hello.txt", content: "hello\n" }), { stopReason: "toolUse" });
+    return commitFile("hello.txt", "hello");
   };
   faux.setResponses([respond]);
 }
