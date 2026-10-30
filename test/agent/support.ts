@@ -97,7 +97,6 @@ export function createWorld(opts: { dir: string; repo?: Partial<RepoConfig>; ext
     dataDir: join(opts.dir, "data"),
     owner: OWNER,
     remoteUrl: (name) => remotes[name]!,
-    identity: () => github.botIdentity(),
   });
   const faux = fauxProvider({ models: [{ id: "faux-1", cost: { input: 10, output: 10, cacheRead: 0, cacheWrite: 0 } }] });
   const models = createModels();
@@ -111,7 +110,7 @@ export const textOf = (message: Message | undefined) =>
   message?.role === "user" ? (typeof message.content === "string" ? message.content : message.content.map((part) => (part.type === "text" ? part.text : "")).join("")) : "";
 
 /**
- * A model that never runs out of responses, so a restarted process can keep going. It writes hello.txt for a task,
+ * A model that never runs out of responses, so a restarted process can keep going. It commits hello.txt for a task,
  * says it tried for a failed verification, and wraps up after any tool result.
  */
 export function autopilot(faux: FauxProviderHandle, decide?: (messages: Message[]) => AssistantMessage | undefined) {
@@ -122,10 +121,17 @@ export function autopilot(faux: FauxProviderHandle, decide?: (messages: Message[
     const last = context.messages.at(-1);
     if (last?.role === "toolResult") return fauxAssistantMessage("Done: wrote hello.txt.");
     if (textOf(last).startsWith("Verification failed")) return fauxAssistantMessage("Tried a fix.");
-    return fauxAssistantMessage(fauxToolCall("write", { path: "hello.txt", content: "hello\n" }), { stopReason: "toolUse" });
+    return commitFile("hello.txt", "hello");
   };
   faux.setResponses([respond]);
 }
+
+/** A bash tool call that writes `path` and commits only that file, as an agent following the commit rules would. */
+export const commitFile = (path: string, content: string) =>
+  fauxAssistantMessage(
+    fauxToolCall("bash", { command: `printf %s '${content}' > ${path} && git add ${path} && git -c user.name=agent -c user.email=agent@example.com commit -qm 'feat: add ${path}'` }),
+    { stopReason: "toolUse" },
+  );
 
 export const startAction = (issue: number, requestId: string, instructions = "", repo = REPO) => ({ kind: "start", repo, issue, requestId, instructions }) as const;
 export const stopAction = (issue: number, requestId: string) => ({ kind: "stop", repo: REPO, issue, requestId }) as const;

@@ -79,6 +79,7 @@ const codeBlock = (value: string) => {
 /** The final answer becomes the PR body, including after a verification fix. */
 const PR_WRITING_INSTRUCTIONS = [
   "Write commits and the final PR description for a reviewer, not as an agent progress report.",
+  "Commit your work to the local branch yourself; only committed changes are verified and published. Commit everything that resolves the issue, including tests and docs, and nothing else: delete scratch files and helper scripts you only used to explore or verify, and leave the working tree clean.",
   "Follow the repository's commit conventions. Otherwise use an imperative, specific subject such as `fix(parser): handle empty input` or `feat(api): add pagination`; avoid generic messages like 'update files'. Add a body explaining why when it is not obvious. Keep commits focused and never claim unrun checks passed.",
   "Your final reply becomes the PR description. Keep it concise (under 3,000 characters) and describe the entire change, including earlier implementation and any verification fixes, not just the last fix.",
   "Use these Markdown sections: `## Summary` (what changed and why), `## Testing` (exact commands and observed results; explicitly say when not run), and, when relevant, `## Notes` (breaking changes, migration/setup steps, documentation changes, risks or limitations). Omit empty sections and unsupported claims.",
@@ -98,6 +99,9 @@ const implementPrompt = (owner: string, repo: string, issue: IssueData, comments
   ]
     .filter(Boolean)
     .join("\n\n");
+
+const uncommittedOutput = (status: string) =>
+  `$ git status --porcelain\n${status}\n\nOnly committed changes are verified and published. Commit the changes that resolve the issue, including tests and docs, and delete or revert the rest, such as scratch files or helper scripts used only to explore or verify.`;
 
 const fixPrompt = (attempt: number, max: number, output: string) =>
   `Verification failed (fix attempt ${attempt} of ${max}). Fix the problem in the working directory.\n\n${codeBlock(output)}\n\n${PR_WRITING_INSTRUCTIONS}`;
@@ -164,6 +168,17 @@ export function createIssuePipeline(deps: PipelineDeps) {
     return { ok: result.value.exitCode === 0, output };
   };
 
+  /** Checks run only on a clean tree, so they verify exactly the commits that get pushed. */
+  const firstFailure = async (rt: Rt, context: Context, config: RepoConfig, issue: number) => {
+    const uncommitted = await worktrees.uncommitted(config.name, issue);
+    if (uncommitted) return { problem: "uncommitted changes remain", output: uncommittedOutput(uncommitted) };
+    for (const command of config.checks ?? []) {
+      const result = await run(rt, context, command, worktrees.worktreePath(config.name, issue));
+      if (!result.ok) return { problem: `\`${command}\` still fails`, output: `$ ${command}\n${result.output}` };
+    }
+    return undefined;
+  };
+
   const converse = async (rt: Rt, context: Context, repo: string, content: string, requestId: string) => {
     const conversation = await rt.conversation(rt.conversationId, context);
     if (!conversation) throw new Error("issue conversation is missing");
@@ -222,18 +237,10 @@ export function createIssuePipeline(deps: PipelineDeps) {
         const { repo, issue } = task.input;
         const { attempt } = task.state.checkpoint;
         const config = repoOf(repo);
-        const cwd = worktrees.worktreePath(repo, issue);
-        for (const command of config.checks ?? []) {
-          const result = await run(rt, context, command, cwd);
-          if (result.ok) continue;
-          const output = `$ ${command}\n${result.output}`;
-          if (attempt >= config.maxFixAttempts) {
-            throw new PipelineFailure(`\`${command}\` still fails after ${attempt} fix attempt(s)`, output);
-          }
-          await go(rt, context, { phase: "fix", attempt: attempt + 1, output: tail(output, MAX_CHECKPOINT_OUTPUT_CHARS) }, { attempts: attempt + 1 });
-          return;
-        }
-        await go(rt, context, { phase: "publish" });
+        const failure = await firstFailure(rt, context, config, issue);
+        if (!failure) return go(rt, context, { phase: "publish" });
+        if (attempt >= config.maxFixAttempts) throw new PipelineFailure(`${failure.problem} after ${attempt} fix attempt(s)`, failure.output);
+        await go(rt, context, { phase: "fix", attempt: attempt + 1, output: tail(failure.output, MAX_CHECKPOINT_OUTPUT_CHARS) }, { attempts: attempt + 1 });
       }),
 
       fix: step("fix", async (task, rt, context) => {
@@ -247,7 +254,6 @@ export function createIssuePipeline(deps: PipelineDeps) {
         const { repo, issue } = task.input;
         const config = repoOf(repo);
         const data = await github.getIssue(repo, issue);
-        await worktrees.commitAll(repo, issue, `chore(agent): ${data.title} (#${issue})`);
         if ((await worktrees.commitsAhead(config, issue)) === 0) throw new PipelineFailure("no changes: the agent produced no commits");
         await worktrees.push(repo, issue);
         const head = (await rt.snapshot(IssueState, rt.conversationId, context))?.branch ?? "";
