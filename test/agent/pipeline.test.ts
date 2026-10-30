@@ -60,6 +60,27 @@ describe("issue pipeline", () => {
     expect(state).toMatchObject({ phase: "done", prUrl: pr.url, branch: "agent/issue-1" });
   });
 
+  it("opens the PR with the final reply after a successful verification fix", async () => {
+    const world = createWorld({ dir, repo: { checks: ["test -f fixed.txt"] } });
+    const description = "## Summary\n- Add hello and fix verification setup.\n\n## Testing\n- `test -f fixed.txt`: passed.";
+    autopilot(world.faux, (messages) => {
+      if (textOf(messages.at(-1)).startsWith("Verification failed")) {
+        return fauxAssistantMessage(fauxToolCall("write", { path: "fixed.txt", content: "ok\n" }), { stopReason: "toolUse" });
+      }
+      if (messages.at(-1)?.role === "toolResult" && messages.some((message) => textOf(message).startsWith("Verification failed"))) {
+        return fauxAssistantMessage(description);
+      }
+      return undefined;
+    });
+    const { harness, service } = await launch(world);
+
+    await service.start(startAction(1, "comment-1"));
+    expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+    expect(git(world.remote, "show", "agent/issue-1:fixed.txt")).toBe("ok");
+    expect(world.github.prs[0]!.body).toBe(`${description}\n\nCloses #1`);
+  });
+
   it("stamps startedAt on start and moves updatedAt on every phase change", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux);

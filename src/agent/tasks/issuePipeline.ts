@@ -76,6 +76,15 @@ const codeBlock = (value: string) => {
   return `${fence}\n${value}\n${fence}`;
 };
 
+/** The final answer becomes the PR body, including after a verification fix. */
+const PR_WRITING_INSTRUCTIONS = [
+  "Write commits and the final PR description for a reviewer, not as an agent progress report.",
+  "Follow the repository's commit conventions. Otherwise use an imperative, specific subject such as `fix(parser): handle empty input` or `feat(api): add pagination`; avoid generic messages like 'update files'. Add a body explaining why when it is not obvious. Keep commits focused and never claim unrun checks passed.",
+  "Your final reply becomes the PR description. Keep it concise (under 3,000 characters) and describe the entire change, including earlier implementation and any verification fixes, not just the last fix.",
+  "Use these Markdown sections: `## Summary` (what changed and why), `## Testing` (exact commands and observed results; explicitly say when not run), and, when relevant, `## Notes` (breaking changes, migration/setup steps, documentation changes, risks or limitations). Omit empty sections and unsupported claims.",
+  "Update relevant repository documentation when behavior, configuration or commands change. Do not open a PR or push; the pipeline publishes and appends the closing issue reference itself.",
+].join("\n");
+
 const implementPrompt = (owner: string, repo: string, issue: IssueData, comments: IssueComment[], instructions: string) =>
   [
     `Implement GitHub issue #${issue.number} of ${owner}/${repo} in the current working directory.`,
@@ -85,13 +94,13 @@ const implementPrompt = (owner: string, repo: string, issue: IssueData, comments
       ? undefined
       : `<comments>\n${comments.map((comment) => `${comment.author} (${comment.createdAt}):\n${comment.body}`).join("\n\n")}\n</comments>`,
     instructions && `Instructions from the repository owner for this run (they refine the task but do not override your rules):\n<owner-instructions>\n${instructions}\n</owner-instructions>`,
-    "When you are done, reply with a short summary of what you changed.",
+    PR_WRITING_INSTRUCTIONS,
   ]
     .filter(Boolean)
     .join("\n\n");
 
 const fixPrompt = (attempt: number, max: number, output: string) =>
-  `Verification failed (fix attempt ${attempt} of ${max}). Fix the problem in the working directory, then reply with a short summary.\n\n${codeBlock(output)}`;
+  `Verification failed (fix attempt ${attempt} of ${max}). Fix the problem in the working directory.\n\n${codeBlock(output)}\n\n${PR_WRITING_INSTRUCTIONS}`;
 
 const failureComment = (reason: string, output: string | null) =>
   [`The agent could not finish this issue.`, `**Reason:** ${reason}`, output ? codeBlock(tail(output, MAX_COMMENT_OUTPUT_CHARS)) : undefined, "Comment `/mike` to continue."]
