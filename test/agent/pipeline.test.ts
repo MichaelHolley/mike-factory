@@ -48,8 +48,8 @@ describe("issue pipeline", () => {
     expect(outcome.status).toBe("completed");
     expect(world.github.prs).toHaveLength(1);
     const pr = world.github.prs[0]!;
-    expect(pr).toMatchObject({ head: "agent/issue-1", base: "main", title: "Add hello", state: "open" });
-    expect(pr.body).toContain("Closes #1");
+    expect(pr).toMatchObject({ head: "agent/issue-1", base: "main", title: "feat: add hello.txt", state: "open" });
+    expect(pr.body).toBe("Done: wrote hello.txt.\n\nCloses #1");
     expect(git(world.remote, "show", "agent/issue-1:hello.txt")).toBe("hello");
     expect(status(world)).toContain("Opened ");
     const comments = world.github.commentsOn(REPO, 1);
@@ -60,6 +60,45 @@ describe("issue pipeline", () => {
     expect(state).toMatchObject({ phase: "done", prUrl: pr.url, branch: "agent/issue-1" });
   });
 
+  it.each(["feat(x): add y", "# feat(x): add y", "feat!: add y", "# feat(x)!: add y"])("uses a conventional reply title: %s", async (replyTitle) => {
+    const world = createWorld({ dir });
+    const body = "## Summary\nAdd y.\n\n## Testing\nNot run.";
+    autopilot(world.faux, (messages) =>
+      messages.at(-1)?.role === "toolResult" ? fauxAssistantMessage(`${replyTitle}\n\n${body}`) : undefined,
+    );
+    const { harness, service } = await launch(world);
+
+    await service.start(startAction(1, "comment-1"));
+    expect((await pipelineResult(harness, 1)).status).toBe("completed");
+    expect(world.github.prs[0]).toMatchObject({ title: replyTitle.replace(/^# /, ""), body: `${body}\n\nCloses #1` });
+  });
+
+  it("falls back to the issue title when neither reply nor commit subject is conventional", async () => {
+    const world = createWorld({ dir });
+    autopilot(world.faux, (messages) =>
+      messages.at(-1)?.role === "toolResult" ? undefined : commitFile("hello.txt", "hello", "Add hello"),
+    );
+    const { harness, service } = await launch(world);
+
+    await service.start(startAction(1, "comment-1"));
+    expect((await pipelineResult(harness, 1)).status).toBe("completed");
+    expect(world.github.prs[0]).toMatchObject({ title: "chore: Add hello", body: "Done: wrote hello.txt.\n\nCloses #1" });
+  });
+
+  it.each(["feat: add hello\n\n", "Not a conventional title\n\n"])("caps the body and retains the closing reference for %s", async (prefix) => {
+    const world = createWorld({ dir });
+    autopilot(world.faux, (messages) =>
+      messages.at(-1)?.role === "toolResult" ? fauxAssistantMessage(`${prefix}${"x".repeat(4_000)}`) : undefined,
+    );
+    const { harness, service } = await launch(world);
+
+    await service.start(startAction(1, "comment-1"));
+    expect((await pipelineResult(harness, 1)).status).toBe("completed");
+    const body = world.github.prs[0]!.body;
+    expect(body.length).toBeLessThanOrEqual(3_000);
+    expect(body.endsWith("\n\nCloses #1")).toBe(true);
+  });
+
   it("opens the PR with the final reply after a successful verification fix", async () => {
     const world = createWorld({ dir, repo: { checks: ["test -f fixed.txt"] } });
     const description = "## Summary\n- Add hello and fix verification setup.\n\n## Testing\n- `test -f fixed.txt`: passed.";
@@ -68,7 +107,7 @@ describe("issue pipeline", () => {
         return commitFile("fixed.txt", "ok");
       }
       if (messages.at(-1)?.role === "toolResult" && messages.some((message) => textOf(message).startsWith("Verification failed"))) {
-        return fauxAssistantMessage(description);
+        return fauxAssistantMessage(`fix: repair verification setup\n\n${description}`);
       }
       return undefined;
     });
@@ -78,7 +117,7 @@ describe("issue pipeline", () => {
     expect((await pipelineResult(harness, 1)).status).toBe("completed");
 
     expect(git(world.remote, "show", "agent/issue-1:fixed.txt")).toBe("ok");
-    expect(world.github.prs[0]!.body).toBe(`${description}\n\nCloses #1`);
+    expect(world.github.prs[0]).toMatchObject({ title: "fix: repair verification setup", body: `${description}\n\nCloses #1` });
   });
 
   it("stamps startedAt on start and moves updatedAt on every phase change", async () => {
