@@ -20,7 +20,7 @@ Configuration is in `config/repos.yaml` (owner, allowed sender id, per-repo `set
 
 ## Commit and PR writing
 
-The final reply's first line supplies a conventional-commit PR title (an optional leading `#` is stripped); the rest becomes the body. If that title is invalid, the pipeline uses the latest commit subject when conventional, otherwise `chore: <issue title>`, and keeps the full reply as the body. The body is capped at 3,000 characters, ending with `Closes #<issue>`. Existing open PRs are reused without title updates. Writing guidance lives in `src/agent/tasks/issuePipeline.ts`.
+The agent drafts the PR title and body with the `draft_pull_request` tool, which rejects non-conventional titles and over-long bodies so the agent can retry. Without a draft, the pipeline uses the latest commit subject when conventional, otherwise `chore: <issue title>`, and the final reply as the body. The body is capped at 3,000 characters, ending with `Closes #<issue>`. Existing open PRs are reused without title updates. Writing guidance lives in `src/agent/tasks/issuePipeline.ts`.
 
 Set each repo's squash default commit message to **Pull request title** so squash merges produce conventional commits.
 

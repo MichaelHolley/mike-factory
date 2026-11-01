@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openAgentHarness } from "../../src/agent/harness.ts";
 import { STATUS_MARKER } from "../../src/agent/tasks/issuePipeline.ts";
 import type { GitHubClient } from "../../src/contracts.ts";
-import { autopilot, commitFile, conversationIdOf, createWorld, ctx, git, issueStateOf, OTHER_REPO, pipelineResult, REPO, startAction, stopAction, textOf, type World } from "./support.ts";
+import { autopilot, commitFile, conversationIdOf, draftPr, createWorld, ctx, git, issueStateOf, OTHER_REPO, pipelineResult, REPO, startAction, stopAction, textOf, type World } from "./support.ts";
 
 let dir: string;
 let open: Harness[];
@@ -60,17 +60,39 @@ describe("issue pipeline", () => {
     expect(state).toMatchObject({ phase: "done", prUrl: pr.url, branch: "agent/issue-1" });
   });
 
-  it.each(["feat(x): add y", "# feat(x): add y", "feat!: add y", "# feat(x)!: add y"])("uses a conventional reply title: %s", async (replyTitle) => {
+  it("opens the PR with the drafted title and body", async () => {
     const world = createWorld({ dir });
     const body = "## Summary\nAdd y.\n\n## Testing\nNot run.";
-    autopilot(world.faux, (messages) =>
-      messages.at(-1)?.role === "toolResult" ? fauxAssistantMessage(`${replyTitle}\n\n${body}`) : undefined,
-    );
+    autopilot(world.faux, (messages) => {
+      const last = messages.at(-1);
+      return last?.role === "toolResult" && last.toolName === "bash" ? draftPr("feat(x)!: add y", body) : undefined;
+    });
     const { harness, service } = await launch(world);
 
     await service.start(startAction(1, "comment-1"));
     expect((await pipelineResult(harness, 1)).status).toBe("completed");
-    expect(world.github.prs[0]).toMatchObject({ title: replyTitle.replace(/^# /, ""), body: `${body}\n\nCloses #1` });
+    expect(world.github.prs[0]).toMatchObject({ title: "feat(x)!: add y", body: `${body}\n\nCloses #1` });
+  });
+
+  it.each([
+    { invalid: draftPr("Add y", "Add y."), error: "conventional commit subject" },
+    { invalid: draftPr("feat: add y", "x".repeat(3_000)), error: "keep it under" },
+  ])("rejects an invalid draft so the agent can retry ($error)", async ({ invalid, error }) => {
+    const world = createWorld({ dir });
+    autopilot(world.faux, (messages) => {
+      const last = messages.at(-1);
+      if (last?.role !== "toolResult") return undefined;
+      if (last.toolName === "bash") return invalid;
+      if (last.toolName === "draft_pull_request" && last.isError) return draftPr("feat: add y", "Add y.");
+      return undefined;
+    });
+    const { harness, service } = await launch(world);
+
+    await service.start(startAction(1, "comment-1"));
+    expect((await pipelineResult(harness, 1)).status).toBe("completed");
+    expect(world.github.prs[0]).toMatchObject({ title: "feat: add y", body: "Add y.\n\nCloses #1" });
+    const transcript = JSON.stringify(await service.transcript(REPO, 1));
+    expect(transcript).toContain(error);
   });
 
   it("falls back to the issue title when neither reply nor commit subject is conventional", async () => {
@@ -85,11 +107,9 @@ describe("issue pipeline", () => {
     expect(world.github.prs[0]).toMatchObject({ title: "chore: Add hello", body: "Done: wrote hello.txt.\n\nCloses #1" });
   });
 
-  it.each(["feat: add hello\n\n", "Not a conventional title\n\n"])("caps the body and retains the closing reference for %s", async (prefix) => {
+  it("caps a fallback body and retains the closing reference", async () => {
     const world = createWorld({ dir });
-    autopilot(world.faux, (messages) =>
-      messages.at(-1)?.role === "toolResult" ? fauxAssistantMessage(`${prefix}${"x".repeat(4_000)}`) : undefined,
-    );
+    autopilot(world.faux, (messages) => (messages.at(-1)?.role === "toolResult" ? fauxAssistantMessage("x".repeat(4_000)) : undefined));
     const { harness, service } = await launch(world);
 
     await service.start(startAction(1, "comment-1"));
@@ -99,17 +119,15 @@ describe("issue pipeline", () => {
     expect(body.endsWith("\n\nCloses #1")).toBe(true);
   });
 
-  it("opens the PR with the final reply after a successful verification fix", async () => {
+  it("opens the PR with the latest draft after a successful verification fix", async () => {
     const world = createWorld({ dir, repo: { checks: ["test -f fixed.txt"] } });
     const description = "## Summary\n- Add hello and fix verification setup.\n\n## Testing\n- `test -f fixed.txt`: passed.";
     autopilot(world.faux, (messages) => {
-      if (textOf(messages.at(-1)).startsWith("Verification failed")) {
-        return commitFile("fixed.txt", "ok");
-      }
-      if (messages.at(-1)?.role === "toolResult" && messages.some((message) => textOf(message).startsWith("Verification failed"))) {
-        return fauxAssistantMessage(`fix: repair verification setup\n\n${description}`);
-      }
-      return undefined;
+      const last = messages.at(-1);
+      if (textOf(last).startsWith("Verification failed")) return commitFile("fixed.txt", "ok");
+      if (last?.role !== "toolResult" || last.toolName !== "bash") return undefined;
+      const fixed = messages.some((message) => textOf(message).startsWith("Verification failed"));
+      return fixed ? draftPr("fix: repair verification setup", description) : draftPr("feat: add hello", "Add hello.");
     });
     const { harness, service } = await launch(world);
 
