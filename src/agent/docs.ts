@@ -27,6 +27,8 @@ export type IssueStateValue = {
   pipelineTaskId: number | null;
   requestId: string | null;
   setupDone: boolean;
+  prTitle?: string | null;
+  prBody?: string | null;
   startedAt?: string | null;
   updatedAt?: string | null;
 };
@@ -50,6 +52,8 @@ export const IssueState = defineDoc<IssueStateValue>({
     pipelineTaskId: null,
     requestId: null,
     setupDone: false,
+    prTitle: null,
+    prBody: null,
     startedAt: null,
     updatedAt: null,
   }),

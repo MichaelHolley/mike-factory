@@ -3,6 +3,7 @@ import { CodingTools } from "@earendil-works/pi-durable/tools";
 import type { AgentDeps } from "./harness.ts";
 import { createGithubTools } from "./extensions/github.ts";
 import { createGuards } from "./extensions/guards.ts";
+import { createPullRequestTools } from "./extensions/pull-request.ts";
 import { createRepoContext } from "./extensions/repo-context.ts";
 import { createIssuePipeline } from "./tasks/issuePipeline.ts";
 
@@ -12,6 +13,7 @@ export function createAgentRegistry(deps: AgentDeps, opts: { crashAt?: string; a
   registry.install(CodingTools);
   registry.install(createRepoContext(deps.config));
   registry.install(createGithubTools(deps.github));
+  registry.install(createPullRequestTools());
   registry.install(createGuards({ config: deps.config, abortTask: opts.abortTask }));
   registry.install(defineExtension({ name: "issue-pipeline", tasks: [pipeline] }));
   return { registry, pipeline };

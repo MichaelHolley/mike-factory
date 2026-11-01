@@ -80,6 +80,8 @@ export function createWorktrees(opts: {
 
     uncommitted: (repo, issue) => git(worktreePath(repo, issue), ["status", "--porcelain", "--untracked-files=all"]),
 
+    latestCommitSubject: (repo, issue) => git(worktreePath(repo, issue), ["log", "-1", "--format=%s", branchName(issue)]),
+
     // Under the repo lock because a push also updates the shared remote-tracking refs.
     push: (repo, issue) =>
       withLock(repo, async () => {

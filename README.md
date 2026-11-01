@@ -13,6 +13,7 @@ A self-hosted coding agent that turns a GitHub issue into a pull request. Commen
 - Each issue gets one durable [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable) run, triggered by a GitHub App webhook: prepare, implement, verify, publish, report.
 - The agent commits its own work: code, tests and docs that resolve the issue, but not scratch or helper files. Checks only run on a clean working tree, so leftover files go back to the agent as a fix attempt, and only verified commits are pushed.
 - State lives in SQLite, so a restart resumes the run and still produces exactly one PR. Commits use the bot identity, overriding inherited Git author settings.
+- New PR titles follow conventional commits so squash merges can use the PR title as their commit subject.
 - Built-in writing guidance asks for focused, descriptive commits and PR descriptions covering the full change, rationale, testing, and relevant documentation or migration notes.
 - Only an allowed sender can trigger runs, and each repo has its own setup command and ordered `checks` (e.g. lint, typecheck, test) and turn and cost budgets.
 

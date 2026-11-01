@@ -20,7 +20,9 @@ Configuration is in `config/repos.yaml` (owner, allowed sender id, per-repo `set
 
 ## Commit and PR writing
 
-The agent's final reply, including after a verification fix, becomes the PR body, followed by `Closes #<issue>`; the issue title becomes the PR title. Writing guidance lives in the prompts in `src/agent/tasks/issuePipeline.ts`. Uncommitted changes are committed as `chore(agent): <issue title> (#<issue>)`.
+The agent drafts the PR title and body with the `draft_pull_request` tool, which rejects non-conventional titles and over-long bodies so the agent can retry. Without a draft, the pipeline uses the latest commit subject when conventional, otherwise `chore: <issue title>`, and the final reply as the body. The body is capped at 3,000 characters, ending with `Closes #<issue>`. Existing open PRs are reused without title updates. Writing guidance lives in `src/agent/tasks/issuePipeline.ts`.
+
+Set each repo's squash default commit message to **Pull request title** so squash merges produce conventional commits.
 
 ## GitHub App
 

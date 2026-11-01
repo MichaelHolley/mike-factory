@@ -93,6 +93,8 @@ export function createIssueService(opts: { harness: Harness; storage: Storage; p
             phase: "queued",
             attempts: 0,
             lastError: null,
+            prTitle: null,
+            prBody: null,
             pipelineTaskId: taskId,
             requestId,
             startedAt: now,

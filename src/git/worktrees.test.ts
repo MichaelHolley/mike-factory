@@ -98,6 +98,19 @@ describe("createWorktrees", () => {
     expect((await worktrees.uncommitted("demo", 1)).split("\n")).toEqual(["M README.md", "?? scripts/check.sh"]);
   });
 
+  it("reads only the latest commit subject on the requested issue branch", async () => {
+    const { path } = await worktrees.prepare(repo, 1);
+    await worktrees.prepare(repo, 2);
+    expect(await worktrees.latestCommitSubject("demo", 1)).toBe("seed");
+    await writeFile(join(path, "README.md"), "changed\n");
+    await commit(path, "feat(demo)!: change greeting\n\nCommit body, not part of the subject.");
+    expect(await worktrees.latestCommitSubject("demo", 1)).toBe("feat(demo)!: change greeting");
+    expect(await worktrees.latestCommitSubject("demo", 2)).toBe("seed");
+    await writeFile(join(path, "README.md"), "changed again\n");
+    await commit(path, "fix: adjust greeting");
+    expect(await worktrees.latestCommitSubject("demo", 1)).toBe("fix: adjust greeting");
+  });
+
   it("pushes the issue branch to the remote, twice without error", async () => {
     const { path } = await worktrees.prepare(repo, 1);
     await writeFile(join(path, "new.txt"), "x");

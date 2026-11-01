@@ -11,6 +11,7 @@ import { findRepo, type AppConfig, type RepoConfig } from "../../config.ts";
 import type { GitHubClient, IssueComment, IssueData, Worktrees } from "../../contracts.ts";
 import { IssueState, type IssueStateValue } from "../docs.ts";
 import { budgetBreach, lastAssistantText, spentOf, totalCostUsd } from "../extensions/guards.ts";
+import { closingRef, CONVENTIONAL_TITLE, prBodyLimit } from "../extensions/pull-request.ts";
 import { createSlots } from "../slots.ts";
 
 export type PipelineInput = { repo: string; issue: number; requestId: string; instructions: string };
@@ -49,7 +50,6 @@ const COMMAND_TIMEOUT_SECONDS = 900;
 const MAX_OUTPUT_CHARS = 20_000;
 const MAX_CHECKPOINT_OUTPUT_CHARS = 8_000;
 const MAX_COMMENT_OUTPUT_CHARS = 4_000;
-const MAX_SUMMARY_CHARS = 3_000;
 export const DEFAULT_MAX_CONCURRENT = 3;
 
 /** One comment per issue, edited in place, shows the run's state instead of labels. */
@@ -76,13 +76,14 @@ const codeBlock = (value: string) => {
   return `${fence}\n${value}\n${fence}`;
 };
 
-/** The final answer becomes the PR body, including after a verification fix. */
+/** The `draft_pull_request` call supplies the PR title and body, including after a verification fix. */
 const PR_WRITING_INSTRUCTIONS = [
   "Write commits and the final PR description for a reviewer, not as an agent progress report.",
   "Commit your work to the local branch yourself; only committed changes are verified and published. Commit everything that resolves the issue, including tests and docs, and nothing else: delete scratch files and helper scripts you only used to explore or verify, and leave the working tree clean.",
   "Follow the repository's commit conventions. Otherwise use an imperative, specific subject such as `fix(parser): handle empty input` or `feat(api): add pagination`; avoid generic messages like 'update files'. Add a body explaining why when it is not obvious. Keep commits focused and never claim unrun checks passed.",
-  "Your final reply becomes the PR description. Keep it concise (under 3,000 characters) and describe the entire change, including earlier implementation and any verification fixes, not just the last fix.",
-  "Use these Markdown sections: `## Summary` (what changed and why), `## Testing` (exact commands and observed results; explicitly say when not run), and, when relevant, `## Notes` (breaking changes, migration/setup steps, documentation changes, risks or limitations). Omit empty sections and unsupported claims.",
+  "Before your final reply, call `draft_pull_request` with the PR title, written as a conventional commit subject (`type(scope)!: summary`, with optional scope and breaking-change marker), and the PR body. Call it again after any verification fix. Keep your final reply to a short summary.",
+  "Keep the PR body concise (under 3,000 characters) and describe the entire change, including earlier implementation and any verification fixes, not just the last fix.",
+  "Use these Markdown sections in the PR body: `## Summary` (what changed and why), `## Testing` (exact commands and observed results; explicitly say when not run), and, when relevant, `## Notes` (breaking changes, migration/setup steps, documentation changes, risks or limitations). Omit empty sections and unsupported claims.",
   "Update relevant repository documentation when behavior, configuration or commands change. Do not open a PR or push; the pipeline publishes and appends the closing issue reference itself.",
 ].join("\n");
 
@@ -256,17 +257,22 @@ export function createIssuePipeline(deps: PipelineDeps) {
         const data = await github.getIssue(repo, issue);
         if ((await worktrees.commitsAhead(config, issue)) === 0) throw new PipelineFailure("no changes: the agent produced no commits");
         await worktrees.push(repo, issue);
-        const head = (await rt.snapshot(IssueState, rt.conversationId, context))?.branch ?? "";
-        const existing = await github.findOpenPr(repo, head);
-        const summary = lastAssistantText((await rt.context(rt.conversationId, context)).messages);
-        const pr =
-          existing ??
-          (await github.createPr(repo, {
+        const state = await rt.snapshot(IssueState, rt.conversationId, context);
+        const head = state?.branch ?? "";
+        let pr = await github.findOpenPr(repo, head);
+        if (!pr) {
+          const subject = state?.prTitle ?? (await worktrees.latestCommitSubject(repo, issue));
+          const title = CONVENTIONAL_TITLE.test(subject) ? subject : `chore: ${data.title}`;
+          const body = state?.prBody ?? lastAssistantText((await rt.context(rt.conversationId, context)).messages);
+          const limit = prBodyLimit(issue);
+          const clipped = body.length > limit ? tail(body, limit - 3) : body;
+          pr = await github.createPr(repo, {
             head,
             base: config.defaultBranch,
-            title: data.title,
-            body: `${summary ? `${tail(summary, MAX_SUMMARY_CHARS)}\n\n` : ""}Closes #${issue}`,
-          }));
+            title,
+            body: `${clipped ? `${clipped}\n\n` : ""}${closingRef(issue)}`,
+          });
+        }
         await go(rt, context, { phase: "report", prUrl: pr.url }, { prUrl: pr.url });
       }),
 
