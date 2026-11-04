@@ -8,6 +8,8 @@ A self-hosted coding agent that turns a GitHub issue into a pull request. Commen
 ## How it works
 
 - **`/mike`** starts a run on the issue. **`/mike <text>`** adds extra instructions. **`/mike stop`** aborts it.
+- `/mike` while a run is in progress is ignored without a reply. While the issue has an open agent PR, each `/mike` gets a "Not starting" reply; merge or close the PR first.
+- A failed or stopped run keeps its worktree, and the next `/mike` continues it. After the PR closes, the next run starts from a fresh worktree but keeps the earlier conversation.
 - Progress shows up in a single status comment on the issue, edited in place. No labels are added to your repos.
 - A public, read-only status page lists every run and refreshes itself; each run's page also shows the agent's conversation with a **Download JSON** link for a current snapshot. When `PUBLIC_URL` is set, the status comment ends with a link to that run's page.
 - Each issue gets one durable [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable) run, triggered by a GitHub App webhook: prepare, implement, verify, publish, report.
