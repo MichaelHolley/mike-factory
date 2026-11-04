@@ -73,7 +73,7 @@ export function createIssueService(opts: { harness: Harness; storage: Storage; p
           : await harness.createConversation(
               {
                 ownership: { kind: "ownerless" },
-                agent: { model: repoConfig.model, cwd: worktreePath, instructions: INSTRUCTIONS },
+                agent: { model: repoConfig.model, thinkingLevel: repoConfig.thinkingLevel, cwd: worktreePath, instructions: INSTRUCTIONS },
                 init: async (tx, id) => {
                   (await tx.doc(IssueIndex, key, null)).conversationId = id;
                 },

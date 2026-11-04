@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { parse } from "yaml";
 
 export interface ModelChoice {
@@ -12,6 +13,7 @@ export interface RepoConfig {
   setup?: string;
   checks?: string[];
   model: ModelChoice;
+  thinkingLevel: ModelThinkingLevel;
   maxTurns: number;
   maxCostUsd: number;
   maxFixAttempts: number;
@@ -23,10 +25,11 @@ export interface AppConfig {
   repos: RepoConfig[];
 }
 
-type RepoDefaults = Pick<RepoConfig, "model" | "maxTurns" | "maxCostUsd" | "maxFixAttempts">;
+type RepoDefaults = Pick<RepoConfig, "model" | "thinkingLevel" | "maxTurns" | "maxCostUsd" | "maxFixAttempts">;
 
 const BUILTIN_DEFAULTS: RepoDefaults = {
   model: { provider: "openai", modelId: "gpt-6.1-sol" },
+  thinkingLevel: "high",
   maxTurns: 60,
   maxCostUsd: 3,
   maxFixAttempts: 2,

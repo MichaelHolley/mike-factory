@@ -84,6 +84,7 @@ export function createWorld(opts: { dir: string; repo?: Partial<RepoConfig>; ext
     model: { provider: "faux", modelId: "faux-1" },
     maxTurns: 60,
     maxCostUsd: 3,
+    thinkingLevel: "high",
     maxFixAttempts: 2,
     ...opts.repo,
   };
