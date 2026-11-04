@@ -24,6 +24,19 @@ The agent drafts the PR title and body with the `draft_pull_request` tool, which
 
 Set each repo's squash default commit message to **Pull request title** so squash merges produce conventional commits.
 
+## Skills
+
+Skills live in `.agents/skills/<name>/SKILL.md` and ship in the image. Every run's system prompt lists each skill's name and description; the agent reads a skill's full text with the `load_skill` tool. Only `SKILL.md` is served, so skills that depend on extra files or scripts won't work fully.
+
+Add one with the skills CLI from the repo root, then commit `.agents/skills/` and `skills-lock.json`:
+
+```sh
+npx skills add anthropics/skills --skill frontend-design --copy -y -a codex
+npx skills update -p   # refresh installed skills
+```
+
+Prefer skills that work unattended. Skills that ask the user questions, push, or open PRs clash with the pipeline and its guards.
+
 ## GitHub App
 
 Create the app under your account and install it with "Only select repositories". Every repo must also be listed in `config/repos.yaml`.

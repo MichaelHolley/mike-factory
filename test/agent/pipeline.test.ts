@@ -387,6 +387,26 @@ describe("issue pipeline", () => {
     });
   });
 
+  it("lists the installed skills and loads one on request", async () => {
+    const skill = { name: "demo-skill", description: "Use for demos.", body: "# Demo\nAlways say hello." };
+    const world = createWorld({ dir, skills: [skill] });
+    let systemPrompt: string | undefined;
+    autopilot(world.faux, (messages) => {
+      systemPrompt ??= JSON.stringify(messages[0]);
+      return messages.at(-1)?.role === "toolResult" ? undefined : fauxAssistantMessage(fauxToolCall("load_skill", { name: skill.name }), { stopReason: "toolUse" });
+    });
+    const { harness, service } = await launch(world);
+
+    await service.start(startAction(1, "comment-1"));
+    await pipelineResult(harness, 1);
+
+    expect(systemPrompt).toContain("- demo-skill: Use for demos.");
+    const conversation = (await harness.conversation((await conversationIdOf(harness, 1))!, ctx))!;
+    const page = await conversation.entries({}, 50, undefined, ctx);
+    const results = page.items.filter((entry) => ToolResultEntry.is(entry)).map((entry) => JSON.stringify(entry.model));
+    expect(results.some((result) => result.includes("Always say hello."))).toBe(true);
+  });
+
   it("blocks a bash git push", async () => {
     const world = createWorld({ dir });
     const mainBefore = git(world.remote, "rev-parse", "main");

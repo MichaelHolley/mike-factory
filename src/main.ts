@@ -7,6 +7,7 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 import { fauxProvider } from "@earendil-works/pi-ai/providers/faux";
 import { openAgentHarness } from "./agent/harness.ts";
+import { loadSkills, SKILLS_DIR } from "./agent/extensions/skills.ts";
 import { DEFAULT_MAX_CONCURRENT } from "./agent/tasks/issuePipeline.ts";
 import { loadConfig, type AppConfig } from "./config.ts";
 import { createGitHubClient } from "./github/app.ts";
@@ -40,6 +41,7 @@ function buildModels(openaiApiKey: string | undefined, useFaux: boolean) {
 
 async function main() {
   const config = await loadConfig(process.env.REPOS_CONFIG ?? "config/repos.yaml");
+  const skills = await loadSkills(SKILLS_DIR);
   const dataDir = process.env.DATA_DIR ?? "/data";
   const port = Number(process.env.PORT ?? 3000);
   const hostname = process.env.HOST ?? "127.0.0.1";
@@ -67,7 +69,7 @@ async function main() {
   await mkdir(dataDir, { recursive: true });
   const storage = await openNodeSqliteStorage(join(dataDir, "agent.sqlite"));
   const { harness, service } = await openAgentHarness(
-    { storage, models, deps: { config: effectiveConfig, github, worktrees, log, maxConcurrent, publicUrl }, crashAt: process.env.CRASH_AT },
+    { storage, models, deps: { config: effectiveConfig, github, worktrees, log, maxConcurrent, publicUrl, skills }, crashAt: process.env.CRASH_AT },
     BACKGROUND_CONTEXT,
   );
 
@@ -84,7 +86,7 @@ async function main() {
 
   const app = createServer({ config: effectiveConfig, service, webhookSecret: secrets.webhookSecret, log });
   const server = serve({ fetch: app.fetch, port, hostname }, (info) =>
-    log("listening", { port: info.port, model: useFaux ? "faux" : "openai" }),
+    log("listening", { port: info.port, model: useFaux ? "faux" : "openai", skills: skills.map((skill) => skill.name) }),
   );
 
   const shutdown = async (signal: string) => {

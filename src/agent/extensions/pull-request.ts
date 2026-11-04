@@ -1,6 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
 import { IssueState } from "../docs.ts";
+import { text } from "./text.ts";
 
 export const CONVENTIONAL_TITLE = /^[a-z]+(\([^)]+\))?!?: \S.*$/;
 const MAX_PR_BODY_CHARS = 3_000;
@@ -9,8 +10,6 @@ export const closingRef = (issue: number) => `Closes #${issue}`;
 
 /** Room left for the body once the closing reference and its blank line are appended. */
 export const prBodyLimit = (issue: number) => MAX_PR_BODY_CHARS - closingRef(issue).length - 2;
-
-const text = (value: string) => [{ type: "text" as const, text: value }];
 
 export function createPullRequestTools() {
   return defineExtension({

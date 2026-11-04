@@ -3,8 +3,7 @@ import { defineExtension, defineTool, type ToolExecutionApi } from "@earendil-wo
 import type { Context } from "@earendil-works/chord";
 import type { GitHubClient } from "../../contracts.ts";
 import { IssueState } from "../docs.ts";
-
-const text = (value: string) => ({ output: [{ type: "text" as const, text: value }] });
+import { text } from "./text.ts";
 
 async function currentIssue(api: Pick<ToolExecutionApi, "snapshot" | "conversationId">, context: Context) {
   const state = await api.snapshot(IssueState, api.conversationId, context);
@@ -24,7 +23,7 @@ export function createGithubTools(github: GitHubClient) {
         execute: async (_args, api, context) => {
           const { repo, issue } = await currentIssue(api, context);
           const data = await github.getIssue(repo, issue);
-          return text(`#${data.number} ${data.title}\nstate: ${data.state}\nlabels: ${data.labels.join(", ") || "none"}\n\n${data.body}`);
+          return { output: text(`#${data.number} ${data.title}\nstate: ${data.state}\nlabels: ${data.labels.join(", ") || "none"}\n\n${data.body}`) };
         },
       }),
       defineTool({
@@ -35,7 +34,7 @@ export function createGithubTools(github: GitHubClient) {
         execute: async (_args, api, context) => {
           const { repo, issue } = await currentIssue(api, context);
           const comments = await github.listIssueComments(repo, issue);
-          return text(comments.length === 0 ? "No comments." : comments.map((c) => `${c.author} (${c.createdAt}):\n${c.body}`).join("\n\n---\n\n"));
+          return { output: text(comments.length === 0 ? "No comments." : comments.map((c) => `${c.author} (${c.createdAt}):\n${c.body}`).join("\n\n---\n\n")) };
         },
       }),
     ],
