@@ -18,6 +18,7 @@ const repo: RepoConfig = {
   model: { provider: "p", modelId: "m" },
   maxTurns: 1,
   maxCostUsd: 1,
+  thinkingLevel: "high",
   maxFixAttempts: 1,
 };
 

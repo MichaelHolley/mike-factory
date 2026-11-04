@@ -7,7 +7,7 @@ const secret = "s3cret";
 const config: AppConfig = {
   owner: "michaelholley",
   allowedSenderId: 42,
-  repos: [{ name: "byok-imagen", defaultBranch: "main", model: { provider: "p", modelId: "m" }, maxTurns: 1, maxCostUsd: 1, maxFixAttempts: 1 }],
+  repos: [{ name: "byok-imagen", defaultBranch: "main", model: { provider: "p", modelId: "m" }, thinkingLevel: "high", maxTurns: 1, maxCostUsd: 1, maxFixAttempts: 1 }],
 };
 
 const payload = (overrides: Record<string, unknown> = {}) => ({

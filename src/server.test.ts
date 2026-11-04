@@ -19,6 +19,7 @@ const config: AppConfig = {
       model: { provider: "openai", modelId: "gpt-6.1-sol" },
       maxTurns: 10,
       maxCostUsd: 1,
+      thinkingLevel: "high",
       maxFixAttempts: 2,
     },
   ],
