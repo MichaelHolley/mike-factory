@@ -37,6 +37,18 @@ const status = (world: World, issue = 1) =>
   world.github.commentsOn(REPO, issue).find((comment) => comment.body.startsWith(`<!-- ${STATUS_MARKER} -->`))?.body;
 
 describe("issue pipeline", () => {
+  it("starts the conversation at the repo's thinking level", async () => {
+    const world = createWorld({ dir, repo: { thinkingLevel: "low" } });
+    autopilot(world.faux);
+    const { harness, service } = await launch(world);
+
+    await service.start(startAction(1, "comment-1"));
+    await pipelineResult(harness, 1);
+
+    const conversation = (await harness.conversation((await conversationIdOf(harness, 1))!, ctx))!;
+    expect((await conversation.agent(ctx)).thinkingLevel).toBe("low");
+  });
+
   it("turns an issue into exactly one pull request", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux);
