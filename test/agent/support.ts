@@ -9,6 +9,7 @@ import { fauxAssistantMessage, fauxProvider, fauxToolCall, type FauxProviderHand
 import type { Harness } from "@earendil-works/pi-durable";
 import type { TaskId } from "@earendil-works/pi-durable";
 import { asConversationId, IssueIndex, IssueState } from "../../src/agent/docs.ts";
+import type { Skill } from "../../src/agent/extensions/skills.ts";
 import { type AgentDeps } from "../../src/agent/harness.ts";
 import type { AppConfig, RepoConfig } from "../../src/config.ts";
 import { issueKey, type GitHubClient } from "../../src/contracts.ts";
@@ -74,7 +75,7 @@ export interface World {
 }
 
 /** `extraRepos` adds more repos with the same settings as `repo`, each with its own remote. */
-export function createWorld(opts: { dir: string; repo?: Partial<RepoConfig>; extraRepos?: string[]; githubFile?: string; maxConcurrent?: number }): World {
+export function createWorld(opts: { dir: string; repo?: Partial<RepoConfig>; extraRepos?: string[]; githubFile?: string; maxConcurrent?: number; skills?: Skill[] }): World {
   const names = [REPO, ...(opts.extraRepos ?? [])];
   const remotes = Object.fromEntries(names.map((name) => [name, seedRemote(opts.dir, name)]));
   const remote = remotes[REPO]!;
@@ -103,7 +104,7 @@ export function createWorld(opts: { dir: string; repo?: Partial<RepoConfig>; ext
   const models = createModels();
   models.setProvider(faux.provider);
   const logs: World["logs"] = [];
-  const deps: AgentDeps = { config, github, worktrees, log: (msg, data) => logs.push({ msg, data }), maxConcurrent: opts.maxConcurrent };
+  const deps: AgentDeps = { config, github, worktrees, log: (msg, data) => logs.push({ msg, data }), maxConcurrent: opts.maxConcurrent, skills: opts.skills };
   return { dir: opts.dir, remote, remotes, github: fake, config, repo, faux, models, deps, logs };
 }
 

@@ -4,6 +4,7 @@ import { Harness, type Storage } from "@earendil-works/pi-durable";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import type { AppConfig } from "../config.ts";
 import type { GitHubClient, IssueService, Worktrees } from "../contracts.ts";
+import type { Skill } from "./extensions/skills.ts";
 import { createAgentRegistry } from "./registry.ts";
 import { createIssueService } from "./service.ts";
 
@@ -14,6 +15,7 @@ export interface AgentDeps {
   log?: (msg: string, data?: object) => void;
   maxConcurrent?: number;
   publicUrl?: string;
+  skills?: readonly Skill[];
 }
 
 /** Opens the harness over `storage`, installs the agent, and resumes unfinished work before returning. */
