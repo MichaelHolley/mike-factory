@@ -86,7 +86,7 @@ async function main() {
 
   const app = createServer({ config: effectiveConfig, service, webhookSecret: secrets.webhookSecret, log });
   const server = serve({ fetch: app.fetch, port, hostname }, (info) =>
-    log("listening", { port: info.port, model: useFaux ? "faux" : "openai" }),
+    log("listening", { port: info.port, model: useFaux ? "faux" : "openai", skills: skills.map((skill) => skill.name) }),
   );
 
   const shutdown = async (signal: string) => {

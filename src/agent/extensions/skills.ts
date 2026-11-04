@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool, section } from "@earendil-works/pi-durable";
 import { parse } from "yaml";
+import { text } from "./text.ts";
 
 export const SKILLS_DIR = ".agents/skills";
 
@@ -14,11 +15,14 @@ export interface Skill {
 
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 
-const text = (value: string) => [{ type: "text" as const, text: value }];
-
 export function parseSkill(source: string, file: string): Skill {
   const match = FRONTMATTER.exec(source);
-  const meta = match ? (parse(match[1]!) as { name?: unknown; description?: unknown } | null) : null;
+  let meta: { name?: unknown; description?: unknown } | null = null;
+  try {
+    meta = match ? parse(match[1]!) : null;
+  } catch (error) {
+    throw new Error(`${file}: ${(error as Error).message}`);
+  }
   if (!match || typeof meta?.name !== "string" || typeof meta.description !== "string") {
     throw new Error(`${file}: frontmatter needs a name and a description`);
   }
