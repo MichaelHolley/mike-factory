@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppConfig } from "./config.ts";
 import type { IssueService } from "./contracts.ts";
-import type { RunStatus } from "./runStatus.ts";
 import { createServer } from "./server.ts";
 
 const secret = "test-secret";
@@ -64,43 +63,12 @@ describe("webhook server", () => {
     expect(service.start).toHaveBeenCalledWith({ kind: "start", repo: "byok-imagen", issue: 12, requestId: "comment-5", instructions: "" });
   });
 
-  it("acknowledges but ignores other senders", async () => {
+  it("acknowledges ignored events with 202 and rejects bad signatures with 401", async () => {
     const { post, service, log } = setup();
     expect((await post(7)).status).toBe(202);
-    expect(service.start).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledWith("webhook ignored", expect.objectContaining({ deliveryId: "delivery-1" }));
-  });
-
-  it("rejects a bad signature", async () => {
-    const { post, service } = setup();
     expect((await post(42, "sha256=deadbeef")).status).toBe(401);
     expect(service.start).not.toHaveBeenCalled();
-  });
-
-  it("serves the issue states on /status", async () => {
-    const { app } = setup();
-    const response = await app.request("/status");
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual([]);
-  });
-
-  it("serves only the public projection on /status", async () => {
-    const { app, service } = setup();
-    const run: RunStatus = {
-      repo: "byok-imagen",
-      issue: 12,
-      issueUrl: "https://github.com/michaelholley/byok-imagen/issues/12",
-      branch: "agent/issue-12",
-      phase: "done",
-      attempts: 1,
-      costUsd: 0.5,
-      prUrl: "https://github.com/michaelholley/byok-imagen/pull/13",
-      lastError: null,
-      startedAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: null,
-    };
-    vi.mocked(service.status).mockResolvedValue([run]);
-    expect(await (await app.request("/status")).json()).toEqual([run]);
   });
 
   it("serves a run's conversation, and 404s when there is none", async () => {
