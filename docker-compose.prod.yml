@@ -2,8 +2,6 @@ services:
   agent:
     image: mpholley/mike-factory:latest
     restart: unless-stopped
-    ports:
-      - "3000:3000"
     volumes:
       - agent-data:/data
     # Portainer writes the stack's environment variables to stack.env.
