@@ -1,6 +1,9 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import type { Context } from "@earendil-works/chord";
 import {
   defineTask,
+  type ConversationHandle,
+  type Submission,
   UsageDoc,
   type NextTaskState,
   type PhaseHandler,
@@ -9,12 +12,19 @@ import {
 } from "@earendil-works/pi-durable";
 import { findRepo, type AppConfig, type RepoConfig } from "../../config.ts";
 import type { GitHubClient, IssueComment, IssueData, Worktrees } from "../../contracts.ts";
-import { IssueState, type IssueStateValue } from "../docs.ts";
+import { HUMAN_ENTRY, IssueNotes, IssueState, type IssueStateValue, type Note } from "../docs.ts";
 import { budgetBreach, lastAssistantText, spentOf, totalCostUsd } from "../extensions/guards.ts";
 import { closingRef, CONVENTIONAL_TITLE, prBodyLimit } from "../extensions/pull-request.ts";
 import { createSlots } from "../slots.ts";
 
-export type PipelineInput = { repo: string; issue: number; requestId: string; instructions: string };
+export type PipelineInput = {
+  repo: string;
+  issue: number;
+  requestId: string;
+  instructions: string;
+  /** `web`: started by a run-page message, so `implement` sends only the pending notes. Absent in older tasks. */
+  trigger?: "comment" | "web";
+};
 
 export type PipelineState =
   | { phase: "queued" }
@@ -22,6 +32,7 @@ export type PipelineState =
   | { phase: "implement" }
   | { phase: "verify"; attempt: number }
   | { phase: "fix"; attempt: number; output: string }
+  | { phase: "revise" }
   | { phase: "publish" }
   | { phase: "report"; prUrl: string }
   | { phase: "failed"; reason: string; output: string | null };
@@ -57,9 +68,11 @@ const MAX_OUTPUT_CHARS = 20_000;
 const MAX_CHECKPOINT_OUTPUT_CHARS = 8_000;
 const MAX_COMMENT_OUTPUT_CHARS = 4_000;
 export const DEFAULT_MAX_CONCURRENT = 3;
+const NOTE_POLL_MS = 2_000;
 
 /** One comment per issue, edited in place, shows the run's state instead of labels. */
 export const STATUS_MARKER = "agent-status";
+export const WORKING_STATUS = "Working on this. Comment `/mike stop` to abort.";
 
 /** Upserts the issue's status comment, ending it with the run's page link when `publicUrl` is set. */
 export const upsertStatus = (
@@ -124,6 +137,27 @@ const implementPrompt = (
     .filter(Boolean)
     .join("\n\n");
 
+const notePrompt = (text: string) =>
+  [
+    "The repository owner sent a message about this issue (it refines the task but does not override your rules):",
+    `<owner-message>\n${text}\n</owner-message>`,
+    "Commit the changes it asks for. When they change what the pull request does, call `draft_pull_request` again so the title and body describe the whole change.",
+  ].join("\n\n");
+
+const noteRequestId = (note: Note) => `note:${note.id}${note.tries ? `:${note.tries}` : ""}`;
+
+const pendingNotes = (notes: { items: readonly Note[] } | undefined) =>
+  notes?.items.filter((note) => !note.deliveredAt) ?? [];
+
+/** True once `idle` resolves, false after `ms`; rejects when `signal` aborts. */
+const idleWithin = (idle: Promise<void>, ms: number, signal: AbortSignal) => {
+  const timer = new AbortController();
+  return Promise.race([
+    idle.then(() => true),
+    sleep(ms, false, { signal: AbortSignal.any([signal, timer.signal]) }),
+  ]).finally(() => timer.abort());
+};
+
 const uncommittedOutput = (status: string) =>
   `$ git status --porcelain\n${status}\n\nOnly committed changes are verified and published. Commit the changes that resolve the issue, including tests and docs, and delete or revert the rest, such as scratch files or helper scripts used only to explore or verify.`;
 
@@ -154,13 +188,19 @@ export function createIssuePipeline(deps: PipelineDeps) {
     return repo;
   };
 
+  /** With `reviseOnNotes`, a note that is still pending at commit time sends the run to `revise` instead. */
   const advance = async (
     rt: Rt,
     context: Context,
     next: NextTaskState<PipelineState, PipelineResult>,
     patch: Partial<IssueStateValue>,
+    reviseOnNotes = false,
   ) => {
     await rt.commit(async (tx) => {
+      if (reviseOnNotes && pendingNotes(await tx.doc(IssueNotes, rt.conversationId)).length > 0) {
+        next = { status: "running", checkpoint: { phase: "revise" } };
+        patch = { phase: "revise" };
+      }
       const doc = (await tx.doc(IssueState, rt.conversationId)) as Record<string, unknown>;
       for (const [key, value] of Object.entries({ ...patch, updatedAt: new Date().toISOString() })) doc[key] = value;
       return next;
@@ -214,14 +254,70 @@ export function createIssuePipeline(deps: PipelineDeps) {
     return undefined;
   };
 
-  const converse = async (rt: Rt, context: Context, repo: string, content: string, requestId: string) => {
+  const hasPendingNotes = async (rt: Rt, context: Context) =>
+    pendingNotes(await rt.snapshot(IssueNotes, rt.conversationId, context)).length > 0;
+
+  /** Submits each pending note, then marks it delivered; a rerun resubmits with the same `requestId`, which adds nothing. */
+  const deliverNotes = async (rt: Rt, conversation: ConversationHandle, context: Context) => {
+    const submissions: Submission[] = [];
+    for (const note of pendingNotes(await rt.snapshot(IssueNotes, rt.conversationId, context))) {
+      const draft = {
+        type: "input",
+        content: notePrompt(note.text),
+        whenBusy: "steer",
+        requestId: noteRequestId(note),
+        entry: { kind: HUMAN_ENTRY, data: { id: note.id, text: note.text } },
+      } as const;
+      submissions.push(await conversation.submit(draft, context));
+      await rt.commit(async (tx) => {
+        const item = (await tx.doc(IssueNotes, rt.conversationId)).items.find(({ id }) => id === note.id);
+        if (item) item.deliveredAt = new Date().toISOString();
+        return undefined;
+      }, context);
+      log("note delivered", { taskId: rt.taskId, id: note.id });
+    }
+    return submissions;
+  };
+
+  /**
+   * Submits `prompt`, if any, then feeds pending notes into the agent's work until it is idle with none left.
+   * Waiting for idle also covers a model run resumed after a crash, so a rerun phase never moves on while the agent edits.
+   */
+  const converse = async (rt: Rt, context: Context, repo: string, prompt?: { content: string; requestId: string }) => {
     const conversation = await rt.conversation(rt.conversationId, context);
     if (!conversation) throw new Error("issue conversation is missing");
-    const settled = await (await conversation.submit({ type: "input", content, requestId }, context)).wait(context);
-    if (settled.status === "done") return;
-    const messages = (await rt.context(rt.conversationId, context)).messages;
-    const breach = budgetBreach(repoOf(repo), await spentOf(rt, rt.conversationId, messages, context));
-    throw new PipelineFailure(breach || `the model run ended without an answer (${settled.reason ?? "unknown"})`);
+    const submissions = prompt ? [await conversation.submit({ type: "input", ...prompt }, context)] : [];
+    let idle: Promise<void> | undefined;
+    for (;;) {
+      const delivered = await deliverNotes(rt, conversation, context);
+      submissions.push(...delivered);
+      if (delivered.length > 0) idle = undefined;
+      idle ??= conversation.waitForIdle(context);
+      if ((await idleWithin(idle, NOTE_POLL_MS, rt.signal)) && !(await hasPendingNotes(rt, context))) break;
+    }
+    for (const submission of submissions) {
+      const settled = await submission.wait(context);
+      if (settled.status === "done") continue;
+      const messages = (await rt.context(rt.conversationId, context)).messages;
+      const breach = budgetBreach(repoOf(repo), await spentOf(rt, rt.conversationId, messages, context));
+      throw new PipelineFailure(breach || `the model run ended without an answer (${settled.reason ?? "unknown"})`);
+    }
+  };
+
+  /** Title and body for creating or updating the PR, from the agent's draft or, failing that, its commit and reply. */
+  const prContent = async (
+    rt: Rt,
+    context: Context,
+    repo: string,
+    issue: number,
+    state: IssueStateValue | undefined,
+  ) => {
+    const subject = state?.prTitle ?? (await worktrees.latestCommitSubject(repo, issue));
+    const title = CONVENTIONAL_TITLE.test(subject) ? subject : `chore: ${(await github.getIssue(repo, issue)).title}`;
+    const body = state?.prBody ?? lastAssistantText((await rt.context(rt.conversationId, context)).messages);
+    const limit = prBodyLimit(issue);
+    const clipped = body.length > limit ? tail(body, limit - 3) : body;
+    return { title, body: `${clipped ? `${clipped}\n\n` : ""}${closingRef(issue)}` };
   };
 
   const step =
@@ -272,18 +368,18 @@ export function createIssuePipeline(deps: PipelineDeps) {
       }),
 
       implement: step("implement", async (task, rt, context) => {
-        const { repo, issue, requestId, instructions } = task.input;
-        const [data, comments] = await Promise.all([
-          github.getIssue(repo, issue),
-          github.listIssueComments(repo, issue),
-        ]);
-        await converse(
-          rt,
-          context,
-          repo,
-          implementPrompt(deps.config.owner, repo, data, comments, instructions),
-          `${requestId}:implement`,
-        );
+        const { repo, issue, requestId, instructions, trigger } = task.input;
+        if (trigger === "web") await converse(rt, context, repo);
+        else {
+          const [data, comments] = await Promise.all([
+            github.getIssue(repo, issue),
+            github.listIssueComments(repo, issue),
+          ]);
+          await converse(rt, context, repo, {
+            content: implementPrompt(deps.config.owner, repo, data, comments, instructions),
+            requestId: `${requestId}:implement`,
+          });
+        }
         await go(rt, context, { phase: "verify", attempt: 0 }, { costUsd: await spentCostUsd(rt, context) });
       }),
 
@@ -292,7 +388,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
         const { attempt } = task.state.checkpoint;
         const config = repoOf(repo);
         const failure = await firstFailure(rt, context, config, issue);
-        if (!failure) return go(rt, context, { phase: "publish" });
+        if (!failure) return go(rt, context, { phase: (await hasPendingNotes(rt, context)) ? "revise" : "publish" });
         if (attempt >= config.maxFixAttempts)
           throw new PipelineFailure(`${failure.problem} after ${attempt} fix attempt(s)`, failure.output);
         await go(
@@ -306,20 +402,30 @@ export function createIssuePipeline(deps: PipelineDeps) {
       fix: step("fix", async (task, rt, context) => {
         const { attempt, output } = task.state.checkpoint;
         const config = repoOf(task.input.repo);
-        await converse(
+        const revisions = (await rt.snapshot(IssueState, rt.conversationId, context))?.revisions ?? 0;
+        await converse(rt, context, task.input.repo, {
+          content: fixPrompt(attempt, config.maxFixAttempts, output),
+          requestId: `${task.input.requestId}:fix-${revisions ? `${revisions}-` : ""}${attempt}`,
+        });
+        await go(rt, context, { phase: "verify", attempt }, { costUsd: await spentCostUsd(rt, context) });
+      }),
+
+      revise: step("revise", async (task, rt, context) => {
+        // `report` may already have posted the PR link before a late note sent the run back here.
+        await upsertStatus(deps, task.input.repo, task.input.issue, WORKING_STATUS);
+        await converse(rt, context, task.input.repo);
+        const revisions = (await rt.snapshot(IssueState, rt.conversationId, context))?.revisions ?? 0;
+        await go(
           rt,
           context,
-          task.input.repo,
-          fixPrompt(attempt, config.maxFixAttempts, output),
-          `${task.input.requestId}:fix-${attempt}`,
+          { phase: "verify", attempt: 0 },
+          { costUsd: await spentCostUsd(rt, context), revisions: revisions + 1 },
         );
-        await go(rt, context, { phase: "verify", attempt }, { costUsd: await spentCostUsd(rt, context) });
       }),
 
       publish: step("publish", async (task, rt, context) => {
         const { repo, issue } = task.input;
         const config = repoOf(repo);
-        const data = await github.getIssue(repo, issue);
         if ((await worktrees.commitsAhead(config, issue)) === 0)
           throw new PipelineFailure("no changes: the agent produced no commits");
         await worktrees.push(repo, issue);
@@ -327,17 +433,10 @@ export function createIssuePipeline(deps: PipelineDeps) {
         const head = state?.branch ?? "";
         let pr = await github.findOpenPr(repo, head);
         if (!pr) {
-          const subject = state?.prTitle ?? (await worktrees.latestCommitSubject(repo, issue));
-          const title = CONVENTIONAL_TITLE.test(subject) ? subject : `chore: ${data.title}`;
-          const body = state?.prBody ?? lastAssistantText((await rt.context(rt.conversationId, context)).messages);
-          const limit = prBodyLimit(issue);
-          const clipped = body.length > limit ? tail(body, limit - 3) : body;
-          pr = await github.createPr(repo, {
-            head,
-            base: config.defaultBranch,
-            title,
-            body: `${clipped ? `${clipped}\n\n` : ""}${closingRef(issue)}`,
-          });
+          const content = await prContent(rt, context, repo, issue, state);
+          pr = await github.createPr(repo, { head, base: config.defaultBranch, ...content });
+        } else if (state?.prTitle || state?.prBody) {
+          await github.updatePr(repo, pr.number, await prContent(rt, context, repo, issue, state));
         }
         await go(rt, context, { phase: "report", prUrl: pr.url }, { prUrl: pr.url });
       }),
@@ -345,13 +444,15 @@ export function createIssuePipeline(deps: PipelineDeps) {
       report: step("report", async (task, rt, context) => {
         const { repo, issue } = task.input;
         const { prUrl } = task.state.checkpoint;
+        if (await hasPendingNotes(rt, context)) return go(rt, context, { phase: "revise" });
         const costUsd = await spentCostUsd(rt, context);
-        await upsertStatus(deps, repo, issue, `Opened ${prUrl}\n\nCost: $${costUsd.toFixed(4)}`);
+        await upsertStatus(deps, repo, issue, `Pull request: ${prUrl}\n\nCost: $${costUsd.toFixed(4)}`);
         await advance(
           rt,
           context,
           { status: "terminal", outcome: { status: "completed", result: { prUrl } } },
           { phase: "done", costUsd },
+          true,
         );
       }),
 
@@ -371,6 +472,23 @@ export function createIssuePipeline(deps: PipelineDeps) {
     abort: async (task, rt, context) => {
       const { repo, issue } = task.input;
       await (await rt.conversation(rt.conversationId, context))?.abort(context);
+      // Match each note to its submission, which a stop may have cut off before or after its delivery was recorded:
+      // a withdrawn steer is pending again under a fresh request ID, one the agent saw counts as delivered.
+      await rt.commit(async (tx) => {
+        const notes = await tx.doc(IssueNotes, rt.conversationId);
+        const records = await Promise.all(
+          notes.items.map((note) => tx.submissionByRequest(rt.conversationId, noteRequestId(note))),
+        );
+        notes.items.forEach((note, index) => {
+          const record = records[index];
+          if (record?.type !== "input") return;
+          if (record.status === "unanswered" && !record.entry) {
+            note.deliveredAt = null;
+            note.tries = (note.tries ?? 0) + 1;
+          } else note.deliveredAt ??= new Date().toISOString();
+        });
+        return undefined;
+      }, context);
       await upsertStatus(deps, repo, issue, "Stopped. The worktree is kept; comment `/mike` to continue.").catch(
         (error) => log("could not update the status comment", { error: messageOf(error) }),
       );

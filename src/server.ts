@@ -18,6 +18,8 @@ export interface ServerDeps {
 }
 
 const THROTTLE_MS = 500;
+const MAX_MESSAGE_CHARS = 8_000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PING_MS = 20_000;
 const RETRY_MS = 5_000;
 
@@ -122,6 +124,24 @@ export function createServer({
     else if (action.kind === "stop") await service.stop(action);
     else await service.cleanup(action);
     return c.body(null, 202);
+  });
+
+  app.post("/status/:repo/:issue/messages", async (c) => {
+    const repo = c.req.param("repo");
+    const issue = Number(c.req.param("issue"));
+    if (!Number.isInteger(issue)) return c.text("not found", 404);
+    // Browsers can't send JSON cross-site without a CORS preflight, which this server never allows.
+    if (!/^application\/json\b/i.test(c.req.header("content-type") ?? ""))
+      return c.text("expected application/json", 415);
+    const body = (await c.req.json().catch(() => undefined)) as { id?: unknown; text?: unknown } | undefined;
+    const { id, text } = body ?? {};
+    if (typeof id !== "string" || !UUID.test(id)) return c.text("id must be a UUID", 400);
+    if (typeof text !== "string" || !text.trim() || text.length > MAX_MESSAGE_CHARS)
+      return c.text(`text must be 1 to ${MAX_MESSAGE_CHARS} characters`, 400);
+    const result = await service.message({ repo, issue, id, text: text.trim() });
+    log("message received", { repo, issue, id, result });
+    if (result === "not_found") return c.text("not found", 404);
+    return c.json({ result }, 202);
   });
 
   app.get("/status", async (c) => c.json(await service.status()));

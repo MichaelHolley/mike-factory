@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import ConversationLog from "../components/ConversationLog.vue";
+import MessageComposer from "../components/MessageComposer.vue";
 import PhaseTrack from "../components/PhaseTrack.vue";
 import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
@@ -73,6 +74,7 @@ const run = computed(() =>
     </section>
 
     <ConversationLog :repo="run.repo" :issue="String(run.issue)" />
+    <MessageComposer :repo="run.repo" :issue="String(run.issue)" :phase="run.phase" />
   </template>
   <p v-else-if="loaded && !error" class="muted">
     No run found for {{ route.params.repo }} #{{ route.params.issue }}. It may not have started yet.

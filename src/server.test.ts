@@ -35,6 +35,7 @@ function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui")) {
   const service: IssueService = {
     start: vi.fn(async () => {}),
     stop: vi.fn(async () => {}),
+    message: vi.fn(async () => "steered" as const),
     cleanup: vi.fn(async () => {}),
     sweep: vi.fn(async () => {}),
     status: vi.fn(async () => []),
@@ -193,6 +194,51 @@ describe("webhook server", () => {
     expect(await sseEvents(response).next()).toEqual({ from: 0, items: [{ kind: "assistant", text: "Done." }] });
     expect(service.subscribeTranscript).toHaveBeenCalledWith("byok-imagen", 12, expect.any(Function));
     shutdown.abort();
+  });
+
+  describe("POST /status/:repo/:issue/messages", () => {
+    const id = "6f1c2a3b-4d5e-4f60-8a9b-0c1d2e3f4a5b";
+    const send = (app: ReturnType<typeof setup>["app"], body: unknown, path = "/status/byok-imagen/12/messages") =>
+      app.request(path, {
+        method: "POST",
+        body: JSON.stringify(body),
+        headers: { "content-type": "application/json" },
+      });
+
+    it.each([
+      { body: { id: "not-a-uuid", text: "hi" } },
+      { body: { id, text: "   " } },
+      { body: { id, text: "x".repeat(8_001) } },
+      { body: { id } },
+      { body: null },
+    ])("rejects $body with 400", async ({ body }) => {
+      const { app, service } = setup();
+      expect((await send(app, body)).status).toBe(400);
+      expect(service.message).not.toHaveBeenCalled();
+    });
+
+    it("rejects a body that isn't sent as JSON with 415", async () => {
+      const { app, service } = setup();
+      const response = await app.request("/status/byok-imagen/12/messages", {
+        method: "POST",
+        body: JSON.stringify({ id, text: "hi" }),
+        headers: { "content-type": "text/plain" },
+      });
+      expect(response.status).toBe(415);
+      expect(service.message).not.toHaveBeenCalled();
+    });
+
+    it("passes the message on with 202, and 404s for an unknown run", async () => {
+      const { app, service, log } = setup();
+      const response = await send(app, { id, text: "  Use tabs  " });
+      expect(response.status).toBe(202);
+      expect(await response.json()).toEqual({ result: "steered" });
+      expect(service.message).toHaveBeenCalledWith({ repo: "byok-imagen", issue: 12, id, text: "Use tabs" });
+      expect(JSON.stringify(log.mock.calls)).not.toContain("Use tabs");
+
+      vi.mocked(service.message).mockResolvedValue("not_found");
+      expect((await send(app, { id, text: "hi" })).status).toBe(404);
+    });
   });
 
   it("returns 404 for everything else", async () => {

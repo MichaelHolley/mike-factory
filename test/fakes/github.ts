@@ -150,6 +150,13 @@ export class FakeGitHub implements GitHubClient {
     return { number: created.number, url: created.url };
   }
 
+  async updatePr(repo: string, number: number, pr: { title: string; body: string }): Promise<void> {
+    this.called("updatePr");
+    const existing = this.prList.find((candidate) => candidate.repo === repo && candidate.number === number);
+    if (!existing) throw new Error(`404 Not Found: ${repo} pull ${number}`);
+    Object.assign(existing, pr);
+  }
+
   async gitToken(_repo: string): Promise<string> {
     this.called("gitToken");
     return FAKE_GIT_TOKEN;

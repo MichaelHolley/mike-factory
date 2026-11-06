@@ -36,6 +36,8 @@ const tally = (calls: Call[]) =>
     .map(([name, count]) => (count > 1 ? `${name} ×${count}` : name))
     .join(", ");
 
+const ROLES: Record<Message["kind"], string> = { user: "Pipeline", assistant: "Agent", human: "You" };
+
 const tone = (call: Call) => (call.result ? (call.result.isError ? "failed" : "done") : "pending");
 </script>
 
@@ -54,7 +56,10 @@ const tone = (call: Call) => (call.result ? (call.result.isError ? "failed" : "d
         :class="entry.kind === 'message' ? entry.message.kind : 'tools'"
       >
         <template v-if="entry.kind === 'message'">
-          <span class="role">{{ entry.message.kind === "user" ? "Pipeline" : "Agent" }}</span>
+          <span class="role">
+            {{ ROLES[entry.message.kind] }}
+            <span v-if="entry.message.kind === 'human' && entry.message.pending" class="queued">queued</span>
+          </span>
           <pre>{{ entry.message.text }}</pre>
         </template>
         <ToolCall v-else-if="entry.calls.length === 1" :call="entry.calls[0]!" />
@@ -111,11 +116,20 @@ ol > li {
   overflow: hidden;
 }
 li.user,
-li.assistant {
+li.assistant,
+li.human {
   padding: 0.75rem 1.25rem;
 }
 li.assistant {
   border-left: 3px solid var(--run);
+}
+li.human {
+  border-left: 3px solid var(--hazard);
+}
+.queued {
+  margin-left: 0.375rem;
+  font-weight: 400;
+  font-style: italic;
 }
 .role {
   font-size: 0.875rem;

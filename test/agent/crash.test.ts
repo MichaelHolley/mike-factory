@@ -34,7 +34,7 @@ beforeEach(async () => {
 afterEach(() => rm(dir, { recursive: true, force: true }));
 
 describe("restart safety", () => {
-  it.each(["prepare", "implement", "verify", "publish", "report"])(
+  it.each(["prepare", "implement", "verify", "revise", "publish", "report"])(
     "survives a hard exit at the start of %s with concurrent runs in two repos",
     async (phase) => {
       const first = await runProcess(dir, "first", phase);
