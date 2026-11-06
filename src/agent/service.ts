@@ -103,6 +103,7 @@ export function createIssueService(opts: {
         worktreePath,
         phase: "queued",
         attempts: 0,
+        revisions: 0,
         lastError: null,
         prTitle: null,
         prBody: null,

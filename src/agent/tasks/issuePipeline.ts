@@ -401,16 +401,23 @@ export function createIssuePipeline(deps: PipelineDeps) {
       fix: step("fix", async (task, rt, context) => {
         const { attempt, output } = task.state.checkpoint;
         const config = repoOf(task.input.repo);
+        const revisions = (await rt.snapshot(IssueState, rt.conversationId, context))?.revisions ?? 0;
         await converse(rt, context, task.input.repo, {
           content: fixPrompt(attempt, config.maxFixAttempts, output),
-          requestId: `${task.input.requestId}:fix-${attempt}`,
+          requestId: `${task.input.requestId}:fix-${revisions ? `${revisions}-` : ""}${attempt}`,
         });
         await go(rt, context, { phase: "verify", attempt }, { costUsd: await spentCostUsd(rt, context) });
       }),
 
       revise: step("revise", async (task, rt, context) => {
         await converse(rt, context, task.input.repo);
-        await go(rt, context, { phase: "verify", attempt: 0 }, { costUsd: await spentCostUsd(rt, context) });
+        const revisions = (await rt.snapshot(IssueState, rt.conversationId, context))?.revisions ?? 0;
+        await go(
+          rt,
+          context,
+          { phase: "verify", attempt: 0 },
+          { costUsd: await spentCostUsd(rt, context), revisions: revisions + 1 },
+        );
       }),
 
       publish: step("publish", async (task, rt, context) => {
@@ -462,18 +469,20 @@ export function createIssuePipeline(deps: PipelineDeps) {
     abort: async (task, rt, context) => {
       const { repo, issue } = task.input;
       await (await rt.conversation(rt.conversationId, context))?.abort(context);
-      // The abort withdrew steers still queued in the inbox; make their notes pending again.
+      // Match each note to its submission, which a stop may have cut off before or after its delivery was recorded:
+      // a withdrawn steer is pending again under a fresh request ID, one the agent saw counts as delivered.
       await rt.commit(async (tx) => {
         const notes = await tx.doc(IssueNotes, rt.conversationId);
-        const delivered = notes.items.filter((note) => note.deliveredAt);
         const records = await Promise.all(
-          delivered.map((note) => tx.submissionByRequest(rt.conversationId, noteRequestId(note))),
+          notes.items.map((note) => tx.submissionByRequest(rt.conversationId, noteRequestId(note))),
         );
-        delivered.forEach((note, index) => {
+        notes.items.forEach((note, index) => {
           const record = records[index];
-          if (record?.type !== "input" || record.status !== "unanswered" || record.entry) return;
-          note.deliveredAt = null;
-          note.tries = (note.tries ?? 0) + 1;
+          if (record?.type !== "input") return;
+          if (record.status === "unanswered" && !record.entry) {
+            note.deliveredAt = null;
+            note.tries = (note.tries ?? 0) + 1;
+          } else note.deliveredAt ??= new Date().toISOString();
         });
         return undefined;
       }, context);

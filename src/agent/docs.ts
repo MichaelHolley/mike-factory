@@ -27,6 +27,8 @@ export type IssueStateValue = {
   pipelineTaskId: number | null;
   requestId: string | null;
   setupDone: boolean;
+  /** `revise` rounds of the current run; keeps fix request IDs unique once a revision restarts the attempts. */
+  revisions?: number;
   prTitle?: string | null;
   prBody?: string | null;
   startedAt?: string | null;

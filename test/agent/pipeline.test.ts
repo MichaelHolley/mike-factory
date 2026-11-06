@@ -368,6 +368,42 @@ describe("issue pipeline", () => {
       expect(prompts).toHaveLength(1);
     });
 
+    it("sends a fresh fix prompt when a revision breaks the checks after an earlier fix", async () => {
+      const checksLog = join(dir, "checks.log");
+      const world = createWorld({
+        dir,
+        repo: {
+          checks: [`echo run >> ${checksLog} && sleep 1 && test -f fixed.txt && test ! -f broken.txt`],
+          maxFixAttempts: 1,
+        },
+      });
+      const removeBroken = fauxAssistantMessage(
+        fauxToolCall("bash", {
+          command: "git rm -q broken.txt && git -c user.name=a -c user.email=a@e.x commit -qm 'fix: remove broken.txt'",
+        }),
+        { stopReason: "toolUse" },
+      );
+      autopilot(world.faux, (messages) => {
+        const last = textOf(messages.at(-1));
+        const revised = messages.some((m) => textOf(m).includes("<owner-message>"));
+        if (last.startsWith("Verification failed")) return revised ? removeBroken : commitFile("fixed.txt", "ok");
+        if (last.includes("<owner-message>")) return commitFile("broken.txt", "x");
+        return undefined;
+      });
+      const { harness, service } = await launch(world);
+
+      await service.start(startAction(1, "comment-1"));
+      await waitFor(() => existsSync(checksLog) && readFileSync(checksLog, "utf8") === "run\nrun\n");
+      expect(await service.message(message("Add broken.txt"))).toBe("steered");
+      expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+      const fixes = (await service.transcript(REPO, 1))!.filter(
+        (item) => item.kind === "user" && item.text.startsWith("Verification failed"),
+      );
+      expect(fixes).toHaveLength(2);
+      expect(git(world.remote, "ls-tree", "--name-only", "agent/issue-1")).not.toContain("broken.txt");
+    });
+
     it("revises and verifies again when a message arrives while checks run", async () => {
       const checksLog = join(dir, "checks.log");
       const world = createWorld({ dir, repo: { checks: [`echo run >> ${checksLog} && sleep 1`] } });
