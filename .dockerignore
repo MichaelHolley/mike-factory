@@ -8,6 +8,5 @@ web/dist
 data
 *.sqlite*
 test
-docker-compose.prod.yml
 Dockerfile
 *.md
