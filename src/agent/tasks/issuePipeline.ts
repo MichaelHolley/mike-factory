@@ -143,6 +143,8 @@ const notePrompt = (text: string) =>
     "Commit the changes it asks for. When they change what the pull request does, call `draft_pull_request` again so the title and body describe the whole change.",
   ].join("\n\n");
 
+const noteRequestId = (note: Note) => `note:${note.id}${note.tries ? `:${note.tries}` : ""}`;
+
 const pendingNotes = (notes: { items: readonly Note[] } | undefined) =>
   notes?.items.filter((note) => !note.deliveredAt) ?? [];
 
@@ -262,7 +264,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
         type: "input",
         content: notePrompt(note.text),
         whenBusy: "steer",
-        requestId: `note:${note.id}`,
+        requestId: noteRequestId(note),
         entry: { kind: HUMAN_ENTRY, data: { id: note.id, text: note.text } },
       } as const;
       submissions.push(await conversation.submit(draft, context));
@@ -460,6 +462,21 @@ export function createIssuePipeline(deps: PipelineDeps) {
     abort: async (task, rt, context) => {
       const { repo, issue } = task.input;
       await (await rt.conversation(rt.conversationId, context))?.abort(context);
+      // The abort withdrew steers still queued in the inbox; make their notes pending again.
+      await rt.commit(async (tx) => {
+        const notes = await tx.doc(IssueNotes, rt.conversationId);
+        const delivered = notes.items.filter((note) => note.deliveredAt);
+        const records = await Promise.all(
+          delivered.map((note) => tx.submissionByRequest(rt.conversationId, noteRequestId(note))),
+        );
+        delivered.forEach((note, index) => {
+          const record = records[index];
+          if (record?.type !== "input" || record.status !== "unanswered" || record.entry) return;
+          note.deliveredAt = null;
+          note.tries = (note.tries ?? 0) + 1;
+        });
+        return undefined;
+      }, context);
       await upsertStatus(deps, repo, issue, "Stopped. The worktree is kept; comment `/mike` to continue.").catch(
         (error) => log("could not update the status comment", { error: messageOf(error) }),
       );

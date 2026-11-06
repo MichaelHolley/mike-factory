@@ -217,6 +217,17 @@ describe("webhook server", () => {
       expect(service.message).not.toHaveBeenCalled();
     });
 
+    it("rejects a body that isn't sent as JSON with 415", async () => {
+      const { app, service } = setup();
+      const response = await app.request("/status/byok-imagen/12/messages", {
+        method: "POST",
+        body: JSON.stringify({ id, text: "hi" }),
+        headers: { "content-type": "text/plain" },
+      });
+      expect(response.status).toBe(415);
+      expect(service.message).not.toHaveBeenCalled();
+    });
+
     it("passes the message on with 202, and 404s for an unknown run", async () => {
       const { app, service, log } = setup();
       const response = await send(app, { id, text: "  Use tabs  " });

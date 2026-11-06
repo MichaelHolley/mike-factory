@@ -62,8 +62,11 @@ export const IssueState = defineDoc<IssueStateValue>({
 
 export const asConversationId = (id: number) => id as ConversationId;
 
-/** A message from the owner on the run page; `id` is the client's UUID, so a retried POST adds nothing. */
-export type Note = { id: string; text: string; at: string; deliveredAt: string | null };
+/**
+ * A message from the owner on the run page; `id` is the client's UUID, so a retried POST adds nothing. `tries` counts
+ * deliveries withdrawn by a stop, so the next delivery submits under a fresh request ID.
+ */
+export type Note = { id: string; text: string; at: string; deliveredAt: string | null; tries?: number };
 
 /** Kept apart from `IssueState` so the pipeline's patches and the server's note writes never clobber each other. */
 export const IssueNotes = defineDoc<{ items: Note[] }>({

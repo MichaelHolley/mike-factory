@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import type { IssuePhase } from "../../../src/runStatus.ts";
 
 const MAX_CHARS = 8000;
@@ -10,6 +10,9 @@ const props = defineProps<{ repo: string; issue: string; phase: IssuePhase }>();
 const text = ref("");
 const sending = ref(false);
 const error = ref<string | null>(null);
+// Kept across retries of the same text, so a send that failed after the server stored it isn't added twice.
+let id = crypto.randomUUID();
+watch(text, () => (id = crypto.randomUUID()));
 
 const finished = computed(() => FINISHED.includes(props.phase));
 const canSend = computed(() => !sending.value && text.value.trim() !== "" && text.value.length <= MAX_CHARS);
@@ -23,7 +26,7 @@ async function send() {
     const response = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: crypto.randomUUID(), text: text.value }),
+      body: JSON.stringify({ id, text: text.value }),
     });
     if (!response.ok) throw new Error((await response.text()) || `HTTP ${response.status}`);
     text.value = "";

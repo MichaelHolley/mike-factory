@@ -304,6 +304,39 @@ describe("issue pipeline", () => {
       expect(JSON.stringify(transcript)).not.toContain("<owner-message>");
     });
 
+    it("keeps a steer withdrawn by a stop pending and delivers it with the next message", async () => {
+      const world = createWorld({ dir });
+      autopilot(world.faux, (messages) => {
+        const last = textOf(messages.at(-1));
+        if (last.startsWith("Implement GitHub issue"))
+          return fauxAssistantMessage(fauxToolCall("bash", { command: "sleep 60" }), { stopReason: "toolUse" });
+        if (last.includes("<owner-message>\nPlease commit hello.txt")) return commitFile("hello.txt", "hello");
+        return undefined;
+      });
+      const { harness, service } = await launch(world);
+
+      await service.start(startAction(1, "comment-1"));
+      await waitFor(() => world.faux.state.callCount >= 1);
+      await service.message(message("Please commit hello.txt"));
+      await waitFor(() => world.logs.some(({ msg }) => msg === "note delivered"));
+      await service.stop(stopAction(1, "comment-2"));
+      expect((await pipelineResult(harness, 1)).status).toBe("aborted");
+      expect(await service.transcript(REPO, 1)).toContainEqual({
+        kind: "human",
+        text: "Please commit hello.txt",
+        pending: true,
+      });
+
+      expect(await service.message(message("Thanks."))).toBe("started");
+      expect((await pipelineResult(harness, 1)).status).toBe("completed");
+      expect(git(world.remote, "show", "agent/issue-1:hello.txt")).toBe("hello");
+      const humans = (await service.transcript(REPO, 1))!.filter((item) => item.kind === "human");
+      expect(humans).toEqual([
+        { kind: "human", text: "Please commit hello.txt" },
+        { kind: "human", text: "Thanks." },
+      ]);
+    });
+
     it("continues a finished run on the same branch and updates its PR", async () => {
       const world = createWorld({ dir });
       autopilot(world.faux, (messages) => {

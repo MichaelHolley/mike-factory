@@ -13,7 +13,7 @@ A self-hosted coding agent that turns a GitHub issue into a pull request. Commen
 - Progress shows up in a single status comment on the issue, edited in place. No labels are added to your repos.
 - A status page, meant to sit behind reverse-proxy auth, lists every run and updates live; each run's page also shows the agent's conversation with a **Download JSON** link for a current snapshot. When `PUBLIC_URL` is set, the status comment ends with a link to that run's page.
 - From a run's page you can message the agent: **Steer** reaches it during its current work, **Continue** starts a follow-up run on a finished one. Messages go through the pipeline, so every change is verified before it is pushed.
-- Each issue gets one durable [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable) run, triggered by a GitHub App webhook: prepare, implement, verify, publish, report.
+- Each issue gets one durable [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable) run, triggered by a GitHub App webhook: prepare, implement, verify, publish, report, with `fix` and `revise` looping back to verify.
 - The agent commits its own work: code, tests and docs that resolve the issue, but not scratch or helper files. Checks only run on a clean working tree, so leftover files go back to the agent as a fix attempt, and only verified commits are pushed.
 - State lives in SQLite, so a restart resumes the run and still produces exactly one PR. Commits use the bot identity, overriding inherited Git author settings.
 - New PR titles follow conventional commits so squash merges can use the PR title as their commit subject.

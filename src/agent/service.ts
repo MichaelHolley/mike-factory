@@ -132,23 +132,24 @@ export function createIssueService(opts: {
     message: ({ repo, issue, id, text }) =>
       mutex.run(async () => {
         const repoConfig = findRepo(config, repo);
-        const { conversationId, state } = repoConfig ? await lookup(repo, issue) : {};
+        const { conversationId } = repoConfig ? await lookup(repo, issue) : {};
         const conversation = conversationId && (await harness.conversation(conversationId, context));
         if (!repoConfig || !conversation) return "not_found";
 
         // One commit, so the pipeline either sees the note before it ends or is already terminal here.
-        const live = await conversation.commit(async (tx) => {
+        const { live, pending } = await conversation.commit(async (tx) => {
           const notes = await tx.doc(IssueNotes, conversation.id);
-          if (!notes.items.some((note) => note.id === id))
-            notes.items.push({ id, text, at: new Date().toISOString(), deliveredAt: null });
+          const existing = notes.items.find((note) => note.id === id);
+          if (!existing) notes.items.push({ id, text, at: new Date().toISOString(), deliveredAt: null });
           const taskId = (await tx.doc(IssueState, conversation.id)).pipelineTaskId;
           const task = taskId == null ? undefined : await tx.task(taskId as TaskId);
-          return task !== undefined && task.state.status !== "terminal";
+          return { live: task !== undefined && task.state.status !== "terminal", pending: !existing?.deliveredAt };
         }, context);
-        const requestId = `web-${id}`;
         if (live) return "steered";
-        if (state?.requestId === requestId) return "started";
-        await launch(repoConfig, conversation.id, { repo, issue, requestId, instructions: "", trigger: "web" });
+        // A retry of a message that was already delivered has nothing left to start.
+        if (!pending) return "started";
+        const input = { repo, issue, requestId: `web-${id}`, instructions: "", trigger: "web" } as const;
+        await launch(repoConfig, conversation.id, input);
         return "started";
       }),
 

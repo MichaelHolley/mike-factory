@@ -130,6 +130,9 @@ export function createServer({
     const repo = c.req.param("repo");
     const issue = Number(c.req.param("issue"));
     if (!Number.isInteger(issue)) return c.text("not found", 404);
+    // Browsers can't send JSON cross-site without a CORS preflight, which this server never allows.
+    if (!/^application\/json\b/i.test(c.req.header("content-type") ?? ""))
+      return c.text("expected application/json", 415);
     const body = (await c.req.json().catch(() => undefined)) as { id?: unknown; text?: unknown } | undefined;
     const { id, text } = body ?? {};
     if (typeof id !== "string" || !UUID.test(id)) return c.text("id must be a UUID", 400);
