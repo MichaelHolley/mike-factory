@@ -3,7 +3,7 @@ import type { ConversationId, Cursor, Harness, Storage, TaskId } from "@earendil
 import { findRepo } from "../config.ts";
 import { branchName, issueKey, type IssueService } from "../contracts.ts";
 import type { RunStatus } from "../runStatus.ts";
-import { asConversationId, IssueIndex, IssueState } from "./docs.ts";
+import { asConversationId, ISSUE_STATE_KIND, IssueIndex, IssueState } from "./docs.ts";
 import type { AgentDeps } from "./harness.ts";
 import { createMutex } from "./mutex.ts";
 import { upsertStatus, type IssuePipeline } from "./tasks/issuePipeline.ts";
@@ -160,6 +160,19 @@ export function createIssueService(opts: { harness: Harness; storage: Storage; p
       const { conversationId } = await lookup(repo, issue);
       const conversation = conversationId === undefined ? undefined : await harness.conversation(conversationId, context);
       return conversation && toTranscript((await conversation.context(context)).messages);
+    },
+
+    subscribeStatus: (listener) =>
+      harness.subscribeCommits(({ changes }) => {
+        if (changes.some((change) => change.type === "document" && change.record.kind === ISSUE_STATE_KIND)) listener();
+      }),
+
+    async subscribeTranscript(repo, issue, listener) {
+      const { conversationId } = await lookup(repo, issue);
+      if (conversationId === undefined) return undefined;
+      return harness.subscribeCommits(({ changes }) => {
+        if (changes.some((change) => change.type === "entry" && change.value.conversationId === conversationId)) listener();
+      });
     },
   };
 }

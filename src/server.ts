@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
+import { streamSSE } from "hono/streaming";
 import type { AppConfig } from "./config.ts";
 import type { IssueService } from "./contracts.ts";
 import { InvalidSignatureError, verifyWebhook } from "./github/webhooks.ts";
@@ -12,12 +13,66 @@ export interface ServerDeps {
   webhookSecret: string;
   log: (msg: string, data?: object) => void;
   uiDir?: string;
+  /** Ends open live streams so `server.close()` can finish. */
+  shutdownSignal?: AbortSignal;
 }
+
+const THROTTLE_MS = 500;
+const PING_MS = 20_000;
+const RETRY_MS = 5_000;
 
 const DEFAULT_UI_DIR = fileURLToPath(new URL("../web/dist", import.meta.url));
 
-export function createServer({ config, service, webhookSecret, log, uiDir = DEFAULT_UI_DIR }: ServerDeps): Hono {
+export function createServer({ config, service, webhookSecret, log, uiDir = DEFAULT_UI_DIR, shutdownSignal }: ServerDeps): Hono {
   const app = new Hono();
+
+  /**
+   * Streams `{ from, items }` events: the full list first, then only the tail from the first item that changed.
+   * Responds 404 when `subscribe` returns undefined.
+   */
+  const liveList = async <T>(c: Context, load: () => Promise<T[]>, subscribe: (onChange: () => void) => Promise<(() => void) | undefined>) => {
+    let wake = () => {};
+    let changed = false;
+    const unsubscribe = await subscribe(() => {
+      changed = true;
+      wake();
+    });
+    if (!unsubscribe) return c.text("not found", 404);
+
+    c.header("X-Accel-Buffering", "no");
+    return streamSSE(
+      c,
+      async (stream) => {
+        const ended = () => stream.aborted || shutdownSignal?.aborted === true;
+        const end = () => wake();
+        stream.onAbort(end);
+        shutdownSignal?.addEventListener("abort", end);
+        const ping = setInterval(() => void stream.write(": ping\n\n"), PING_MS);
+        let sent: string[] | undefined;
+        try {
+          while (!ended()) {
+            changed = false;
+            const loadedAt = Date.now();
+            const items = (await load()).map((item) => JSON.stringify(item));
+            let from = 0;
+            while (sent && from < items.length && items[from] === sent[from]) from++;
+            if (!sent || from < Math.max(items.length, sent.length)) {
+              await stream.writeSSE({ data: `{"from":${from},"items":[${items.slice(from).join(",")}]}`, retry: sent ? undefined : RETRY_MS });
+            }
+            sent = items;
+            if (!changed && !ended()) await new Promise<void>((resolve) => (wake = resolve));
+            if (ended()) break;
+            await stream.sleep(Math.max(0, loadedAt + THROTTLE_MS - Date.now()));
+          }
+        } finally {
+          clearInterval(ping);
+          unsubscribe();
+          shutdownSignal?.removeEventListener("abort", end);
+        }
+      },
+      async (error) => log("live stream failed", { path: c.req.path, error: error.message }),
+    );
+  };
 
   app.post("/webhooks/github", async (c) => {
     const rawBody = await c.req.text();
@@ -47,6 +102,19 @@ export function createServer({ config, service, webhookSecret, log, uiDir = DEFA
   });
 
   app.get("/status", async (c) => c.json(await service.status()));
+
+  app.get("/status/stream", (c) => liveList(c, () => service.status(), async (onChange) => service.subscribeStatus(onChange)));
+
+  app.get("/status/:repo/:issue/conversation/stream", async (c) => {
+    const repo = c.req.param("repo");
+    const issue = Number(c.req.param("issue"));
+    if (!Number.isInteger(issue)) return c.text("not found", 404);
+    return liveList(
+      c,
+      async () => (await service.transcript(repo, issue)) ?? [],
+      (onChange) => service.subscribeTranscript(repo, issue, onChange),
+    );
+  });
 
   app.get("/status/:repo/:issue/conversation", async (c) => {
     const issue = Number(c.req.param("issue"));

@@ -84,7 +84,8 @@ async function main() {
   void sweep();
   setInterval(sweep, SWEEP_INTERVAL_MS).unref();
 
-  const app = createServer({ config: effectiveConfig, service, webhookSecret: secrets.webhookSecret, log });
+  const shutdownController = new AbortController();
+  const app = createServer({ config: effectiveConfig, service, webhookSecret: secrets.webhookSecret, log, shutdownSignal: shutdownController.signal });
   const server = serve({ fetch: app.fetch, port, hostname }, (info) =>
     log("listening", { port: info.port, model: useFaux ? "faux" : "openai", skills: skills.map((skill) => skill.name) }),
   );
@@ -93,6 +94,7 @@ async function main() {
     if (shuttingDown) return;
     shuttingDown = true;
     log("shutting down", { signal });
+    shutdownController.abort();
     const serverClosed = new Promise<void>((resolve) => server.close(() => resolve()));
     if ("closeIdleConnections" in server) server.closeIdleConnections();
     await serverClosed;
