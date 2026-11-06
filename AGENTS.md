@@ -2,7 +2,7 @@
 
 Self-hosted agent that turns a `/mike` comment on a GitHub issue into a pull request. Overview in `README.md`, setup and config in `docs/setup.md`.
 
-- Use pnpm. Verify with `pnpm typecheck` and `pnpm test`.
+- Use pnpm. Verify with `pnpm lint`, `pnpm typecheck` and `pnpm test`; run `pnpm format` before committing.
 - Running the server needs GitHub App secrets even with `MODEL=faux`; use the tests to verify behavior offline.
 
 ## Code map

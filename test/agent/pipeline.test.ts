@@ -3,13 +3,27 @@ import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ToolResultEntry, MemoryStorage, type Harness } from "@earendil-works/pi-durable";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openAgentHarness } from "../../src/agent/harness.ts";
 import { STATUS_MARKER } from "../../src/agent/tasks/issuePipeline.ts";
-import type { GitHubClient } from "../../src/contracts.ts";
-import { autopilot, commitFile, conversationIdOf, draftPr, createWorld, ctx, git, issueStateOf, OTHER_REPO, pipelineResult, REPO, startAction, stopAction, textOf, type World } from "./support.ts";
+import {
+  autopilot,
+  commitFile,
+  conversationIdOf,
+  draftPr,
+  createWorld,
+  ctx,
+  git,
+  issueStateOf,
+  OTHER_REPO,
+  pipelineResult,
+  REPO,
+  startAction,
+  stopAction,
+  textOf,
+  type World,
+} from "./support.ts";
 
 let dir: string;
 let open: Harness[];
@@ -28,7 +42,10 @@ async function launch(world: World, issueNumbers: number[] = [1]) {
   for (const number of issueNumbers) {
     world.github.addIssue(REPO, { number, title: "Add hello", body: "Please add hello.txt." });
   }
-  const { harness, service } = await openAgentHarness({ storage: new MemoryStorage(), models: world.models, deps: world.deps }, ctx);
+  const { harness, service } = await openAgentHarness(
+    { storage: new MemoryStorage(), models: world.models, deps: world.deps },
+    ctx,
+  );
   open.push(harness);
   return { harness, service };
 }
@@ -116,12 +133,17 @@ describe("issue pipeline", () => {
 
     await service.start(startAction(1, "comment-1"));
     expect((await pipelineResult(harness, 1)).status).toBe("completed");
-    expect(world.github.prs[0]).toMatchObject({ title: "chore: Add hello", body: "Done: wrote hello.txt.\n\nCloses #1" });
+    expect(world.github.prs[0]).toMatchObject({
+      title: "chore: Add hello",
+      body: "Done: wrote hello.txt.\n\nCloses #1",
+    });
   });
 
   it("caps a fallback body and retains the closing reference", async () => {
     const world = createWorld({ dir });
-    autopilot(world.faux, (messages) => (messages.at(-1)?.role === "toolResult" ? fauxAssistantMessage("x".repeat(4_000)) : undefined));
+    autopilot(world.faux, (messages) =>
+      messages.at(-1)?.role === "toolResult" ? fauxAssistantMessage("x".repeat(4_000)) : undefined,
+    );
     const { harness, service } = await launch(world);
 
     await service.start(startAction(1, "comment-1"));
@@ -133,7 +155,8 @@ describe("issue pipeline", () => {
 
   it("opens the PR with the latest draft after a successful verification fix", async () => {
     const world = createWorld({ dir, repo: { checks: ["test -f fixed.txt"] } });
-    const description = "## Summary\n- Add hello and fix verification setup.\n\n## Testing\n- `test -f fixed.txt`: passed.";
+    const description =
+      "## Summary\n- Add hello and fix verification setup.\n\n## Testing\n- `test -f fixed.txt`: passed.";
     autopilot(world.faux, (messages) => {
       const last = messages.at(-1);
       if (textOf(last).startsWith("Verification failed")) return commitFile("fixed.txt", "ok");
@@ -147,7 +170,10 @@ describe("issue pipeline", () => {
     expect((await pipelineResult(harness, 1)).status).toBe("completed");
 
     expect(git(world.remote, "show", "agent/issue-1:fixed.txt")).toBe("ok");
-    expect(world.github.prs[0]).toMatchObject({ title: "fix: repair verification setup", body: `${description}\n\nCloses #1` });
+    expect(world.github.prs[0]).toMatchObject({
+      title: "fix: repair verification setup",
+      body: `${description}\n\nCloses #1`,
+    });
   });
 
   it("stamps startedAt on start and moves updatedAt on every phase change", async () => {
@@ -247,7 +273,10 @@ describe("issue pipeline", () => {
   });
 
   it("fails with the output in the status comment when verify keeps failing", async () => {
-    const world = createWorld({ dir, repo: { checks: ["echo 'boom: assertion failed' && exit 1"], maxFixAttempts: 2 } });
+    const world = createWorld({
+      dir,
+      repo: { checks: ["echo 'boom: assertion failed' && exit 1"], maxFixAttempts: 2 },
+    });
     autopilot(world.faux);
     const { harness, service } = await launch(world);
 
@@ -267,7 +296,10 @@ describe("issue pipeline", () => {
 
   it("continues the same conversation and worktree when /mike is sent again after a failure", async () => {
     const setupLog = join(dir, "setup.log");
-    const world = createWorld({ dir, repo: { setup: `echo ran >> ${setupLog}`, checks: ["test -f fixed.txt"], maxFixAttempts: 1 } });
+    const world = createWorld({
+      dir,
+      repo: { setup: `echo ran >> ${setupLog}`, checks: ["test -f fixed.txt"], maxFixAttempts: 1 },
+    });
     autopilot(world.faux, (messages) => {
       const last = messages.at(-1);
       const prompt = JSON.stringify(messages.filter((message) => message.role === "user").at(-1));
@@ -295,11 +327,13 @@ describe("issue pipeline", () => {
 
   it("verifies and publishes only committed changes, sending leftover files back to the agent", async () => {
     const world = createWorld({ dir, repo: { checks: ["test -f hello.txt"] } });
-    const helper = (command: string) => fauxAssistantMessage(fauxToolCall("bash", { command }), { stopReason: "toolUse" });
+    const helper = (command: string) =>
+      fauxAssistantMessage(fauxToolCall("bash", { command }), { stopReason: "toolUse" });
     autopilot(world.faux, (messages) => {
       const last = messages.at(-1);
       if (textOf(last).startsWith("Implement GitHub issue")) return helper("echo 'test -f hello.txt' > verify.sh");
-      if (last?.role === "toolResult" && messages.filter((message) => message.role === "assistant").length === 1) return commitFile("hello.txt", "hello");
+      if (last?.role === "toolResult" && messages.filter((message) => message.role === "assistant").length === 1)
+        return commitFile("hello.txt", "hello");
       if (textOf(last).startsWith("Verification failed")) return helper("rm verify.sh");
       return undefined;
     });
@@ -308,7 +342,9 @@ describe("issue pipeline", () => {
     await service.start(startAction(1, "comment-1"));
     expect((await pipelineResult(harness, 1)).status).toBe("completed");
 
-    const fix = (await service.transcript(REPO, 1))!.find((item) => item.kind === "user" && item.text.startsWith("Verification failed"));
+    const fix = (await service.transcript(REPO, 1))!.find(
+      (item) => item.kind === "user" && item.text.startsWith("Verification failed"),
+    );
     expect(fix).toMatchObject({ text: expect.stringContaining("?? verify.sh") });
     expect(git(world.remote, "diff", "--name-only", "main", "agent/issue-1")).toBe("hello.txt");
     expect(await issueStateOf(harness, 1)).toMatchObject({ phase: "done", attempts: 1 });
@@ -317,7 +353,11 @@ describe("issue pipeline", () => {
   it("fails without publishing when uncommitted changes remain", async () => {
     const world = createWorld({ dir, repo: { maxFixAttempts: 0 } });
     autopilot(world.faux, (messages) =>
-      messages.at(-1)?.role === "toolResult" ? undefined : fauxAssistantMessage(fauxToolCall("write", { path: "hello.txt", content: "hello\n" }), { stopReason: "toolUse" }),
+      messages.at(-1)?.role === "toolResult"
+        ? undefined
+        : fauxAssistantMessage(fauxToolCall("write", { path: "hello.txt", content: "hello\n" }), {
+            stopReason: "toolUse",
+          }),
     );
     const { harness, service } = await launch(world);
 
@@ -343,7 +383,9 @@ describe("issue pipeline", () => {
 
   it("aborts on stop, keeps the worktree and says so in the status comment", async () => {
     const world = createWorld({ dir });
-    autopilot(world.faux, () => fauxAssistantMessage(fauxToolCall("bash", { command: "sleep 60" }), { stopReason: "toolUse" }));
+    autopilot(world.faux, () =>
+      fauxAssistantMessage(fauxToolCall("bash", { command: "sleep 60" }), { stopReason: "toolUse" }),
+    );
     const { harness, service } = await launch(world);
 
     await service.start(startAction(1, "comment-1"));
@@ -378,7 +420,9 @@ describe("issue pipeline", () => {
       const stopped = createWorld({ dir: join(dir, "stop") });
       stopped.deps.publicUrl = PUBLIC_URL;
       const stoppedBodies = statusBodies(stopped);
-      autopilot(stopped.faux, () => fauxAssistantMessage(fauxToolCall("bash", { command: "sleep 60" }), { stopReason: "toolUse" }));
+      autopilot(stopped.faux, () =>
+        fauxAssistantMessage(fauxToolCall("bash", { command: "sleep 60" }), { stopReason: "toolUse" }),
+      );
       const stoppedRun = await launch(stopped);
       await stoppedRun.service.start(startAction(1, "comment-1"));
       await waitFor(() => stopped.faux.state.callCount >= 1);
@@ -398,7 +442,9 @@ describe("issue pipeline", () => {
       const first = await launch(linked);
       await first.service.start(startAction(1, "comment-1"));
       await pipelineResult(first.harness, 1);
-      expect(status(linked)).toMatch(/^<!-- agent-status -->\nOpened .*\n\nhttps:\/\/factory\.example\.com\/runs\/demo\/1$/s);
+      expect(status(linked)).toMatch(
+        /^<!-- agent-status -->\nOpened .*\n\nhttps:\/\/factory\.example\.com\/runs\/demo\/1$/s,
+      );
 
       const plain = createWorld({ dir: join(dir, "plain") });
       const bodies = statusBodies(plain);
@@ -417,7 +463,9 @@ describe("issue pipeline", () => {
     let systemPrompt: string | undefined;
     autopilot(world.faux, (messages) => {
       systemPrompt ??= JSON.stringify(messages[0]);
-      return messages.at(-1)?.role === "toolResult" ? undefined : fauxAssistantMessage(fauxToolCall("load_skill", { name: skill.name }), { stopReason: "toolUse" });
+      return messages.at(-1)?.role === "toolResult"
+        ? undefined
+        : fauxAssistantMessage(fauxToolCall("load_skill", { name: skill.name }), { stopReason: "toolUse" });
     });
     const { harness, service } = await launch(world);
 
@@ -453,7 +501,9 @@ describe("issue pipeline", () => {
 
   it("fails the pipeline when the turn budget is exhausted", async () => {
     const world = createWorld({ dir, repo: { maxTurns: 3 } });
-    autopilot(world.faux, () => fauxAssistantMessage(fauxToolCall("bash", { command: "echo working" }), { stopReason: "toolUse" }));
+    autopilot(world.faux, () =>
+      fauxAssistantMessage(fauxToolCall("bash", { command: "echo working" }), { stopReason: "toolUse" }),
+    );
     const { harness, service } = await launch(world);
 
     await service.start(startAction(1, "comment-1"));
@@ -498,16 +548,25 @@ describe("issue pipeline", () => {
     world.github.addIssue(OTHER_REPO, { number: 1, title: "Add other", body: "Please." });
     const runs = [...[1, 2, 3].map((issue) => ({ repo: REPO, issue })), { repo: OTHER_REPO, issue: 1 }];
 
-    await Promise.all(runs.map(({ repo, issue }) => service.start(startAction(issue, `comment-${repo}-${issue}`, "", repo))));
+    await Promise.all(
+      runs.map(({ repo, issue }) => service.start(startAction(issue, `comment-${repo}-${issue}`, "", repo))),
+    );
     for (const { repo, issue } of runs) expect((await pipelineResult(harness, issue, repo)).status).toBe("completed");
 
     expect(maxSlotsHeld(world)).toBe(3);
     expect(world.github.prs).toHaveLength(4);
     for (const { repo, issue } of runs) {
-      expect(git(world.remotes[repo]!, "diff", "--name-only", "main", `agent/issue-${issue}`)).toBe(`${repo}-${issue}.txt`);
+      expect(git(world.remotes[repo]!, "diff", "--name-only", "main", `agent/issue-${issue}`)).toBe(
+        `${repo}-${issue}.txt`,
+      );
     }
     const states = await service.status();
-    expect(states.map(({ repo, issue, phase }) => `${repo}#${issue}:${phase}`).sort()).toEqual(["demo#1:done", "demo#2:done", "demo#3:done", "other#1:done"]);
+    expect(states.map(({ repo, issue, phase }) => `${repo}#${issue}:${phase}`).sort()).toEqual([
+      "demo#1:done",
+      "demo#2:done",
+      "demo#3:done",
+      "other#1:done",
+    ]);
   });
 
   it("removes the worktree and local branch when the PR closes", async () => {
