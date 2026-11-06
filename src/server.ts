@@ -43,9 +43,14 @@ export function createServer({ config, service, webhookSecret, log, uiDir = DEFA
     const response = streamSSE(
       c,
       async (stream) => {
-        const ended = () => stream.aborted || shutdownSignal?.aborted === true;
-        const end = () => wake();
+        const ended = () => stream.aborted || c.req.raw.signal.aborted || shutdownSignal?.aborted === true;
+        const end = () => {
+          stream.abort();
+          wake();
+        };
         stream.onAbort(end);
+        // On Node, `onAbort` misses clients that leave before the response body is read.
+        c.req.raw.signal.addEventListener("abort", end);
         shutdownSignal?.addEventListener("abort", end);
         const ping = setInterval(() => void stream.write(": ping\n\n"), PING_MS);
         let sent: string[] | undefined;
@@ -67,6 +72,7 @@ export function createServer({ config, service, webhookSecret, log, uiDir = DEFA
         } finally {
           clearInterval(ping);
           unsubscribe();
+          c.req.raw.signal.removeEventListener("abort", end);
           shutdownSignal?.removeEventListener("abort", end);
         }
       },

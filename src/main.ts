@@ -97,6 +97,8 @@ async function main() {
     shutdownController.abort();
     const serverClosed = new Promise<void>((resolve) => server.close(() => resolve()));
     if ("closeIdleConnections" in server) server.closeIdleConnections();
+    // A client that stopped reading never drains its live stream, so its socket would never close.
+    if ("closeAllConnections" in server) setTimeout(() => server.closeAllConnections(), 5_000).unref();
     await serverClosed;
     await harness.close(BACKGROUND_CONTEXT);
     process.exit(0);

@@ -165,6 +165,14 @@ describe("webhook server", () => {
     expect(listeners.size).toBe(0);
   });
 
+  it("ends the stream and unsubscribes when the client is gone before it starts", async () => {
+    const { app, listeners } = setup();
+    const gone = new AbortController();
+    gone.abort();
+    await app.request(new Request("http://localhost/status/stream", { signal: gone.signal }));
+    await vi.waitFor(() => expect(listeners.size).toBe(0));
+  });
+
   it("streams a run's conversation, and 404s when there is none", async () => {
     const { app, service, subscribe, shutdown } = setup();
     expect((await app.request("/status/byok-imagen/12/conversation/stream")).status).toBe(404);
