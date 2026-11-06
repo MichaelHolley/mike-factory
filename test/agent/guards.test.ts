@@ -53,8 +53,17 @@ describe("budget", () => {
   const limits = { maxTurns: 3, maxCostUsd: 1 };
 
   it("sums model and tool spend", () => {
-    const usage = (total: number) => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total } });
-    expect(totalCostUsd({ models: { "a/b": usage(0.25), "a/c": usage(0.5) }, tools: { x: usage(0.125) } })).toBeCloseTo(0.875);
+    const usage = (total: number) => ({
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total },
+    });
+    expect(totalCostUsd({ models: { "a/b": usage(0.25), "a/c": usage(0.5) }, tools: { x: usage(0.125) } })).toBeCloseTo(
+      0.875,
+    );
     expect(totalCostUsd(undefined)).toBe(0);
   });
 

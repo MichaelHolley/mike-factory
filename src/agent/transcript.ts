@@ -3,7 +3,10 @@ import type { TranscriptItem } from "../runStatus.ts";
 
 const MAX_ITEM_CHARS = 4_000;
 
-const clip = (value: string) => (value.length > MAX_ITEM_CHARS ? `${value.slice(0, MAX_ITEM_CHARS)}\n... (${value.length - MAX_ITEM_CHARS} more characters)` : value);
+const clip = (value: string) =>
+  value.length > MAX_ITEM_CHARS
+    ? `${value.slice(0, MAX_ITEM_CHARS)}\n... (${value.length - MAX_ITEM_CHARS} more characters)`
+    : value;
 
 const textOf = (content: string | readonly (TextContent | ImageContent)[]) =>
   typeof content === "string" ? content : content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("");
@@ -20,7 +23,9 @@ const summarize = (args: Record<string, unknown>) => {
 export function toTranscript(messages: readonly Message[]): TranscriptItem[] {
   const results = new Map(
     messages.flatMap((message) =>
-      message.role === "toolResult" ? [[message.toolCallId, { text: clip(textOf(message.content)), isError: message.isError }] as const] : [],
+      message.role === "toolResult"
+        ? [[message.toolCallId, { text: clip(textOf(message.content)), isError: message.isError }] as const]
+        : [],
     ),
   );
   return messages.flatMap((message): TranscriptItem[] => {

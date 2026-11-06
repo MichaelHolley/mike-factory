@@ -27,7 +27,12 @@ const entries = computed(() =>
 );
 
 const tally = (calls: Call[]) =>
-  [...calls.reduce((counts, call) => counts.set(call.name, (counts.get(call.name) ?? 0) + 1), new Map<string, number>())]
+  [
+    ...calls.reduce(
+      (counts, call) => counts.set(call.name, (counts.get(call.name) ?? 0) + 1),
+      new Map<string, number>(),
+    ),
+  ]
     .map(([name, count]) => (count > 1 ? `${name} ×${count}` : name))
     .join(", ");
 
@@ -43,7 +48,11 @@ const tone = (call: Call) => (call.result ? (call.result.isError ? "failed" : "d
     <p v-if="error && !items.length" class="muted">Couldn't load the conversation: {{ error }}.</p>
     <p v-else-if="loaded && !items.length" class="muted">No messages yet.</p>
     <ol v-else>
-      <li v-for="(entry, index) in entries" :key="index" :class="entry.kind === 'message' ? entry.message.kind : 'tools'">
+      <li
+        v-for="(entry, index) in entries"
+        :key="index"
+        :class="entry.kind === 'message' ? entry.message.kind : 'tools'"
+      >
         <template v-if="entry.kind === 'message'">
           <span class="role">{{ entry.message.kind === "user" ? "Pipeline" : "Agent" }}</span>
           <pre>{{ entry.message.text }}</pre>

@@ -5,7 +5,12 @@ import { join } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { fauxAssistantMessage, fauxProvider, fauxToolCall, type FauxProviderHandle } from "@earendil-works/pi-ai/providers/faux";
+import {
+  fauxAssistantMessage,
+  fauxProvider,
+  fauxToolCall,
+  type FauxProviderHandle,
+} from "@earendil-works/pi-ai/providers/faux";
 import type { Harness } from "@earendil-works/pi-durable";
 import type { TaskId } from "@earendil-works/pi-durable";
 import { asConversationId, IssueIndex, IssueState } from "../../src/agent/docs.ts";
@@ -22,7 +27,17 @@ export const OTHER_REPO = "other";
 export const ctx = BACKGROUND_CONTEXT;
 
 export const git = (cwd: string, ...args: string[]) =>
-  execFileSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, GIT_AUTHOR_NAME: "seed", GIT_AUTHOR_EMAIL: "s@e.x", GIT_COMMITTER_NAME: "seed", GIT_COMMITTER_EMAIL: "s@e.x" } }).trim();
+  execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "seed",
+      GIT_AUTHOR_EMAIL: "s@e.x",
+      GIT_COMMITTER_NAME: "seed",
+      GIT_COMMITTER_EMAIL: "s@e.x",
+    },
+  }).trim();
 
 function seedRemote(dir: string, repo: string) {
   const remote = join(dir, repo === REPO ? "remote.git" : `${repo}.git`);
@@ -42,7 +57,8 @@ function persisted(github: FakeGitHub, file: string): FakeGitHub {
   return new Proxy(github, {
     get(target, property, receiver) {
       const value = Reflect.get(target, property, receiver);
-      if (typeof value !== "function" || typeof property !== "string" || !(property in FAKE_CLIENT_METHODS)) return value;
+      if (typeof value !== "function" || typeof property !== "string" || !(property in FAKE_CLIENT_METHODS))
+        return value;
       return async (...args: unknown[]) => {
         const result = await value.apply(target, args);
         writeFileSync(file, JSON.stringify(target.toJSON()));
@@ -75,7 +91,14 @@ export interface World {
 }
 
 /** `extraRepos` adds more repos with the same settings as `repo`, each with its own remote. */
-export function createWorld(opts: { dir: string; repo?: Partial<RepoConfig>; extraRepos?: string[]; githubFile?: string; maxConcurrent?: number; skills?: Skill[] }): World {
+export function createWorld(opts: {
+  dir: string;
+  repo?: Partial<RepoConfig>;
+  extraRepos?: string[];
+  githubFile?: string;
+  maxConcurrent?: number;
+  skills?: Skill[];
+}): World {
   const names = [REPO, ...(opts.extraRepos ?? [])];
   const remotes = Object.fromEntries(names.map((name) => [name, seedRemote(opts.dir, name)]));
   const remote = remotes[REPO]!;
@@ -100,16 +123,29 @@ export function createWorld(opts: { dir: string; repo?: Partial<RepoConfig>; ext
     owner: OWNER,
     remoteUrl: (name) => remotes[name]!,
   });
-  const faux = fauxProvider({ models: [{ id: "faux-1", cost: { input: 10, output: 10, cacheRead: 0, cacheWrite: 0 } }] });
+  const faux = fauxProvider({
+    models: [{ id: "faux-1", cost: { input: 10, output: 10, cacheRead: 0, cacheWrite: 0 } }],
+  });
   const models = createModels();
   models.setProvider(faux.provider);
   const logs: World["logs"] = [];
-  const deps: AgentDeps = { config, github, worktrees, log: (msg, data) => logs.push({ msg, data }), maxConcurrent: opts.maxConcurrent, skills: opts.skills };
+  const deps: AgentDeps = {
+    config,
+    github,
+    worktrees,
+    log: (msg, data) => logs.push({ msg, data }),
+    maxConcurrent: opts.maxConcurrent,
+    skills: opts.skills,
+  };
   return { dir: opts.dir, remote, remotes, github: fake, config, repo, faux, models, deps, logs };
 }
 
 export const textOf = (message: Message | undefined) =>
-  message?.role === "user" ? (typeof message.content === "string" ? message.content : message.content.map((part) => (part.type === "text" ? part.text : "")).join("")) : "";
+  message?.role === "user"
+    ? typeof message.content === "string"
+      ? message.content
+      : message.content.map((part) => (part.type === "text" ? part.text : "")).join("")
+    : "";
 
 /**
  * A model that never runs out of responses, so a restarted process can keep going. It commits hello.txt for a task,
@@ -136,15 +172,19 @@ export function autopilot(faux: FauxProviderHandle, decide?: (messages: Message[
 /** Writes and commits only `path`; safe to retry after a hard exit interrupted the tool result. */
 export const commitFile = (path: string, content: string, subject = `feat: add ${path}`) =>
   fauxAssistantMessage(
-    fauxToolCall("bash", { command: `printf %s '${content}' > ${path} && git add ${path} && (git diff --cached --quiet || git -c user.name=agent -c user.email=agent@example.com commit -qm '${subject}')` }),
+    fauxToolCall("bash", {
+      command: `printf %s '${content}' > ${path} && git add ${path} && (git diff --cached --quiet || git -c user.name=agent -c user.email=agent@example.com commit -qm '${subject}')`,
+    }),
     { stopReason: "toolUse" },
   );
 
 export const draftPr = (title: string, body: string) =>
   fauxAssistantMessage(fauxToolCall("draft_pull_request", { title, body }), { stopReason: "toolUse" });
 
-export const startAction = (issue: number, requestId: string, instructions = "", repo = REPO) => ({ kind: "start", repo, issue, requestId, instructions }) as const;
-export const stopAction = (issue: number, requestId: string) => ({ kind: "stop", repo: REPO, issue, requestId }) as const;
+export const startAction = (issue: number, requestId: string, instructions = "", repo = REPO) =>
+  ({ kind: "start", repo, issue, requestId, instructions }) as const;
+export const stopAction = (issue: number, requestId: string) =>
+  ({ kind: "stop", repo: REPO, issue, requestId }) as const;
 
 export async function conversationIdOf(harness: Harness, issue: number, repo = REPO) {
   const index = await harness.snapshot(IssueIndex, issueKey(OWNER, repo, issue), ctx);

@@ -1,4 +1,14 @@
-export type IssuePhase = "queued" | "prepare" | "implement" | "verify" | "fix" | "publish" | "report" | "done" | "failed" | "aborted";
+export type IssuePhase =
+  | "queued"
+  | "prepare"
+  | "implement"
+  | "verify"
+  | "fix"
+  | "publish"
+  | "report"
+  | "done"
+  | "failed"
+  | "aborted";
 
 export type TranscriptItem =
   | { kind: "user" | "assistant"; text: string }

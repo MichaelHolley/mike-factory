@@ -18,9 +18,7 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
   const installationId = (repo: string) => {
     let id = installationIds.get(repo);
     if (!id) {
-      id = app.octokit
-        .request("GET /repos/{owner}/{repo}/installation", { owner, repo })
-        .then((res) => res.data.id);
+      id = app.octokit.request("GET /repos/{owner}/{repo}/installation", { owner, repo }).then((res) => res.data.id);
       id.catch(() => installationIds.delete(repo));
       installationIds.set(repo, id);
     }
@@ -42,7 +40,13 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
     const octokit = await octokitFor(repo);
     return listAll((page) =>
       octokit
-        .request("GET /repos/{owner}/{repo}/issues/{issue_number}/comments", { owner, repo, issue_number: issue, per_page: PER_PAGE, page })
+        .request("GET /repos/{owner}/{repo}/issues/{issue_number}/comments", {
+          owner,
+          repo,
+          issue_number: issue,
+          per_page: PER_PAGE,
+          page,
+        })
         .then((res) => res.data),
     );
   };
@@ -50,7 +54,11 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
   return {
     async getIssue(repo, issue): Promise<IssueData> {
       const octokit = await octokitFor(repo);
-      const { data } = await octokit.request("GET /repos/{owner}/{repo}/issues/{issue_number}", { owner, repo, issue_number: issue });
+      const { data } = await octokit.request("GET /repos/{owner}/{repo}/issues/{issue_number}", {
+        owner,
+        repo,
+        issue_number: issue,
+      });
       return {
         number: data.number,
         title: data.title,
@@ -62,7 +70,11 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
 
     async listIssueComments(repo, issue): Promise<IssueComment[]> {
       const comments = await rawComments(repo, issue);
-      return comments.map((comment) => ({ author: comment.user?.login ?? "", body: comment.body ?? "", createdAt: comment.created_at }));
+      return comments.map((comment) => ({
+        author: comment.user?.login ?? "",
+        body: comment.body ?? "",
+        createdAt: comment.created_at,
+      }));
     },
 
     async upsertComment(repo, issue, marker, body) {
@@ -71,15 +83,31 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
       const existing = (await rawComments(repo, issue)).find((comment) => comment.body?.includes(tag));
       const fullBody = `${tag}\n${body}`;
       if (existing) {
-        await octokit.request("PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}", { owner, repo, comment_id: existing.id, body: fullBody });
+        await octokit.request("PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}", {
+          owner,
+          repo,
+          comment_id: existing.id,
+          body: fullBody,
+        });
       } else {
-        await octokit.request("POST /repos/{owner}/{repo}/issues/{issue_number}/comments", { owner, repo, issue_number: issue, body: fullBody });
+        await octokit.request("POST /repos/{owner}/{repo}/issues/{issue_number}/comments", {
+          owner,
+          repo,
+          issue_number: issue,
+          body: fullBody,
+        });
       }
     },
 
     async findOpenPr(repo, head) {
       const octokit = await octokitFor(repo);
-      const { data } = await octokit.request("GET /repos/{owner}/{repo}/pulls", { owner, repo, head: `${owner}:${head}`, state: "open", per_page: 1 });
+      const { data } = await octokit.request("GET /repos/{owner}/{repo}/pulls", {
+        owner,
+        repo,
+        head: `${owner}:${head}`,
+        state: "open",
+        per_page: 1,
+      });
       const pr = data[0];
       return pr && { number: pr.number, url: pr.html_url };
     },

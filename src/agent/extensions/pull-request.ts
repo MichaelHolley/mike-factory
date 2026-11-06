@@ -21,7 +21,9 @@ export function createPullRequestTools() {
           "Set the title and body the pipeline uses when it opens this issue's pull request. Does not open it. Call again to replace them.",
         parameters: Type.Object({
           title: Type.String({ description: "Conventional commit subject, e.g. `feat(api): add pagination`." }),
-          body: Type.String({ description: "Markdown PR description; the pipeline appends the closing issue reference." }),
+          body: Type.String({
+            description: "Markdown PR description; the pipeline appends the closing issue reference.",
+          }),
         }),
         replay: "safe",
         execute: async (args, api, context) => {
@@ -30,11 +32,19 @@ export function createPullRequestTools() {
           const title = args.title.trim();
           const body = args.body.trim();
           if (!CONVENTIONAL_TITLE.test(title)) {
-            return { output: text("Rejected: the title must be a conventional commit subject such as `feat(api): add pagination` (`type(scope)!: summary`)."), isError: true };
+            return {
+              output: text(
+                "Rejected: the title must be a conventional commit subject such as `feat(api): add pagination` (`type(scope)!: summary`).",
+              ),
+              isError: true,
+            };
           }
           const limit = prBodyLimit(state.issue);
           if (body.length > limit) {
-            return { output: text(`Rejected: the body has ${body.length} characters; keep it under ${limit}.`), isError: true };
+            return {
+              output: text(`Rejected: the body has ${body.length} characters; keep it under ${limit}.`),
+              isError: true,
+            };
           }
           await api.commit(async (tx) => {
             Object.assign(await tx.doc(IssueState, api.conversationId), { prTitle: title, prBody: body });

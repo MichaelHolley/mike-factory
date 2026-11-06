@@ -23,14 +23,25 @@ const RETRY_MS = 5_000;
 
 const DEFAULT_UI_DIR = fileURLToPath(new URL("../web/dist", import.meta.url));
 
-export function createServer({ config, service, webhookSecret, log, uiDir = DEFAULT_UI_DIR, shutdownSignal }: ServerDeps): Hono {
+export function createServer({
+  config,
+  service,
+  webhookSecret,
+  log,
+  uiDir = DEFAULT_UI_DIR,
+  shutdownSignal,
+}: ServerDeps): Hono {
   const app = new Hono();
 
   /**
    * Streams `{ from, items }` events: the full list first, then only the tail from the first item that changed.
    * Responds 404 when `subscribe` returns undefined.
    */
-  const liveList = async <T>(c: Context, load: () => Promise<T[]>, subscribe: (onChange: () => void) => Promise<(() => void) | undefined>) => {
+  const liveList = async <T>(
+    c: Context,
+    load: () => Promise<T[]>,
+    subscribe: (onChange: () => void) => Promise<(() => void) | undefined>,
+  ) => {
     let wake = () => {};
     let changed = false;
     const unsubscribe = await subscribe(() => {
@@ -62,7 +73,10 @@ export function createServer({ config, service, webhookSecret, log, uiDir = DEFA
             let from = 0;
             while (sent && from < items.length && items[from] === sent[from]) from++;
             if (!sent || from < Math.max(items.length, sent.length)) {
-              await stream.writeSSE({ data: `{"from":${from},"items":[${items.slice(from).join(",")}]}`, retry: sent ? undefined : RETRY_MS });
+              await stream.writeSSE({
+                data: `{"from":${from},"items":[${items.slice(from).join(",")}]}`,
+                retry: sent ? undefined : RETRY_MS,
+              });
             }
             sent = items;
             if (!changed && !ended()) await new Promise<void>((resolve) => (wake = resolve));
@@ -112,7 +126,13 @@ export function createServer({ config, service, webhookSecret, log, uiDir = DEFA
 
   app.get("/status", async (c) => c.json(await service.status()));
 
-  app.get("/status/stream", (c) => liveList(c, () => service.status(), async (onChange) => service.subscribeStatus(onChange)));
+  app.get("/status/stream", (c) =>
+    liveList(
+      c,
+      () => service.status(),
+      async (onChange) => service.subscribeStatus(onChange),
+    ),
+  );
 
   app.get("/status/:repo/:issue/conversation/stream", async (c) => {
     const repo = c.req.param("repo");

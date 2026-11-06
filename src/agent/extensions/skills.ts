@@ -33,15 +33,19 @@ export function parseSkill(source: string, file: string): Skill {
 export async function loadSkills(dir: string): Promise<Skill[]> {
   let names: string[];
   try {
-    names = (await readdir(dir, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+    names = (await readdir(dir, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
-  return Promise.all(names.sort().map(async (name) => {
-    const file = join(dir, name, "SKILL.md");
-    return parseSkill(await readFile(file, "utf8"), file);
-  }));
+  return Promise.all(
+    names.sort().map(async (name) => {
+      const file = join(dir, name, "SKILL.md");
+      return parseSkill(await readFile(file, "utf8"), file);
+    }),
+  );
 }
 
 /** Lists the skills in the system prompt and serves their instructions through `load_skill`. */
@@ -67,7 +71,11 @@ export function createSkills(skills: readonly Skill[]) {
         replay: "safe",
         execute: async (args) => {
           const skill = byName.get(args.name);
-          if (!skill) return { output: text(`Unknown skill "${args.name}". Use one listed in the system prompt.`), isError: true };
+          if (!skill)
+            return {
+              output: text(`Unknown skill "${args.name}". Use one listed in the system prompt.`),
+              isError: true,
+            };
           return { output: text(skill.body) };
         },
       }),

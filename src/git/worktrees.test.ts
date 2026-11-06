@@ -9,8 +9,13 @@ import { createWorktrees } from "./worktrees.ts";
 
 const run = promisify(execFile);
 const git = async (cwd: string, ...args: string[]) => (await run("git", args, { cwd })).stdout.trim();
-const exists = (path: string) => access(path).then(() => true, () => false);
-const commit = (cwd: string, message: string) => git(cwd, "-c", "user.name=agent", "-c", "user.email=agent@example.com", "commit", "-qam", message);
+const exists = (path: string) =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
+const commit = (cwd: string, message: string) =>
+  git(cwd, "-c", "user.name=agent", "-c", "user.email=agent@example.com", "commit", "-qam", message);
 
 const repo: RepoConfig = {
   name: "demo",
@@ -48,7 +53,11 @@ afterEach(async () => {
 describe("createWorktrees", () => {
   it("creates a bare clone and a worktree on agent/issue-<n>", async () => {
     const info = await worktrees.prepare(repo, 1);
-    expect(info).toEqual({ path: join(dataDir, "worktrees", "demo", "issue-1"), branch: "agent/issue-1", created: true });
+    expect(info).toEqual({
+      path: join(dataDir, "worktrees", "demo", "issue-1"),
+      branch: "agent/issue-1",
+      created: true,
+    });
     expect(info.path).toBe(worktrees.worktreePath("demo", 1));
     expect(await git(info.path, "rev-parse", "--abbrev-ref", "HEAD")).toBe("agent/issue-1");
     expect(await readFile(join(info.path, "README.md"), "utf8")).toBe("hello\n");

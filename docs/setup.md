@@ -8,9 +8,13 @@ cp .env.example .env   # fill in the GitHub App values; leave OPENAI_API_KEY emp
 MODEL=faux DATA_DIR=./data pnpm dev
 pnpm test
 pnpm typecheck
+pnpm lint          # oxlint
+pnpm format        # oxfmt; CI runs pnpm format:check
 ```
 
 `MODEL=faux` swaps every repo's model for the scripted faux provider, so no real model runs on your machine. Without it, `OPENAI_API_KEY` is required.
+
+CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck and tests on every pull request.
 
 To work on the status UI (`web/`), run the server as above and `pnpm -C web dev` next to it. Vite serves the UI on http://localhost:5173 with HMR and proxies `/status` to the server on :3000. `pnpm dev` alone serves no UI until `pnpm -C web build` has produced `web/dist`.
 

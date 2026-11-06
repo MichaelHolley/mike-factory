@@ -10,7 +10,9 @@ describe("parseConfig thinkingLevel", () => {
   });
 
   it("lets a repo override the default", () => {
-    const { repos } = parseConfig(`${base}defaults:\n  thinkingLevel: medium\nrepos:\n  - name: a\n  - name: b\n    thinkingLevel: low\n`);
+    const { repos } = parseConfig(
+      `${base}defaults:\n  thinkingLevel: medium\nrepos:\n  - name: a\n  - name: b\n    thinkingLevel: low\n`,
+    );
     expect(repos.map((repo) => repo.thinkingLevel)).toEqual(["medium", "low"]);
   });
 });

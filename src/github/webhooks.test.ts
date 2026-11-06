@@ -7,7 +7,17 @@ const secret = "s3cret";
 const config: AppConfig = {
   owner: "michaelholley",
   allowedSenderId: 42,
-  repos: [{ name: "byok-imagen", defaultBranch: "main", model: { provider: "p", modelId: "m" }, thinkingLevel: "high", maxTurns: 1, maxCostUsd: 1, maxFixAttempts: 1 }],
+  repos: [
+    {
+      name: "byok-imagen",
+      defaultBranch: "main",
+      model: { provider: "p", modelId: "m" },
+      thinkingLevel: "high",
+      maxTurns: 1,
+      maxCostUsd: 1,
+      maxFixAttempts: 1,
+    },
+  ],
 };
 
 const payload = (overrides: Record<string, unknown> = {}) => ({
@@ -33,8 +43,19 @@ describe("verifyWebhook", () => {
   });
 
   it("starts on /mike and stops on /mike stop, keyed by the comment id", async () => {
-    expect(await run(payload())).toEqual({ kind: "start", repo: "byok-imagen", issue: 12, requestId: "comment-99", instructions: "" });
-    expect(await run(payload({ comment: { id: 99, body: "/mike stop" } }))).toEqual({ kind: "stop", repo: "byok-imagen", issue: 12, requestId: "comment-99" });
+    expect(await run(payload())).toEqual({
+      kind: "start",
+      repo: "byok-imagen",
+      issue: 12,
+      requestId: "comment-99",
+      instructions: "",
+    });
+    expect(await run(payload({ comment: { id: 99, body: "/mike stop" } }))).toEqual({
+      kind: "stop",
+      repo: "byok-imagen",
+      issue: 12,
+      requestId: "comment-99",
+    });
   });
 
   it.each([
@@ -54,13 +75,22 @@ describe("verifyWebhook", () => {
     const repo = overrides.repo ?? "byok-imagen";
     return {
       action: overrides.action ?? "closed",
-      pull_request: { head: { ref: overrides.ref ?? "agent/issue-12", repo: { full_name: overrides.headRepo ?? `MichaelHolley/${repo}` } } },
+      pull_request: {
+        head: {
+          ref: overrides.ref ?? "agent/issue-12",
+          repo: { full_name: overrides.headRepo ?? `MichaelHolley/${repo}` },
+        },
+      },
       repository: { name: repo, full_name: `MichaelHolley/${repo}`, owner: { login: "MichaelHolley" } },
     };
   };
 
   it("cleans up when an agent PR closes", async () => {
-    expect(await run(closedPr(), { event: "pull_request" })).toEqual({ kind: "cleanup", repo: "byok-imagen", issue: 12 });
+    expect(await run(closedPr(), { event: "pull_request" })).toEqual({
+      kind: "cleanup",
+      repo: "byok-imagen",
+      issue: 12,
+    });
   });
 
   it.each([

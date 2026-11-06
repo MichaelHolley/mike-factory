@@ -7,7 +7,11 @@ import { branchName, type Worktrees } from "../contracts.ts";
 
 const execFileAsync = promisify(execFile);
 
-const exists = (path: string) => access(path).then(() => true, () => false);
+const exists = (path: string) =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
 
 export function createWorktrees(opts: {
   dataDir: string;
@@ -23,7 +27,10 @@ export function createWorktrees(opts: {
   const worktreePath = (repo: string, issue: number) => join(dataDir, "worktrees", repo, `issue-${issue}`);
 
   const git = async (cwd: string, args: string[], env: Record<string, string> = {}) => {
-    const { stdout } = await execFileAsync("git", args, { cwd, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...env } });
+    const { stdout } = await execFileAsync("git", args, {
+      cwd,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...env },
+    });
     return stdout.trim();
   };
 
@@ -39,7 +46,10 @@ export function createWorktrees(opts: {
 
   const withLock = <T>(repo: string, task: () => Promise<T>): Promise<T> => {
     const run = (locks.get(repo) ?? Promise.resolve()).then(task);
-    locks.set(repo, run.catch(() => undefined));
+    locks.set(
+      repo,
+      run.catch(() => undefined),
+    );
     return run;
   };
 
@@ -55,7 +65,10 @@ export function createWorktrees(opts: {
   };
 
   const branchExists = (repo: string, branch: string) =>
-    git(barePath(repo), ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]).then(() => true, () => false);
+    git(barePath(repo), ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]).then(
+      () => true,
+      () => false,
+    );
 
   return {
     worktreePath,
@@ -80,7 +93,8 @@ export function createWorktrees(opts: {
 
     uncommitted: (repo, issue) => git(worktreePath(repo, issue), ["status", "--porcelain", "--untracked-files=all"]),
 
-    latestCommitSubject: (repo, issue) => git(worktreePath(repo, issue), ["log", "-1", "--format=%s", branchName(issue)]),
+    latestCommitSubject: (repo, issue) =>
+      git(worktreePath(repo, issue), ["log", "-1", "--format=%s", branchName(issue)]),
 
     // Under the repo lock because a push also updates the shared remote-tracking refs.
     push: (repo, issue) =>
@@ -90,7 +104,11 @@ export function createWorktrees(opts: {
       }),
 
     async commitsAhead(repo, issue) {
-      const count = await git(worktreePath(repo.name, issue), ["rev-list", "--count", `origin/${repo.defaultBranch}..${branchName(issue)}`]);
+      const count = await git(worktreePath(repo.name, issue), [
+        "rev-list",
+        "--count",
+        `origin/${repo.defaultBranch}..${branchName(issue)}`,
+      ]);
       return Number(count);
     },
 

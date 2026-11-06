@@ -34,30 +34,35 @@ beforeEach(async () => {
 afterEach(() => rm(dir, { recursive: true, force: true }));
 
 describe("restart safety", () => {
-  it.each(["prepare", "implement", "verify", "publish", "report"])("survives a hard exit at the start of %s with concurrent runs in two repos", async (phase) => {
-    const first = await runProcess(dir, "first", phase);
-    expect(first.code, first.stderr).toBe(137);
+  it.each(["prepare", "implement", "verify", "publish", "report"])(
+    "survives a hard exit at the start of %s with concurrent runs in two repos",
+    async (phase) => {
+      const first = await runProcess(dir, "first", phase);
+      expect(first.code, first.stderr).toBe(137);
 
-    const second = await runProcess(dir, "second");
-    expect(second.code, second.stderr).toBe(0);
-    expect(second.stdout).toContain('"outcomes":["completed","completed","completed","completed"]');
+      const second = await runProcess(dir, "second");
+      expect(second.code, second.stderr).toBe(0);
+      expect(second.stdout).toContain('"outcomes":["completed","completed","completed","completed"]');
 
-    const github = JSON.parse(readFileSync(join(dir, "github.json"), "utf8")) as FakeGitHubState;
-    expect(github.prs.map((pr) => `${pr.repo}:${pr.head}:${pr.state}`).sort()).toEqual([
-      `${REPO}:agent/issue-1:open`,
-      `${REPO}:agent/issue-2:open`,
-      `${REPO}:agent/issue-3:open`,
-      `${OTHER_REPO}:agent/issue-1:open`,
-    ]);
-    expect(github.calls.createPr).toBe(4);
-    for (const pr of github.prs) {
-      expect(pr.body).toContain(`Closes #${pr.head.split("-").at(-1)}`);
-      const statusComments = github.comments.filter((comment) => comment.repo === pr.repo && comment.issue === Number(pr.head.split("-").at(-1)));
-      expect(statusComments).toHaveLength(1);
-      expect(statusComments[0]!.body).toContain(pr.url);
-    }
-    expect(git(join(dir, "remote.git"), "show", "agent/issue-1:hello.txt")).toBe("hello");
-    expect(git(join(dir, `${OTHER_REPO}.git`), "show", "agent/issue-1:hello.txt")).toBe("hello");
-    expect(existsSync(join(dir, "data", "worktrees", REPO, "issue-1"))).toBe(true);
-  });
+      const github = JSON.parse(readFileSync(join(dir, "github.json"), "utf8")) as FakeGitHubState;
+      expect(github.prs.map((pr) => `${pr.repo}:${pr.head}:${pr.state}`).sort()).toEqual([
+        `${REPO}:agent/issue-1:open`,
+        `${REPO}:agent/issue-2:open`,
+        `${REPO}:agent/issue-3:open`,
+        `${OTHER_REPO}:agent/issue-1:open`,
+      ]);
+      expect(github.calls.createPr).toBe(4);
+      for (const pr of github.prs) {
+        expect(pr.body).toContain(`Closes #${pr.head.split("-").at(-1)}`);
+        const statusComments = github.comments.filter(
+          (comment) => comment.repo === pr.repo && comment.issue === Number(pr.head.split("-").at(-1)),
+        );
+        expect(statusComments).toHaveLength(1);
+        expect(statusComments[0]!.body).toContain(pr.url);
+      }
+      expect(git(join(dir, "remote.git"), "show", "agent/issue-1:hello.txt")).toBe("hello");
+      expect(git(join(dir, `${OTHER_REPO}.git`), "show", "agent/issue-1:hello.txt")).toBe("hello");
+      expect(existsSync(join(dir, "data", "worktrees", REPO, "issue-1"))).toBe(true);
+    },
+  );
 });

@@ -18,7 +18,7 @@ repos:
   - name: mike-factory
     defaultBranch: main
     setup: pnpm install --frozen-lockfile
-    checks: [pnpm typecheck, pnpm test]
+    checks: [pnpm lint, pnpm format:check, pnpm typecheck, pnpm test]
   - name: zone-0
     defaultBranch: main
     setup: pnpm install --frozen-lockfile
