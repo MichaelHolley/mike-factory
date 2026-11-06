@@ -118,6 +118,16 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
       return { number: data.number, url: data.html_url };
     },
 
+    async updatePr(repo, number, pr) {
+      const octokit = await octokitFor(repo);
+      await octokit.request("PATCH /repos/{owner}/{repo}/pulls/{pull_number}", {
+        owner,
+        repo,
+        pull_number: number,
+        ...pr,
+      });
+    },
+
     async gitToken(repo) {
       const cached = tokens.get(repo);
       if (cached && cached.expiresAt - Date.now() > TOKEN_REFRESH_MARGIN_MS) return cached.token;

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -80,7 +81,7 @@ describe("issue pipeline", () => {
     expect(pr).toMatchObject({ head: "agent/issue-1", base: "main", title: "feat: add hello.txt", state: "open" });
     expect(pr.body).toBe("Done: wrote hello.txt.\n\nCloses #1");
     expect(git(world.remote, "show", "agent/issue-1:hello.txt")).toBe("hello");
-    expect(status(world)).toContain("Opened ");
+    expect(status(world)).toContain("Pull request: ");
     const comments = world.github.commentsOn(REPO, 1);
     expect(comments).toHaveLength(1);
     expect(comments[0]!.body).toContain(pr.url);
@@ -250,26 +251,107 @@ describe("issue pipeline", () => {
     expect(world.github.prs).toHaveLength(1);
     expect(world.faux.state.callCount).toBe(modelCalls);
     expect(world.github.commentsOn(REPO, 1)).toHaveLength(1);
-    expect(status(world)).toContain("Opened ");
+    expect(status(world)).toContain("Pull request: ");
   });
 
-  it("ignores /mike while a PR is open and replies once with the PR link", async () => {
+  it("continues on the open PR when /mike is sent again", async () => {
     const world = createWorld({ dir });
-    autopilot(world.faux);
+    autopilot(world.faux, (messages) =>
+      textOf(messages.at(-1)).includes("also add more") ? commitFile("more.txt", "more") : undefined,
+    );
     const { harness, service } = await launch(world);
     await service.start(startAction(1, "comment-1"));
     await pipelineResult(harness, 1);
-    const modelCalls = world.faux.state.callCount;
 
-    await service.start(startAction(1, "comment-2"));
-    await service.start(startAction(1, "comment-2"));
+    await service.start(startAction(1, "comment-2", "also add more"));
+    expect((await pipelineResult(harness, 1)).status).toBe("completed");
 
-    expect(status(world)).toContain("Opened ");
+    expect(git(world.remote, "show", "agent/issue-1:more.txt")).toBe("more");
     expect(world.github.prs).toHaveLength(1);
-    expect(world.faux.state.callCount).toBe(modelCalls);
-    const comments = world.github.commentsOn(REPO, 1);
-    expect(comments).toHaveLength(2);
-    expect(comments[1]!.body).toContain(`Not starting: ${world.github.prs[0]!.url}`);
+    expect(world.github.callCount("createPr")).toBe(1);
+  });
+
+  describe("owner messages", () => {
+    const message = (text: string, id = randomUUID()) => ({ repo: REPO, issue: 1, id, text });
+    const sleepCall = fauxAssistantMessage(fauxToolCall("bash", { command: "sleep 3" }), { stopReason: "toolUse" });
+
+    it("steers a message into the running turn and still opens one PR", async () => {
+      const world = createWorld({ dir });
+      autopilot(world.faux, (messages) => {
+        const last = textOf(messages.at(-1));
+        if (last.startsWith("Implement GitHub issue")) return sleepCall;
+        if (last.includes("<owner-message>\nPlease commit hello.txt")) return commitFile("hello.txt", "hello");
+        return messages.at(-1)?.role === "toolResult" ? undefined : fauxAssistantMessage("Waiting.");
+      });
+      const { harness, service } = await launch(world);
+      expect(await service.message(message("Please commit hello.txt"))).toBe("not_found");
+
+      await service.start(startAction(1, "comment-1"));
+      await waitFor(() => world.faux.state.callCount >= 1);
+      expect(await service.message(message("Please commit hello.txt"))).toBe("steered");
+      expect(await service.transcript(REPO, 1)).toContainEqual({
+        kind: "human",
+        text: "Please commit hello.txt",
+        pending: true,
+      });
+      expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+      expect(world.github.prs).toHaveLength(1);
+      expect(git(world.remote, "show", "agent/issue-1:hello.txt")).toBe("hello");
+      const transcript = (await service.transcript(REPO, 1))!;
+      const sleep = transcript.findIndex((item) => item.kind === "tool" && item.summary === "sleep 3");
+      expect(transcript[sleep + 1]).toEqual({ kind: "human", text: "Please commit hello.txt" });
+      expect(JSON.stringify(transcript)).not.toContain("<owner-message>");
+    });
+
+    it("continues a finished run on the same branch and updates its PR", async () => {
+      const world = createWorld({ dir });
+      autopilot(world.faux, (messages) => {
+        const last = messages.at(-1);
+        if (textOf(last).includes("<owner-message>")) return commitFile("more.txt", "more");
+        const followUp = messages.some((m) => textOf(m).includes("<owner-message>"));
+        if (followUp && last?.role === "toolResult" && last.toolName === "bash")
+          return draftPr("feat: add hello and more", "Adds more.");
+        return undefined;
+      });
+      const { harness, service } = await launch(world);
+      await service.start(startAction(1, "comment-1"));
+      await pipelineResult(harness, 1);
+      const first = await issueStateOf(harness, 1);
+
+      const id = randomUUID();
+      expect(await service.message(message("Add more.txt", id))).toBe("started");
+      expect((await pipelineResult(harness, 1)).status).toBe("completed");
+      expect(await service.message(message("Add more.txt", id))).toBe("started");
+
+      expect((await issueStateOf(harness, 1))!.pipelineTaskId).not.toBe(first!.pipelineTaskId);
+      expect(git(world.remote, "show", "agent/issue-1:more.txt")).toBe("more");
+      expect(world.github.callCount("createPr")).toBe(1);
+      expect(world.github.callCount("updatePr")).toBe(1);
+      expect(world.github.prs[0]).toMatchObject({ title: "feat: add hello and more", body: "Adds more.\n\nCloses #1" });
+      const prompts = (await service.transcript(REPO, 1))!.filter(
+        (item) => item.kind === "user" && item.text.startsWith("Implement GitHub issue"),
+      );
+      expect(prompts).toHaveLength(1);
+    });
+
+    it("revises and verifies again when a message arrives while checks run", async () => {
+      const checksLog = join(dir, "checks.log");
+      const world = createWorld({ dir, repo: { checks: [`echo run >> ${checksLog} && sleep 1`] } });
+      autopilot(world.faux, (messages) =>
+        textOf(messages.at(-1)).includes("<owner-message>") ? commitFile("revised.txt", "ok") : undefined,
+      );
+      const { harness, service } = await launch(world);
+
+      await service.start(startAction(1, "comment-1"));
+      await waitFor(() => existsSync(checksLog));
+      expect(await service.message(message("Add revised.txt"))).toBe("steered");
+      expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+      expect(readFileSync(checksLog, "utf8")).toBe("run\nrun\n");
+      expect(git(world.remote, "show", "agent/issue-1:revised.txt")).toBe("ok");
+      expect(world.github.prs).toHaveLength(1);
+    });
   });
 
   it("fails with the output in the status comment when verify keeps failing", async () => {
@@ -322,7 +404,7 @@ describe("issue pipeline", () => {
     expect(readFileSync(setupLog, "utf8")).toBe("ran\n");
     expect(second!.pipelineTaskId).not.toBe(first!.pipelineTaskId);
     expect(world.github.prs).toHaveLength(1);
-    expect(status(world)).toContain("Opened ");
+    expect(status(world)).toContain("Pull request: ");
   });
 
   it("verifies and publishes only committed changes, sending leftover files back to the agent", async () => {
@@ -443,7 +525,7 @@ describe("issue pipeline", () => {
       await first.service.start(startAction(1, "comment-1"));
       await pipelineResult(first.harness, 1);
       expect(status(linked)).toMatch(
-        /^<!-- agent-status -->\nOpened .*\n\nhttps:\/\/factory\.example\.com\/runs\/demo\/1$/s,
+        /^<!-- agent-status -->\nPull request: .*\n\nhttps:\/\/factory\.example\.com\/runs\/demo\/1$/s,
       );
 
       const plain = createWorld({ dir: join(dir, "plain") });

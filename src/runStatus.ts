@@ -4,6 +4,7 @@ export type IssuePhase =
   | "implement"
   | "verify"
   | "fix"
+  | "revise"
   | "publish"
   | "report"
   | "done"
@@ -12,6 +13,7 @@ export type IssuePhase =
 
 export type TranscriptItem =
   | { kind: "user" | "assistant"; text: string }
+  | { kind: "human"; text: string; pending?: true }
   | { kind: "tool"; name: string; summary: string; args: string; result?: { text: string; isError: boolean } };
 
 export type RunStatus = {

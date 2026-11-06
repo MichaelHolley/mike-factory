@@ -73,6 +73,7 @@ const FAKE_CLIENT_METHODS: Record<keyof GitHubClient, true> = {
   upsertComment: true,
   findOpenPr: true,
   createPr: true,
+  updatePr: true,
   gitToken: true,
   botIdentity: true,
 };

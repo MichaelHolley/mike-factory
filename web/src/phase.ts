@@ -3,7 +3,7 @@ import type { IssuePhase } from "../../src/runStatus.ts";
 export type PhaseTone = "idle" | "run" | "ok" | "bad" | "halt";
 export type StepState = "passed" | "current" | "pending";
 
-const FLOW = ["queued", "prepare", "implement", "verify", "fix", "publish", "report"] as const;
+const FLOW = ["queued", "prepare", "implement", "verify", "fix", "revise", "publish", "report"] as const;
 const OUTCOMES: readonly IssuePhase[] = ["done", "failed", "aborted"];
 
 export function phaseTone(phase: IssuePhase): PhaseTone {

@@ -36,6 +36,7 @@ export interface GitHubClient {
   upsertComment(repo: string, issue: number, marker: string, body: string): Promise<void>;
   findOpenPr(repo: string, head: string): Promise<PullRequestRef | undefined>;
   createPr(repo: string, pr: { head: string; base: string; title: string; body: string }): Promise<PullRequestRef>;
+  updatePr(repo: string, number: number, pr: { title: string; body: string }): Promise<void>;
   /** Short-lived token for git over HTTPS. Only push/fetch code may see it. */
   gitToken(repo: string): Promise<string>;
   botIdentity(): Promise<GitIdentity>;
@@ -81,6 +82,16 @@ export type WebhookAction =
 export interface IssueService {
   start(action: Extract<WebhookAction, { kind: "start" }>): Promise<void>;
   stop(action: Extract<WebhookAction, { kind: "stop" }>): Promise<void>;
+  /**
+   * Stores an owner message from the run page. A live pipeline steers it into the agent's work (`steered`); otherwise
+   * it starts a follow-up run on the same conversation and branch (`started`). A repeated `id` adds nothing.
+   */
+  message(message: {
+    repo: string;
+    issue: number;
+    id: string;
+    text: string;
+  }): Promise<"steered" | "started" | "not_found">;
   /** Removes the issue's worktree and local branch unless a pipeline is still running for it. */
   cleanup(action: Extract<WebhookAction, { kind: "cleanup" }>): Promise<void>;
   /** Removes worktrees and branches of closed issues, then prunes every repo. */

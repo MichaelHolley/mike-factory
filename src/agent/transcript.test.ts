@@ -1,6 +1,17 @@
 import type { Message } from "@earendil-works/pi-ai";
+import type { EntryRecord } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
+import { HUMAN_ENTRY } from "./docs.ts";
 import { toTranscript } from "./transcript.ts";
+
+type Entry = { kind: string; data?: unknown; model: Message[] };
+const viewOf = (entries: (Message | Entry)[]) => {
+  const all = entries.map((entry) => ("role" in entry ? { kind: `pi.${entry.role}`, model: [entry] } : entry));
+  return {
+    entries: all.map(({ kind, data }) => ({ kind, data }) as EntryRecord),
+    contributions: all.map(({ model }) => model),
+  };
+};
 
 const usage = {
   input: 0,
@@ -47,7 +58,7 @@ describe("toTranscript", () => {
       },
     ] as unknown as Message[];
 
-    expect(toTranscript(messages)).toEqual([
+    expect(toTranscript(viewOf(messages))).toEqual([
       { kind: "user", text: "Implement it" },
       { kind: "assistant", text: "Writing the file." },
       {
@@ -70,15 +81,34 @@ describe("toTranscript", () => {
       },
     ] as unknown as Message[];
 
-    expect(toTranscript(messages)).toEqual([
+    expect(toTranscript(viewOf(messages))).toEqual([
       { kind: "tool", name: "bash", summary: "pnpm test", args: JSON.stringify({ command }, null, 2) },
     ]);
   });
 
   it("clips long text", () => {
     const messages = [{ role: "user", content: "x".repeat(10_000), timestamp: 1 }] as Message[];
-    const [item] = toTranscript(messages);
+    const [item] = toTranscript(viewOf(messages));
     expect(item!.kind === "user" && item!.text.length).toBeLessThan(4_100);
     expect(item).toMatchObject({ text: expect.stringContaining("6000 more characters") });
+  });
+
+  it("shows owner messages once, as You, and appends queued ones the agent hasn't seen", () => {
+    const prompt = { role: "user", content: "<owner-message>Use tabs</owner-message>", timestamp: 1 } as Message;
+    const view = viewOf([
+      { kind: HUMAN_ENTRY, data: { id: "a", text: "Use tabs" }, model: [prompt] },
+      { role: "assistant", content: [{ type: "text", text: "Switched." }], timestamp: 2 } as unknown as Message,
+    ]);
+
+    expect(
+      toTranscript(view, [
+        { id: "a", text: "Use tabs" },
+        { id: "b", text: "Also docs" },
+      ]),
+    ).toEqual([
+      { kind: "human", text: "Use tabs" },
+      { kind: "assistant", text: "Switched." },
+      { kind: "human", text: "Also docs", pending: true },
+    ]);
   });
 });
