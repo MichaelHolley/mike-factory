@@ -96,11 +96,7 @@ async function main() {
     log("shutting down", { signal });
     shutdownController.abort();
     const serverClosed = new Promise<void>((resolve) => server.close(() => resolve()));
-    if ("closeIdleConnections" in server) {
-      server.closeIdleConnections();
-      // Aborted live streams only turn idle after their responses end, which is just after this tick.
-      setTimeout(() => server.closeIdleConnections(), 100).unref();
-    }
+    if ("closeIdleConnections" in server) server.closeIdleConnections();
     await serverClosed;
     await harness.close(BACKGROUND_CONTEXT);
     process.exit(0);

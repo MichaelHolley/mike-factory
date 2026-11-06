@@ -146,6 +146,7 @@ describe("webhook server", () => {
     const response = await app.request("/status/stream");
     expect(response.headers.get("Content-Type")).toBe("text/event-stream");
     expect(response.headers.get("X-Accel-Buffering")).toBe("no");
+    expect(response.headers.get("Connection")).toBe("close");
     const events = sseEvents(response);
     expect(await events.next()).toEqual({ from: 0, items: [run(1, "done"), run(2, "queued")] });
 

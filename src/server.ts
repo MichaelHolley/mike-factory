@@ -40,7 +40,7 @@ export function createServer({ config, service, webhookSecret, log, uiDir = DEFA
     if (!unsubscribe) return c.text("not found", 404);
 
     c.header("X-Accel-Buffering", "no");
-    return streamSSE(
+    const response = streamSSE(
       c,
       async (stream) => {
         const ended = () => stream.aborted || shutdownSignal?.aborted === true;
@@ -72,6 +72,9 @@ export function createServer({ config, service, webhookSecret, log, uiDir = DEFA
       },
       async (error) => log("live stream failed", { path: c.req.path, error: error.message }),
     );
+    // A kept-alive socket left over after shutdown aborts the stream would hold `server.close()` until its keep-alive timeout.
+    response.headers.set("Connection", "close");
+    return response;
   };
 
   app.post("/webhooks/github", async (c) => {
