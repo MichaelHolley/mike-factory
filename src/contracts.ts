@@ -88,4 +88,8 @@ export interface IssueService {
   status(): Promise<RunStatus[]>;
   /** The issue's conversation as a public projection, or undefined when the issue has none. */
   transcript(repo: string, issue: number): Promise<TranscriptItem[] | undefined>;
+  /** Calls `listener` after any run's status may have changed. Returns an unsubscribe. */
+  subscribeStatus(listener: () => void): () => void;
+  /** Calls `listener` after the issue's conversation may have changed; undefined when the issue has none. */
+  subscribeTranscript(repo: string, issue: number, listener: () => void): Promise<(() => void) | undefined>;
 }

@@ -161,5 +161,18 @@ export function createIssueService(opts: { harness: Harness; storage: Storage; p
       const conversation = conversationId === undefined ? undefined : await harness.conversation(conversationId, context);
       return conversation && toTranscript((await conversation.context(context)).messages);
     },
+
+    subscribeStatus: (listener) =>
+      harness.subscribeCommits(({ changes }) => {
+        if (changes.some((change) => change.type === "document" && change.record.kind === IssueState.definition.kind)) listener();
+      }),
+
+    async subscribeTranscript(repo, issue, listener) {
+      const { conversationId } = await lookup(repo, issue);
+      if (conversationId === undefined) return undefined;
+      return harness.subscribeCommits(({ changes }) => {
+        if (changes.some((change) => change.type === "entry" && change.value.conversationId === conversationId)) listener();
+      });
+    },
   };
 }

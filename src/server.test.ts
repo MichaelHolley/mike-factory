@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppConfig } from "./config.ts";
 import type { IssueService } from "./contracts.ts";
+import type { IssuePhase, RunStatus } from "./runStatus.ts";
 import { createServer } from "./server.ts";
 
 const secret = "test-secret";
@@ -25,6 +26,12 @@ const config: AppConfig = {
 };
 
 function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui")) {
+  const listeners = new Set<() => void>();
+  const subscribe = (listener: () => void) => {
+    listeners.add(listener);
+    return () => void listeners.delete(listener);
+  };
+  const notify = () => listeners.forEach((listener) => listener());
   const service: IssueService = {
     start: vi.fn(async () => {}),
     stop: vi.fn(async () => {}),
@@ -32,9 +39,12 @@ function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui")) {
     sweep: vi.fn(async () => {}),
     status: vi.fn(async () => []),
     transcript: vi.fn(async () => undefined),
+    subscribeStatus: vi.fn(subscribe),
+    subscribeTranscript: vi.fn(async () => undefined),
   };
   const log = vi.fn();
-  const app = createServer({ config, service, webhookSecret: secret, log, uiDir });
+  const shutdown = new AbortController();
+  const app = createServer({ config, service, webhookSecret: secret, log, uiDir, shutdownSignal: shutdown.signal });
   const post = (senderId: number, signature?: string) => {
     const body = JSON.stringify({
       action: "created",
@@ -53,7 +63,30 @@ function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui")) {
       },
     });
   };
-  return { app, service, log, post };
+  return { app, service, log, post, notify, listeners, shutdown, subscribe };
+}
+
+/** Reads `data:` events from an SSE response, one per call. */
+function sseEvents(response: Response) {
+  const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  return {
+    async next(): Promise<unknown> {
+      for (;;) {
+        const end = buffer.indexOf("\n\n");
+        if (end >= 0) {
+          const block = buffer.slice(0, end);
+          buffer = buffer.slice(end + 2);
+          const data = block.split("\n").find((line) => line.startsWith("data: "));
+          if (data) return JSON.parse(data.slice("data: ".length));
+          continue;
+        }
+        const { done, value } = await reader.read();
+        if (done) return undefined;
+        buffer += value;
+      }
+    },
+  };
 }
 
 describe("webhook server", () => {
@@ -92,6 +125,66 @@ describe("webhook server", () => {
     expect(response.headers.get("Content-Disposition")).toBe('attachment; filename="byok-imagen-issue-12-conversation.json"');
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(await response.text()).toBe(JSON.stringify(transcript, null, 2));
+  });
+
+  it("streams the full run list first, then only the changed tail", async () => {
+    const { app, service, notify, listeners, shutdown } = setup();
+    const run = (issue: number, phase: IssuePhase): RunStatus => ({
+      repo: "byok-imagen",
+      issue,
+      issueUrl: "",
+      branch: "",
+      phase,
+      attempts: 0,
+      costUsd: 0,
+      prUrl: null,
+      lastError: null,
+      startedAt: null,
+      updatedAt: null,
+    });
+    vi.mocked(service.status).mockResolvedValue([run(1, "done"), run(2, "queued")]);
+    const response = await app.request("/status/stream");
+    expect(response.headers.get("Content-Type")).toBe("text/event-stream");
+    expect(response.headers.get("X-Accel-Buffering")).toBe("no");
+    expect(response.headers.get("Connection")).toBe("close");
+    const events = sseEvents(response);
+    expect(await events.next()).toEqual({ from: 0, items: [run(1, "done"), run(2, "queued")] });
+
+    notify();
+    await vi.waitFor(() => expect(service.status).toHaveBeenCalledTimes(2));
+    vi.mocked(service.status).mockResolvedValue([run(1, "done"), run(2, "implement"), run(3, "queued")]);
+    notify();
+    expect(await events.next()).toEqual({ from: 1, items: [run(2, "implement"), run(3, "queued")] });
+
+    vi.mocked(service.status).mockResolvedValue([run(1, "done")]);
+    notify();
+    expect(await events.next()).toEqual({ from: 1, items: [] });
+
+    shutdown.abort();
+    expect(await events.next()).toBeUndefined();
+    expect(listeners.size).toBe(0);
+  });
+
+  it("ends the stream and unsubscribes when the client is gone before it starts", async () => {
+    const { app, listeners } = setup();
+    const gone = new AbortController();
+    gone.abort();
+    await app.request(new Request("http://localhost/status/stream", { signal: gone.signal }));
+    await vi.waitFor(() => expect(listeners.size).toBe(0));
+  });
+
+  it("streams a run's conversation, and 404s when there is none", async () => {
+    const { app, service, subscribe, shutdown } = setup();
+    expect((await app.request("/status/byok-imagen/12/conversation/stream")).status).toBe(404);
+    expect((await app.request("/status/byok-imagen/abc/conversation/stream")).status).toBe(404);
+
+    vi.mocked(service.subscribeTranscript).mockImplementation(async (_repo, _issue, listener) => subscribe(listener));
+    vi.mocked(service.transcript).mockResolvedValue([{ kind: "assistant", text: "Done." }]);
+    const response = await app.request("/status/byok-imagen/12/conversation/stream");
+    expect(response.status).toBe(200);
+    expect(await sseEvents(response).next()).toEqual({ from: 0, items: [{ kind: "assistant", text: "Done." }] });
+    expect(service.subscribeTranscript).toHaveBeenCalledWith("byok-imagen", 12, expect.any(Function));
+    shutdown.abort();
   });
 
   it("returns 404 for everything else", async () => {

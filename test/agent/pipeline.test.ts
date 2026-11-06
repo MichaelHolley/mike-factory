@@ -186,6 +186,30 @@ describe("issue pipeline", () => {
     });
   });
 
+  it("notifies status and transcript subscribers of their own changes until they unsubscribe", async () => {
+    const world = createWorld({ dir });
+    autopilot(world.faux);
+    const { harness, service } = await launch(world, [1, 2]);
+    const calls = { status: 0, first: 0, second: 0 };
+    expect(await service.subscribeTranscript(REPO, 1, () => {})).toBeUndefined();
+
+    const unsubscribeStatus = service.subscribeStatus(() => calls.status++);
+    await service.start(startAction(1, "comment-1"));
+    await service.subscribeTranscript(REPO, 1, () => calls.first++);
+    await pipelineResult(harness, 1);
+    expect(calls.status).toBeGreaterThan(0);
+    expect(calls.first).toBeGreaterThan(0);
+
+    unsubscribeStatus();
+    const before = { ...calls };
+    await service.start(startAction(2, "comment-2"));
+    await service.subscribeTranscript(REPO, 2, () => calls.second++);
+    await pipelineResult(harness, 2);
+    expect(calls.status).toBe(before.status);
+    expect(calls.first).toBe(before.first);
+    expect(calls.second).toBeGreaterThan(0);
+  });
+
   it("starts nothing new for a redelivered webhook", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux);

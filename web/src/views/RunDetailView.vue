@@ -3,11 +3,13 @@ import { computed } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 import ConversationLog from "../components/ConversationLog.vue";
 import PhaseTrack from "../components/PhaseTrack.vue";
+import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
 import { formatCost, formatDate, timeAgo } from "../format.ts";
 
 const route = useRoute();
 const { runs, error, loaded } = useRuns();
+const now = useNow();
 
 const run = computed(() =>
   runs.value.find((r) => r.repo === route.params.repo && String(r.issue) === route.params.issue),
@@ -16,7 +18,7 @@ const run = computed(() =>
 
 <template>
   <RouterLink to="/" class="back">All runs</RouterLink>
-  <p v-if="error" class="notice">Couldn't load runs: {{ error }}. Retrying every 5 seconds.</p>
+  <p v-if="error" class="notice">Couldn't load runs: {{ error }}. Reconnecting…</p>
   <template v-if="run">
     <header class="head">
       <h1>
@@ -43,7 +45,7 @@ const run = computed(() =>
         </div>
         <div>
           <dt>Updated</dt>
-          <dd>{{ formatDate(run.updatedAt) }} <span class="muted">({{ timeAgo(run.updatedAt) }})</span></dd>
+          <dd>{{ formatDate(run.updatedAt) }} <span class="muted">({{ timeAgo(run.updatedAt, now) }})</span></dd>
         </div>
       </dl>
       <dl class="links">

@@ -2,10 +2,12 @@
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import PhaseBadge from "../components/PhaseBadge.vue";
+import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
 import { formatCost, timeAgo } from "../format.ts";
 
 const { runs, error, loaded } = useRuns();
+const now = useNow();
 
 const sorted = computed(() =>
   [...runs.value].sort((a, b) => {
@@ -20,7 +22,7 @@ const sorted = computed(() =>
     <h1>Runs</h1>
     <span v-if="sorted.length" class="count">{{ sorted.length }}</span>
   </div>
-  <p v-if="error" class="notice">Couldn't load runs: {{ error }}. Retrying every 5 seconds.</p>
+  <p v-if="error" class="notice">Couldn't load runs: {{ error }}. Reconnecting…</p>
   <p v-else-if="loaded && !sorted.length" class="empty">
     No runs yet. Comment <code>/mike</code> on an issue in a configured repo to start one.
   </p>
@@ -53,7 +55,7 @@ const sorted = computed(() =>
             <a v-if="run.prUrl" :href="run.prUrl" target="_blank" rel="noopener">Open PR</a>
             <span v-else class="muted">None</span>
           </td>
-          <td class="num muted" data-label="Updated">{{ timeAgo(run.updatedAt) }}</td>
+          <td class="num muted" data-label="Updated">{{ timeAgo(run.updatedAt, now) }}</td>
         </tr>
       </tbody>
     </table>
