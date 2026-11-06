@@ -46,10 +46,8 @@ Create the app under your account and install it with "Only select repositories"
 
 ## Deployment
 
-`docker-compose.prod.yml` is the Portainer stack. Set `MAX_CONCURRENT` (default 3) to limit how many issues run at once; the rest wait as `queued`. Worktrees of closed issues are also swept at startup and every 24 hours.
+Run the image behind a reverse proxy; it listens on port 3000, which should not be published past the proxy. Set `MAX_CONCURRENT` (default 3) to limit how many issues run at once; the rest wait as `queued`. Worktrees of closed issues are also swept at startup and every 24 hours.
 
 The image contains `config/repos.yaml`, so adding or changing a repo needs a rebuilt image, or a mounted file with `REPOS_CONFIG` pointing at it.
 
-The image also builds the status UI and serves it from `/`, with each run at `/runs/<repo>/<issue>`. `GET /status` returns the runs as a public projection (`RunStatus` in `src/runStatus.ts`) without worktree paths or other internals. `GET /status/<repo>/<issue>/conversation` returns the run's conversation (the pipeline's prompts, the agent's replies, and its tool calls and results) for the run page; the system prompt and the model's thinking are left out and each item is clipped to 4,000 characters; `?download=1` returns it as a JSON file, used by the run page's **Download JSON** link. Neither the UI nor these endpoints have auth, so anything in a run's state or conversation is public; that's fine as long as every configured repo is public.
-
-`deploy/nginx.conf` forwards `/webhooks/github` and everything else to the app on `127.0.0.1:3000`, with no basic auth. Set `PUBLIC_URL` to the host nginx serves so status comments link to it.
+The image also builds the status UI and serves it from `/`, with each run at `/runs/<repo>/<issue>`. `GET /status` returns the runs as a public projection (`RunStatus` in `src/runStatus.ts`) without worktree paths or other internals. `GET /status/<repo>/<issue>/conversation` returns the run's conversation (the pipeline's prompts, the agent's replies, and its tool calls and results) for the run page; the system prompt and the model's thinking are left out and each item is clipped to 4,000 characters; `?download=1` returns it as a JSON file, used by the run page's **Download JSON** link. The app has no auth of its own, so put everything except `/webhooks/github` (which GitHub calls and the app verifies by HMAC signature) behind reverse-proxy auth, such as Traefik basic auth. Set `PUBLIC_URL` to the proxy's public URL so status comments link to the run page.
