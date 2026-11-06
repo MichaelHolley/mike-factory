@@ -33,10 +33,8 @@ export type IssueStateValue = {
   updatedAt?: string | null;
 };
 
-export const ISSUE_STATE_KIND = "app.issueState";
-
 export const IssueState = defineDoc<IssueStateValue>({
-  kind: ISSUE_STATE_KIND,
+  kind: "app.issueState",
   version: 1,
   scope: "conversation",
   history: "latest",

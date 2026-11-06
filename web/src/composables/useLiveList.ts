@@ -1,4 +1,6 @@
-import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
+
+const RETRY_MS = 5000;
 
 type LiveEvent<T> = { from: number; items: T[] };
 
@@ -8,8 +10,10 @@ export function useLiveList<T>(url: () => string) {
   const error = ref<string | null>(null);
   const loaded = ref(false);
   let source: EventSource | undefined;
+  let retry: ReturnType<typeof setTimeout> | undefined;
 
   function close() {
+    clearTimeout(retry);
     source?.close();
     source = undefined;
   }
@@ -28,6 +32,11 @@ export function useLiveList<T>(url: () => string) {
     source.onerror = () => {
       error.value = "connection lost";
       loaded.value = true;
+      // EventSource gives up for good on a non-stream response, such as a proxy 502 while the server restarts.
+      if (source?.readyState === EventSource.CLOSED) {
+        close();
+        retry = setTimeout(open, RETRY_MS);
+      }
     };
   }
 
@@ -35,8 +44,6 @@ export function useLiveList<T>(url: () => string) {
     if (document.hidden) close();
     else open();
   }
-
-  watch(url, () => source && open());
 
   onMounted(() => {
     document.addEventListener("visibilitychange", onVisibilityChange);

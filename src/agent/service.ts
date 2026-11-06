@@ -3,7 +3,7 @@ import type { ConversationId, Cursor, Harness, Storage, TaskId } from "@earendil
 import { findRepo } from "../config.ts";
 import { branchName, issueKey, type IssueService } from "../contracts.ts";
 import type { RunStatus } from "../runStatus.ts";
-import { asConversationId, ISSUE_STATE_KIND, IssueIndex, IssueState } from "./docs.ts";
+import { asConversationId, IssueIndex, IssueState } from "./docs.ts";
 import type { AgentDeps } from "./harness.ts";
 import { createMutex } from "./mutex.ts";
 import { upsertStatus, type IssuePipeline } from "./tasks/issuePipeline.ts";
@@ -164,7 +164,7 @@ export function createIssueService(opts: { harness: Harness; storage: Storage; p
 
     subscribeStatus: (listener) =>
       harness.subscribeCommits(({ changes }) => {
-        if (changes.some((change) => change.type === "document" && change.record.kind === ISSUE_STATE_KIND)) listener();
+        if (changes.some((change) => change.type === "document" && change.record.kind === IssueState.definition.kind)) listener();
       }),
 
     async subscribeTranscript(repo, issue, listener) {
