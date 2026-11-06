@@ -18,7 +18,13 @@ const INSTRUCTIONS = [
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-export function createIssueService(opts: { harness: Harness; storage: Storage; pipeline: IssuePipeline; deps: AgentDeps; context: Context }): IssueService {
+export function createIssueService(opts: {
+  harness: Harness;
+  storage: Storage;
+  pipeline: IssuePipeline;
+  deps: AgentDeps;
+  context: Context;
+}): IssueService {
   const { harness, storage, pipeline, deps, context } = opts;
   const { config, github, worktrees } = deps;
   const log = deps.log ?? (() => {});
@@ -29,7 +35,11 @@ export function createIssueService(opts: { harness: Harness; storage: Storage; p
     const index = await harness.snapshot(IssueIndex, key, context);
     const conversationId = index?.conversationId ?? undefined;
     if (conversationId === undefined) return { key };
-    return { key, conversationId: asConversationId(conversationId), state: await harness.snapshot(IssueState, asConversationId(conversationId), context) };
+    return {
+      key,
+      conversationId: asConversationId(conversationId),
+      state: await harness.snapshot(IssueState, asConversationId(conversationId), context),
+    };
   };
 
   const isLive = async (taskId: number) => {
@@ -63,7 +73,12 @@ export function createIssueService(opts: { harness: Harness; storage: Storage; p
         const openPr = await github.findOpenPr(repo, branchName(issue));
         if (openPr) {
           log("start ignored: issue has an open agent PR", { key, requestId });
-          return github.upsertComment(repo, issue, `agent-pr-open:${requestId}`, `Not starting: ${openPr.url} is still open. Merge or close it first.`);
+          return github.upsertComment(
+            repo,
+            issue,
+            `agent-pr-open:${requestId}`,
+            `Not starting: ${openPr.url} is still open. Merge or close it first.`,
+          );
         }
 
         await upsertStatus(deps, repo, issue, "Working on this. Comment `/mike stop` to abort.");
@@ -73,7 +88,12 @@ export function createIssueService(opts: { harness: Harness; storage: Storage; p
           : await harness.createConversation(
               {
                 ownership: { kind: "ownerless" },
-                agent: { model: repoConfig.model, thinkingLevel: repoConfig.thinkingLevel, cwd: worktreePath, instructions: INSTRUCTIONS },
+                agent: {
+                  model: repoConfig.model,
+                  thinkingLevel: repoConfig.thinkingLevel,
+                  cwd: worktreePath,
+                  instructions: INSTRUCTIONS,
+                },
                 init: async (tx, id) => {
                   (await tx.doc(IssueIndex, key, null)).conversationId = id;
                 },
@@ -84,7 +104,11 @@ export function createIssueService(opts: { harness: Harness; storage: Storage; p
 
         const now = new Date().toISOString();
         await conversation.commit(async (tx) => {
-          const taskId = await tx.createTask(pipeline, { repo, issue, requestId, instructions }, { ownership: { kind: "conversation" }, background: true });
+          const taskId = await tx.createTask(
+            pipeline,
+            { repo, issue, requestId, instructions },
+            { ownership: { kind: "conversation" }, background: true },
+          );
           Object.assign(await tx.doc(IssueState, conversation.id), {
             repo,
             issue,
@@ -158,20 +182,23 @@ export function createIssueService(opts: { harness: Harness; storage: Storage; p
 
     async transcript(repo, issue) {
       const { conversationId } = await lookup(repo, issue);
-      const conversation = conversationId === undefined ? undefined : await harness.conversation(conversationId, context);
+      const conversation =
+        conversationId === undefined ? undefined : await harness.conversation(conversationId, context);
       return conversation && toTranscript((await conversation.context(context)).messages);
     },
 
     subscribeStatus: (listener) =>
       harness.subscribeCommits(({ changes }) => {
-        if (changes.some((change) => change.type === "document" && change.record.kind === IssueState.definition.kind)) listener();
+        if (changes.some((change) => change.type === "document" && change.record.kind === IssueState.definition.kind))
+          listener();
       }),
 
     async subscribeTranscript(repo, issue, listener) {
       const { conversationId } = await lookup(repo, issue);
       if (conversationId === undefined) return undefined;
       return harness.subscribeCommits(({ changes }) => {
-        if (changes.some((change) => change.type === "entry" && change.value.conversationId === conversationId)) listener();
+        if (changes.some((change) => change.type === "entry" && change.value.conversationId === conversationId))
+          listener();
       });
     },
   };

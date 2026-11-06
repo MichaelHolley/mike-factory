@@ -1,7 +1,16 @@
-import { type GitHubClient, type GitIdentity, type IssueComment, type IssueData, type PullRequestRef } from "../../src/contracts.ts";
+import {
+  type GitHubClient,
+  type GitIdentity,
+  type IssueComment,
+  type IssueData,
+  type PullRequestRef,
+} from "../../src/contracts.ts";
 
 export const FAKE_GIT_TOKEN = "fake-installation-token";
-export const FAKE_BOT_IDENTITY: GitIdentity = { name: "mike-factory[bot]", email: "1+mike-factory[bot]@users.noreply.github.com" };
+export const FAKE_BOT_IDENTITY: GitIdentity = {
+  name: "mike-factory[bot]",
+  email: "1+mike-factory[bot]@users.noreply.github.com",
+};
 
 const BOT_LOGIN = FAKE_BOT_IDENTITY.name;
 const COMMENT_MARKER = (marker: string) => `<!-- ${marker} -->`;
@@ -105,7 +114,15 @@ export class FakeGitHub implements GitHubClient {
     const fullBody = `${tag}\n${body}`;
     const existing = this.commentsOn(repo, issue).find((comment) => comment.body.includes(tag));
     if (existing) existing.body = fullBody;
-    else this.commentList.push({ id: this.nextId++, repo, issue, author: BOT_LOGIN, body: fullBody, createdAt: new Date().toISOString() });
+    else
+      this.commentList.push({
+        id: this.nextId++,
+        repo,
+        issue,
+        author: BOT_LOGIN,
+        body: fullBody,
+        createdAt: new Date().toISOString(),
+      });
   }
 
   async findOpenPr(repo: string, head: string): Promise<PullRequestRef | undefined> {
@@ -114,11 +131,21 @@ export class FakeGitHub implements GitHubClient {
     return pr && { number: pr.number, url: pr.url };
   }
 
-  async createPr(repo: string, pr: { head: string; base: string; title: string; body: string }): Promise<PullRequestRef> {
+  async createPr(
+    repo: string,
+    pr: { head: string; base: string; title: string; body: string },
+  ): Promise<PullRequestRef> {
     this.called("createPr");
-    if (this.openPr(repo, pr.head)) throw new Error(`422 Validation Failed: A pull request already exists for ${pr.head}`);
+    if (this.openPr(repo, pr.head))
+      throw new Error(`422 Validation Failed: A pull request already exists for ${pr.head}`);
     const number = this.nextId++;
-    const created: FakePr = { ...pr, repo, number, url: `https://github.com/fake/${repo}/pull/${number}`, state: "open" };
+    const created: FakePr = {
+      ...pr,
+      repo,
+      number,
+      url: `https://github.com/fake/${repo}/pull/${number}`,
+      state: "open",
+    };
     this.prList.push(created);
     return { number: created.number, url: created.url };
   }

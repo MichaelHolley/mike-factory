@@ -18,7 +18,10 @@ function required(env: NodeJS.ProcessEnv, name: string): string {
 
 /** Accepts the PEM as is, on one line with literal `\\n`, wrapped in quotes, or base64-encoded. */
 export function parsePrivateKey(raw: string): string {
-  let value = raw.trim().replace(/^(["'])([\s\S]*)\1$/, "$2").trim();
+  let value = raw
+    .trim()
+    .replace(/^(["'])([\s\S]*)\1$/, "$2")
+    .trim();
   if (!value.includes("-----BEGIN")) value = Buffer.from(value, "base64").toString("utf8").trim();
   value = value.replaceAll("\\n", "\n");
   try {
@@ -27,7 +30,9 @@ export function parsePrivateKey(raw: string): string {
     const firstLine = value.split("\n", 1)[0] ?? "";
     // Describe only the shape, never the key material.
     const start = firstLine.startsWith("-----") ? `starts with "${firstLine}"` : "does not start with -----BEGIN";
-    throw new Error(`GITHUB_PRIVATE_KEY is not a valid PEM private key (${value.split("\n").length} lines, ${value.length} chars, ${start})`);
+    throw new Error(
+      `GITHUB_PRIVATE_KEY is not a valid PEM private key (${value.split("\n").length} lines, ${value.length} chars, ${start})`,
+    );
   }
   return value;
 }

@@ -4,7 +4,10 @@ import { generateKeyPairSync } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { parsePrivateKey, takeSecrets } from "./secrets.ts";
 
-const pem = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs1", format: "pem" }).toString().trim();
+const pem = generateKeyPairSync("rsa", { modulusLength: 2048 })
+  .privateKey.export({ type: "pkcs1", format: "pem" })
+  .toString()
+  .trim();
 
 describe("takeSecrets", () => {
   it("returns the secrets and hides them from shells started by tools", async () => {
@@ -51,6 +54,8 @@ describe("takeSecrets", () => {
 
   it("explains a broken key without leaking it", () => {
     const firstLineOnly = pem.split("\n")[0]!;
-    expect(() => parsePrivateKey(firstLineOnly)).toThrow('1 lines, 31 chars, starts with "-----BEGIN RSA PRIVATE KEY-----"');
+    expect(() => parsePrivateKey(firstLineOnly)).toThrow(
+      '1 lines, 31 chars, starts with "-----BEGIN RSA PRIVATE KEY-----"',
+    );
   });
 });

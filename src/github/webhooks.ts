@@ -66,9 +66,11 @@ export async function verifyWebhook(input: {
   const issue = payload.issue?.number;
   const repo = payload.repository?.name;
   const commentId = payload.comment?.id;
-  if (typeof issue !== "number" || typeof commentId !== "number" || !repo) return ignore("payload has no issue number, comment id or repository");
+  if (typeof issue !== "number" || typeof commentId !== "number" || !repo)
+    return ignore("payload has no issue number, comment id or repository");
 
-  if (Number(payload.sender?.id) !== config.allowedSenderId) return ignore(`sender ${payload.sender?.id} is not allowed`);
+  if (Number(payload.sender?.id) !== config.allowedSenderId)
+    return ignore(`sender ${payload.sender?.id} is not allowed`);
 
   const notAllowed = repoNotAllowed(payload, config);
   if (notAllowed) return ignore(notAllowed);
@@ -88,7 +90,10 @@ function pullRequestAction(payload: PullRequestPayload, config: AppConfig): Webh
   return { kind: "cleanup", repo: payload.repository!.name!, issue: Number(match[1]) };
 }
 
-function repoNotAllowed(payload: { repository?: { name?: string; owner?: { login?: string } } }, config: AppConfig): string | undefined {
+function repoNotAllowed(
+  payload: { repository?: { name?: string; owner?: { login?: string } } },
+  config: AppConfig,
+): string | undefined {
   const owner = payload.repository?.owner?.login;
   const repo = payload.repository?.name;
   if (owner?.toLowerCase() !== config.owner.toLowerCase()) return `repository owner ${owner} is not ${config.owner}`;

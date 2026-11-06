@@ -17,7 +17,8 @@ import { takeSecrets } from "./secrets.ts";
 
 const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-const log = (msg: string, data: object = {}) => console.log(JSON.stringify({ time: new Date().toISOString(), msg, ...data }));
+const log = (msg: string, data: object = {}) =>
+  console.log(JSON.stringify({ time: new Date().toISOString(), msg, ...data }));
 
 function buildModels(openaiApiKey: string | undefined, useFaux: boolean) {
   if (useFaux) {
@@ -47,7 +48,8 @@ async function main() {
   const hostname = process.env.HOST ?? "127.0.0.1";
   const useFaux = process.env.MODEL === "faux";
   const maxConcurrent = Number(process.env.MAX_CONCURRENT ?? DEFAULT_MAX_CONCURRENT);
-  if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1) throw new Error("MAX_CONCURRENT must be a positive integer");
+  if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1)
+    throw new Error("MAX_CONCURRENT must be a positive integer");
 
   const publicUrl = process.env.PUBLIC_URL?.replace(/\/+$/, "") || undefined;
 
@@ -69,7 +71,12 @@ async function main() {
   await mkdir(dataDir, { recursive: true });
   const storage = await openNodeSqliteStorage(join(dataDir, "agent.sqlite"));
   const { harness, service } = await openAgentHarness(
-    { storage, models, deps: { config: effectiveConfig, github, worktrees, log, maxConcurrent, publicUrl, skills }, crashAt: process.env.CRASH_AT },
+    {
+      storage,
+      models,
+      deps: { config: effectiveConfig, github, worktrees, log, maxConcurrent, publicUrl, skills },
+      crashAt: process.env.CRASH_AT,
+    },
     BACKGROUND_CONTEXT,
   );
 
@@ -85,9 +92,19 @@ async function main() {
   setInterval(sweep, SWEEP_INTERVAL_MS).unref();
 
   const shutdownController = new AbortController();
-  const app = createServer({ config: effectiveConfig, service, webhookSecret: secrets.webhookSecret, log, shutdownSignal: shutdownController.signal });
+  const app = createServer({
+    config: effectiveConfig,
+    service,
+    webhookSecret: secrets.webhookSecret,
+    log,
+    shutdownSignal: shutdownController.signal,
+  });
   const server = serve({ fetch: app.fetch, port, hostname }, (info) =>
-    log("listening", { port: info.port, model: useFaux ? "faux" : "openai", skills: skills.map((skill) => skill.name) }),
+    log("listening", {
+      port: info.port,
+      model: useFaux ? "faux" : "openai",
+      skills: skills.map((skill) => skill.name),
+    }),
   );
 
   const shutdown = async (signal: string) => {

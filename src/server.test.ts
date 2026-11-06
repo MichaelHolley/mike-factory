@@ -93,7 +93,13 @@ describe("webhook server", () => {
   it("starts the issue for a valid signed event", async () => {
     const { post, service } = setup();
     expect((await post(42)).status).toBe(202);
-    expect(service.start).toHaveBeenCalledWith({ kind: "start", repo: "byok-imagen", issue: 12, requestId: "comment-5", instructions: "" });
+    expect(service.start).toHaveBeenCalledWith({
+      kind: "start",
+      repo: "byok-imagen",
+      issue: 12,
+      requestId: "comment-5",
+      instructions: "",
+    });
   });
 
   it("acknowledges ignored events with 202 and rejects bad signatures with 401", async () => {
@@ -122,7 +128,9 @@ describe("webhook server", () => {
     vi.mocked(service.transcript).mockResolvedValue(transcript);
     const response = await app.request("/status/byok-imagen/12/conversation?download=1");
     expect(response.status).toBe(200);
-    expect(response.headers.get("Content-Disposition")).toBe('attachment; filename="byok-imagen-issue-12-conversation.json"');
+    expect(response.headers.get("Content-Disposition")).toBe(
+      'attachment; filename="byok-imagen-issue-12-conversation.json"',
+    );
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(await response.text()).toBe(JSON.stringify(transcript, null, 2));
   });

@@ -11,7 +11,12 @@ const steps = computed(() => pipelineSteps(props.phase));
 
 <template>
   <ol class="track" :class="[tone, { large }]" aria-label="Pipeline">
-    <li v-for="step in steps" :key="step.name" :class="step.state" :aria-current="step.state === 'current' ? 'step' : undefined">
+    <li
+      v-for="step in steps"
+      :key="step.name"
+      :class="step.state"
+      :aria-current="step.state === 'current' ? 'step' : undefined"
+    >
       <span class="label">{{ step.name }}</span>
     </li>
   </ol>

@@ -10,7 +10,8 @@ const world = createWorld({ dir, githubFile, extraRepos: [OTHER_REPO], maxConcur
 const runs = [...[1, 2, 3].map((issue) => ({ repo: REPO, issue })), { repo: OTHER_REPO, issue: 1 }];
 
 if (process.env.MODE === "first") {
-  for (const { repo, issue } of runs) world.github.addIssue(repo, { number: issue, title: "Add hello", body: "Please add hello.txt." });
+  for (const { repo, issue } of runs)
+    world.github.addIssue(repo, { number: issue, title: "Add hello", body: "Please add hello.txt." });
   writeFileSync(githubFile, JSON.stringify(world.github.toJSON()));
 }
 autopilot(world.faux);
@@ -20,7 +21,9 @@ const { harness, service } = await openAgentHarness(
   { storage, models: world.models, deps: world.deps, crashAt: process.env.CRASH_AT },
   ctx,
 );
-await Promise.all(runs.map(({ repo, issue }) => service.start(startAction(issue, `comment-${repo}-${issue}`, "", repo))));
+await Promise.all(
+  runs.map(({ repo, issue }) => service.start(startAction(issue, `comment-${repo}-${issue}`, "", repo))),
+);
 const outcomes = await Promise.all(runs.map(({ repo, issue }) => pipelineResult(harness, issue, repo)));
 console.log(JSON.stringify({ outcomes: outcomes.map((outcome) => outcome.status) }));
 await harness.close(ctx);

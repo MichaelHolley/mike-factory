@@ -37,7 +37,8 @@ export async function openAgentHarness(
       models: opts.models,
       registry,
       env: ({ cwd }) => (cwd === undefined ? undefined : new NodeExecutionEnv({ cwd })),
-      onReport: (error) => log("harness report", { error: error instanceof Error ? (error.stack ?? error.message) : String(error) }),
+      onReport: (error) =>
+        log("harness report", { error: error instanceof Error ? (error.stack ?? error.message) : String(error) }),
     },
     context,
   );

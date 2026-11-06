@@ -45,19 +45,25 @@ const run = computed(() =>
         </div>
         <div>
           <dt>Updated</dt>
-          <dd>{{ formatDate(run.updatedAt) }} <span class="muted">({{ timeAgo(run.updatedAt, now) }})</span></dd>
+          <dd>
+            {{ formatDate(run.updatedAt) }} <span class="muted">({{ timeAgo(run.updatedAt, now) }})</span>
+          </dd>
         </div>
       </dl>
       <dl class="links">
         <dt>Issue</dt>
-        <dd><a :href="run.issueUrl" target="_blank" rel="noopener">{{ run.issueUrl }}</a></dd>
+        <dd>
+          <a :href="run.issueUrl" target="_blank" rel="noopener">{{ run.issueUrl }}</a>
+        </dd>
         <dt>Pull request</dt>
         <dd>
           <a v-if="run.prUrl" :href="run.prUrl" target="_blank" rel="noopener">{{ run.prUrl }}</a>
           <span v-else class="muted">None</span>
         </dd>
         <dt>Branch</dt>
-        <dd><code>{{ run.branch }}</code></dd>
+        <dd>
+          <code>{{ run.branch }}</code>
+        </dd>
       </dl>
     </div>
 
