@@ -72,6 +72,7 @@ const NOTE_POLL_MS = 2_000;
 
 /** One comment per issue, edited in place, shows the run's state instead of labels. */
 export const STATUS_MARKER = "agent-status";
+export const WORKING_STATUS = "Working on this. Comment `/mike stop` to abort.";
 
 /** Upserts the issue's status comment, ending it with the run's page link when `publicUrl` is set. */
 export const upsertStatus = (
@@ -410,6 +411,8 @@ export function createIssuePipeline(deps: PipelineDeps) {
       }),
 
       revise: step("revise", async (task, rt, context) => {
+        // `report` may already have posted the PR link before a late note sent the run back here.
+        await upsertStatus(deps, task.input.repo, task.input.issue, WORKING_STATUS);
         await converse(rt, context, task.input.repo);
         const revisions = (await rt.snapshot(IssueState, rt.conversationId, context))?.revisions ?? 0;
         await go(

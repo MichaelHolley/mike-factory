@@ -7,7 +7,7 @@ import { ToolResultEntry, MemoryStorage, type Harness } from "@earendil-works/pi
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openAgentHarness } from "../../src/agent/harness.ts";
-import { STATUS_MARKER } from "../../src/agent/tasks/issuePipeline.ts";
+import { STATUS_MARKER, WORKING_STATUS } from "../../src/agent/tasks/issuePipeline.ts";
 import {
   autopilot,
   commitFile,
@@ -402,6 +402,29 @@ describe("issue pipeline", () => {
       );
       expect(fixes).toHaveLength(2);
       expect(git(world.remote, "ls-tree", "--name-only", "agent/issue-1")).not.toContain("broken.txt");
+    });
+
+    it("marks the status as working again when a message arrives after the PR link is posted", async () => {
+      const world = createWorld({ dir });
+      autopilot(world.faux, (messages) =>
+        textOf(messages.at(-1)).includes("<owner-message>") ? commitFile("late.txt", "late") : undefined,
+      );
+      const { harness, service } = await launch(world);
+      const statuses: string[] = [];
+      const upsert = world.github.upsertComment.bind(world.github);
+      world.github.upsertComment = async (repo, issue, marker, body) => {
+        await upsert(repo, issue, marker, body);
+        if (marker !== STATUS_MARKER) return;
+        statuses.push(body.startsWith("Pull request:") ? "pr" : body);
+        if (statuses.join() === `${WORKING_STATUS},pr`)
+          expect(await service.message(message("Add late.txt"))).toBe("steered");
+      };
+
+      await service.start(startAction(1, "comment-1"));
+      expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+      expect(statuses).toEqual([WORKING_STATUS, "pr", WORKING_STATUS, "pr"]);
+      expect(git(world.remote, "show", "agent/issue-1:late.txt")).toBe("late");
     });
 
     it("revises and verifies again when a message arrives while checks run", async () => {

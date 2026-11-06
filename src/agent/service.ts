@@ -13,7 +13,7 @@ import type { RunStatus } from "../runStatus.ts";
 import { asConversationId, HUMAN_ENTRY, IssueIndex, IssueNotes, IssueState } from "./docs.ts";
 import type { AgentDeps } from "./harness.ts";
 import { createMutex } from "./mutex.ts";
-import { upsertStatus, type IssuePipeline, type PipelineInput } from "./tasks/issuePipeline.ts";
+import { upsertStatus, WORKING_STATUS, type IssuePipeline, type PipelineInput } from "./tasks/issuePipeline.ts";
 import { humanMessage, toTranscript } from "./transcript.ts";
 
 const INSTRUCTIONS = [
@@ -72,7 +72,7 @@ export function createIssueService(opts: {
   const launch = async (repoConfig: RepoConfig, conversationId: ConversationId | undefined, input: PipelineInput) => {
     const { repo, issue, requestId } = input;
     const key = issueKey(config.owner, repo, issue);
-    await upsertStatus(deps, repo, issue, "Working on this. Comment `/mike stop` to abort.");
+    await upsertStatus(deps, repo, issue, WORKING_STATUS);
     const worktreePath = worktrees.worktreePath(repo, issue);
     const conversation = conversationId
       ? await harness.conversation(conversationId, context)
