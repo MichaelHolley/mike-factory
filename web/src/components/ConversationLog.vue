@@ -2,6 +2,8 @@
 import { computed } from "vue";
 import type { TranscriptItem } from "../../../src/runStatus.ts";
 import { useTranscript } from "../composables/useTranscript.ts";
+import MarkdownText from "./MarkdownText.vue";
+import PipelineMessage from "./PipelineMessage.vue";
 import ToolCall from "./ToolCall.vue";
 
 type Message = Exclude<TranscriptItem, { kind: "tool" }>;
@@ -38,6 +40,10 @@ const tally = (calls: Call[]) =>
 
 const ROLES: Record<Message["kind"], string> = { user: "Pipeline", assistant: "Agent", human: "You" };
 
+const speaker = (entry: Entry) => (entry.kind === "tools" ? "assistant" : entry.message.kind);
+const startsTurn = (index: number) =>
+  index === 0 || speaker(entries.value[index - 1]!) !== speaker(entries.value[index]!);
+
 const tone = (call: Call) => (call.result ? (call.result.isError ? "failed" : "done") : "pending");
 </script>
 
@@ -53,31 +59,34 @@ const tone = (call: Call) => (call.result ? (call.result.isError ? "failed" : "d
       <li
         v-for="(entry, index) in entries"
         :key="index"
-        :class="entry.kind === 'message' ? entry.message.kind : 'tools'"
+        :class="[speaker(entry), entry.kind, { turn: startsTurn(index) }]"
       >
+        <span v-if="startsTurn(index)" class="who">{{ ROLES[speaker(entry)] }}</span>
         <template v-if="entry.kind === 'message'">
-          <span class="role">
-            {{ ROLES[entry.message.kind] }}
-            <span v-if="entry.message.kind === 'human' && entry.message.pending" class="queued">queued</span>
-          </span>
-          <pre>{{ entry.message.text }}</pre>
+          <PipelineMessage v-if="entry.message.kind === 'user'" :text="entry.message.text" class="say" />
+          <div v-else class="say text">
+            <MarkdownText :text="entry.message.text" class="body" />
+            <span v-if="entry.message.kind === 'human' && entry.message.pending" class="queued">Queued</span>
+          </div>
         </template>
-        <ToolCall v-else-if="entry.calls.length === 1" :call="entry.calls[0]!" />
-        <details v-else class="group">
-          <summary>
-            <span class="chevron" aria-hidden="true"></span>
-            <span class="count">{{ entry.calls.length }} tools called</span>
-            <code class="names">{{ tally(entry.calls) }}</code>
-            <span class="marks" aria-hidden="true">
-              <span v-for="(call, i) in entry.calls.slice(0, MAX_MARKS)" :key="i" :class="tone(call)"></span>
-            </span>
-          </summary>
-          <ul>
-            <li v-for="(call, i) in entry.calls" :key="i">
-              <ToolCall :call="call" />
-            </li>
-          </ul>
-        </details>
+        <div v-else class="say calls">
+          <ToolCall v-if="entry.calls.length === 1" :call="entry.calls[0]!" />
+          <details v-else class="group">
+            <summary>
+              <span class="chevron" aria-hidden="true"></span>
+              <span class="count">{{ entry.calls.length }} tools called</span>
+              <code class="names">{{ tally(entry.calls) }}</code>
+              <span class="marks" aria-hidden="true">
+                <span v-for="(call, i) in entry.calls.slice(0, MAX_MARKS)" :key="i" :class="tone(call)"></span>
+              </span>
+            </summary>
+            <ul>
+              <li v-for="(call, i) in entry.calls" :key="i">
+                <ToolCall :call="call" />
+              </li>
+            </ul>
+          </details>
+        </div>
       </li>
     </ol>
   </section>
@@ -102,47 +111,70 @@ h2 {
   font-size: 1.125rem;
 }
 ol {
-  display: grid;
-  gap: 0.5rem;
+  --gutter: 6.5rem;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 ol > li {
+  display: grid;
+  grid-template-columns: var(--gutter) minmax(0, 1fr);
+  align-items: start;
+  margin-top: 0.5rem;
+}
+ol > li.turn {
+  margin-top: 1.75rem;
+}
+ol > li:first-child {
+  margin-top: 0;
+}
+.who {
+  grid-column: 1;
+  padding-top: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.user .who {
+  padding-top: 0.875rem;
+  color: var(--muted);
+}
+.human .who {
+  padding-top: 0.625rem;
+  color: var(--you);
+}
+.say {
+  grid-column: 2;
   min-width: 0;
+}
+.body {
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.assistant .text {
+  max-width: 70ch;
+  padding-top: 0.125rem;
+}
+.human .text {
+  max-width: 70ch;
+  width: fit-content;
+  padding: 0.625rem 1rem;
+  background: color-mix(in srgb, var(--you) 10%, var(--surface));
+  border-left: 3px solid var(--you);
+  border-radius: 0 6px 6px 0;
+}
+.queued {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  font-style: italic;
+  color: var(--muted);
+}
+.calls {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 6px;
   overflow: hidden;
-}
-li.user,
-li.assistant,
-li.human {
-  padding: 0.75rem 1.25rem;
-}
-li.assistant {
-  border-left: 3px solid var(--run);
-}
-li.human {
-  border-left: 3px solid var(--hazard);
-}
-.queued {
-  margin-left: 0.375rem;
-  font-weight: 400;
-  font-style: italic;
-}
-.role {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--muted);
-}
-li > pre {
-  margin: 0.375rem 0 0;
-  max-height: 24rem;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  line-height: 1.6;
 }
 .group > summary {
   display: flex;
@@ -213,6 +245,18 @@ li > pre {
 @media (prefers-reduced-motion: reduce) {
   .chevron {
     transition: none;
+  }
+}
+@media (max-width: 40rem) {
+  ol > li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  li.turn > .who {
+    padding: 0 0 0.25rem;
+  }
+  .who,
+  .say {
+    grid-column: 1;
   }
 }
 @media (max-width: 36rem) {

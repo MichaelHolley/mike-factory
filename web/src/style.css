@@ -7,11 +7,11 @@
   --line: #d7dde3;
   --chrome: #18212b;
   --chrome-ink: #e9edf1;
-  --hazard: #f2b705;
   --run: #2f4dd8;
   --ok: #1e8556;
   --bad: #c2362e;
   --halt: #6e6a86;
+  --you: #0e7490;
   --idle: #c3cbd3;
 
   --font-ui: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -38,6 +38,7 @@
     --ok: #4cc28a;
     --bad: #f0706a;
     --halt: #a9a3c9;
+    --you: #5cc8d8;
     --idle: #38414c;
   }
 }

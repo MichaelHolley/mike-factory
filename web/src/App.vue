@@ -4,10 +4,7 @@ import { RouterLink, RouterView } from "vue-router";
 
 <template>
   <header class="top">
-    <RouterLink to="/" class="brand">
-      <span class="mark" aria-hidden="true" />
-      mike-factory
-    </RouterLink>
+    <RouterLink to="/" class="brand"> mike-factory </RouterLink>
   </header>
   <main>
     <RouterView />
@@ -23,21 +20,12 @@ import { RouterLink, RouterView } from "vue-router";
   background: var(--chrome);
 }
 .brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.625rem;
   font-family: var(--font-head);
   font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--chrome-ink);
   text-decoration: none;
-}
-.mark {
-  width: 1.375rem;
-  height: 0.875rem;
-  border-radius: 2px;
-  background: repeating-linear-gradient(-45deg, var(--hazard) 0 4px, var(--chrome) 4px 8px);
 }
 main {
   max-width: 72rem;

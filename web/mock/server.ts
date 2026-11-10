@@ -40,8 +40,30 @@ const runs: RunStatus[] = [
 ];
 
 const sampleConversation = (): TranscriptItem[] => [
-  { kind: "user", text: "Implement issue #31: add a dark mode toggle to the status page.\n\nKeep the change small." },
-  { kind: "assistant", text: "I'll look at how the styles are organised first." },
+  {
+    kind: "user",
+    text: [
+      "Implement issue #31: add a dark mode toggle to the status page.",
+      "",
+      "## Issue",
+      "",
+      "The status page is hard to read at night. Add a toggle in the header that switches between light and dark.",
+      "",
+      "## Rules",
+      "",
+      "- Keep the change small.",
+      "- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before you finish.",
+      "- Commit locally; the pipeline pushes and opens the pull request.",
+      "",
+      "## Repository notes",
+      "",
+      "The web UI lives in `web/` and uses Vue 3 with plain CSS custom properties in `web/src/style.css`.",
+    ].join("\n"),
+  },
+  {
+    kind: "assistant",
+    text: "I'll look at how the styles are organised first. The plan:\n\n- read `web/src/style.css`\n- find where the colours are defined\n- add a **toggle** in the header",
+  },
   {
     kind: "tool",
     name: "bash",
@@ -67,7 +89,10 @@ const sampleConversation = (): TranscriptItem[] => [
     },
   },
   { kind: "human", text: "Please use the system preference by default." },
-  { kind: "assistant", text: "Got it. I'll default to `prefers-color-scheme` and keep the toggle as an override." },
+  {
+    kind: "assistant",
+    text: 'Got it. I\'ll default to `prefers-color-scheme` and keep the toggle as an override.\n\n```ts\nconst dark = matchMedia("(prefers-color-scheme: dark)").matches;\ndocument.documentElement.dataset.theme = stored ?? (dark ? "dark" : "light");\n```\n\nSee [MDN](https://developer.mozilla.org/docs/Web/CSS/@media/prefers-color-scheme) for details.',
+  },
   { kind: "tool", name: "edit", summary: "web/src/App.vue", args: '{ "path": "web/src/App.vue" }' },
 ];
 
