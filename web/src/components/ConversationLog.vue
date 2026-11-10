@@ -171,19 +171,36 @@ ol > li:first-child {
   color: var(--muted);
 }
 .calls {
-  background: var(--surface);
-  border: 1px solid var(--line);
+  /* Outdent by the summary padding so collapsed rows line up with the prose. */
+  margin-left: calc(-0.75rem - 1px);
+  border: 1px solid transparent;
   border-radius: 6px;
   overflow: hidden;
+}
+.calls:has(details[open]) {
+  background: var(--surface);
+  border-color: var(--line);
 }
 .group > summary {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  min-height: 2.75rem;
-  padding: 0 1rem;
+  gap: 0.625rem;
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  font-size: 0.875rem;
+  color: var(--muted);
   cursor: pointer;
   list-style: none;
+}
+.calls > .call:not([open]):not(:hover) :deep(.name) {
+  color: var(--muted);
+}
+.group > summary:focus-visible {
+  outline-offset: -2px;
+}
+.group > summary:hover,
+.group[open] > summary {
+  color: var(--ink);
 }
 .group > summary::-webkit-details-marker {
   display: none;
@@ -193,11 +210,11 @@ ol > li:first-child {
 }
 .chevron {
   flex: none;
-  width: 0.4375rem;
-  height: 0.4375rem;
+  width: 0.375rem;
+  height: 0.375rem;
   margin-right: 0.125rem;
-  border-right: 2px solid var(--muted);
-  border-bottom: 2px solid var(--muted);
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
   transform: rotate(-45deg);
   transition: transform 0.15s ease;
 }
@@ -206,14 +223,16 @@ ol > li:first-child {
 }
 .count {
   flex: none;
-  font-weight: 600;
+  font-weight: 500;
 }
 .names {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.75rem;
   color: var(--muted);
+  opacity: 0.8;
 }
 .marks {
   display: flex;
@@ -223,7 +242,7 @@ ol > li:first-child {
 }
 .marks > span {
   width: 3px;
-  height: 1rem;
+  height: 0.75rem;
   border-radius: 1px;
   background: color-mix(in srgb, var(--muted) 55%, transparent);
 }

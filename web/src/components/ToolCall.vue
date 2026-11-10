@@ -37,11 +37,15 @@ defineProps<{ call: Extract<TranscriptItem, { kind: "tool" }> }>();
 summary {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  min-height: 2.5rem;
-  padding: 0 1rem;
+  gap: 0.625rem;
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  font-size: 0.875rem;
   cursor: pointer;
   list-style: none;
+}
+summary:focus-visible {
+  outline-offset: -2px;
 }
 summary::-webkit-details-marker {
   display: none;
@@ -52,7 +56,7 @@ summary:hover {
 .mark {
   flex: none;
   width: 3px;
-  height: 1rem;
+  height: 0.75rem;
   border-radius: 1px;
   background: var(--tone);
 }
@@ -75,7 +79,7 @@ summary:hover {
   color: var(--tone);
 }
 .body {
-  padding: 0.25rem 1rem 1rem calc(1rem + 3px + 0.75rem);
+  padding: 0.25rem 0.75rem 0.75rem calc(0.75rem + 3px + 0.625rem);
 }
 h3 {
   margin: 0.75rem 0 0.375rem;
