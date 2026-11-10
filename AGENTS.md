@@ -4,7 +4,7 @@ Self-hosted agent that turns a `/mike` comment on a GitHub issue into a pull req
 
 - Use pnpm. Verify with `pnpm lint`, `pnpm typecheck` and `pnpm test`; run `pnpm format` before committing.
 - Running the server needs GitHub App secrets even with `MODEL=faux`; use the tests to verify behavior offline.
-- For UI work without secrets, run `pnpm -C web dev:mock` (in-memory sample `/status` API on :3000, `web/mock/server.ts`) alongside `pnpm -C web dev`.
+- For UI work without secrets, run `pnpm dev:mock` (the real HTTP server on :3000 with in-memory sample runs and no GitHub, `src/dev/mock.ts`) alongside `pnpm -C web dev`.
 
 ## Code map
 

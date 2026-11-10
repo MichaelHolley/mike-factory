@@ -8,9 +8,9 @@ import type { IssueService } from "./contracts.ts";
 import { InvalidSignatureError, verifyWebhook } from "./github/webhooks.ts";
 
 export interface ServerDeps {
-  config: AppConfig;
   service: IssueService;
-  webhookSecret: string;
+  /** Serves `/webhooks/github`; without it the server has no GitHub integration. */
+  webhook?: { config: AppConfig; secret: string };
   log: (msg: string, data?: object) => void;
   uiDir?: string;
   /** Ends open live streams so `server.close()` can finish. */
@@ -25,14 +25,7 @@ const RETRY_MS = 5_000;
 
 const DEFAULT_UI_DIR = fileURLToPath(new URL("../web/dist", import.meta.url));
 
-export function createServer({
-  config,
-  service,
-  webhookSecret,
-  log,
-  uiDir = DEFAULT_UI_DIR,
-  shutdownSignal,
-}: ServerDeps): Hono {
+export function createServer({ service, webhook, log, uiDir = DEFAULT_UI_DIR, shutdownSignal }: ServerDeps): Hono {
   const app = new Hono();
 
   /**
@@ -99,32 +92,33 @@ export function createServer({
     return response;
   };
 
-  app.post("/webhooks/github", async (c) => {
-    const rawBody = await c.req.text();
-    const deliveryId = c.req.header("x-github-delivery") ?? "";
-    let action;
-    try {
-      action = await verifyWebhook({
-        event: c.req.header("x-github-event") ?? "",
-        signature: c.req.header("x-hub-signature-256") ?? "",
-        rawBody,
-        secret: webhookSecret,
-        config,
-      });
-    } catch (error) {
-      if (error instanceof InvalidSignatureError) {
-        log("webhook rejected", { deliveryId, reason: "invalid signature" });
-        return c.text("invalid signature", 401);
+  if (webhook)
+    app.post("/webhooks/github", async (c) => {
+      const rawBody = await c.req.text();
+      const deliveryId = c.req.header("x-github-delivery") ?? "";
+      let action;
+      try {
+        action = await verifyWebhook({
+          event: c.req.header("x-github-event") ?? "",
+          signature: c.req.header("x-hub-signature-256") ?? "",
+          rawBody,
+          secret: webhook.secret,
+          config: webhook.config,
+        });
+      } catch (error) {
+        if (error instanceof InvalidSignatureError) {
+          log("webhook rejected", { deliveryId, reason: "invalid signature" });
+          return c.text("invalid signature", 401);
+        }
+        throw error;
       }
-      throw error;
-    }
 
-    if (action.kind === "ignore") log("webhook ignored", { deliveryId, reason: action.reason });
-    else if (action.kind === "start") await service.start(action);
-    else if (action.kind === "stop") await service.stop(action);
-    else await service.cleanup(action);
-    return c.body(null, 202);
-  });
+      if (action.kind === "ignore") log("webhook ignored", { deliveryId, reason: action.reason });
+      else if (action.kind === "start") await service.start(action);
+      else if (action.kind === "stop") await service.stop(action);
+      else await service.cleanup(action);
+      return c.body(null, 202);
+    });
 
   app.post("/status/:repo/:issue/messages", async (c) => {
     const repo = c.req.param("repo");

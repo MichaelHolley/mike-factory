@@ -16,7 +16,7 @@ pnpm format        # oxfmt; CI runs pnpm format:check
 
 CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck and tests on every pull request.
 
-To work on the status UI (`web/`), run the server as above and `pnpm -C web dev` next to it. Vite serves the UI on http://localhost:5173 with HMR and proxies `/status` to the server on :3000. `pnpm dev` alone serves no UI until `pnpm -C web build` has produced `web/dist`.
+To work on the status UI (`web/`), run the server as above and `pnpm -C web dev` next to it. Vite serves the UI on http://localhost:5173 with HMR and proxies `/status` to the server on :3000. `pnpm dev` alone serves no UI until `pnpm -C web build` has produced `web/dist`. Without GitHub App secrets, run `pnpm dev:mock` instead of the server: it serves the same `/status` API from in-memory sample runs, with no webhook route, and answers run-page messages with a canned reply.
 
 ## Configuration
 

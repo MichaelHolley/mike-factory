@@ -45,7 +45,7 @@ function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui")) {
   };
   const log = vi.fn();
   const shutdown = new AbortController();
-  const app = createServer({ config, service, webhookSecret: secret, log, uiDir, shutdownSignal: shutdown.signal });
+  const app = createServer({ service, webhook: { config, secret }, log, uiDir, shutdownSignal: shutdown.signal });
   const post = (senderId: number, signature?: string) => {
     const body = JSON.stringify({
       action: "created",

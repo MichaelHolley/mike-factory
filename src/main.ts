@@ -93,9 +93,8 @@ async function main() {
 
   const shutdownController = new AbortController();
   const app = createServer({
-    config: effectiveConfig,
     service,
-    webhookSecret: secrets.webhookSecret,
+    webhook: { config: effectiveConfig, secret: secrets.webhookSecret },
     log,
     shutdownSignal: shutdownController.signal,
   });
