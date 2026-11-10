@@ -14,7 +14,7 @@ pnpm format        # oxfmt; CI runs pnpm format:check
 
 `MODEL=faux` swaps every repo's model for the scripted faux provider, so no real model runs on your machine. Without it, `OPENAI_API_KEY` is required.
 
-CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck and tests on every pull request.
+CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck and tests on every pull request. Pushes to `main` publish the Docker image (`.github/workflows/docker.yml`), skipping docs- and test-only changes; a newer push cancels a build still in progress.
 
 To work on the status UI (`web/`), run the server as above and `pnpm -C web dev` next to it. Vite serves the UI on http://localhost:5173 with HMR and proxies `/status` to the server on :3000. `pnpm dev` alone serves no UI until `pnpm -C web build` has produced `web/dist`. Without GitHub App secrets, run `pnpm dev:mock` instead of the server: it serves the same `/status` API from in-memory sample runs, with no webhook route, and answers run-page messages with a canned reply.
 

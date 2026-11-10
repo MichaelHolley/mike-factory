@@ -3,6 +3,18 @@ name: docker
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "*.md"
+      - docs/**
+      - test/**
+      - .github/workflows/ci.yml
+      - .oxfmtrc.json
+      - .oxlintrc.json
+      - vitest.config.ts
+
+concurrency:
+  group: docker
+  cancel-in-progress: true
 
 jobs:
   publish:
