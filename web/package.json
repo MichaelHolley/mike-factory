@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:mock": "node --watch mock/server.ts",
     "build": "vue-tsc --noEmit && vite build",
     "typecheck": "vue-tsc --noEmit"
   },
