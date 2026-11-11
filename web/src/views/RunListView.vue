@@ -39,273 +39,114 @@ const projects = computed(() => {
 </script>
 
 <template>
-  <h1>Runs</h1>
-  <p v-if="error" class="notice">Couldn't load runs: {{ error }}. Reconnecting…</p>
+  <h1 class="mb-6 text-[2.25rem]">Runs</h1>
+  <p v-if="error" class="mb-6 border-l-[3px] border-bad bg-surface px-4 py-3 text-bad">
+    Couldn't load runs: {{ error }}. Reconnecting…
+  </p>
 
-  <section v-if="loaded" class="live" aria-labelledby="live-heading">
-    <h2 id="live-heading">
-      Working now <span v-if="live.length" class="count">{{ live.length }}</span>
+  <section v-if="loaded" aria-labelledby="live-heading">
+    <h2 id="live-heading" class="mb-3 flex items-baseline gap-2 text-[1.125rem]">
+      Working now <span v-if="live.length" class="font-medium text-muted tabular-nums">{{ live.length }}</span>
     </h2>
-    <p v-if="!live.length" class="empty">
+    <p v-if="!live.length" class="max-w-xl text-muted">
       Nothing running. Comment <code>/mike</code> on an issue in a configured repo to start a run.
     </p>
-    <ul v-else class="panel">
-      <li v-for="run in live" :key="`${run.repo}#${run.issue}`">
-        <RouterLink :to="runPath(run)" class="name row-link">
-          <span class="repo">{{ run.repo }}</span>
-          <span class="issue">#{{ run.issue }}</span>
+    <ul v-else class="overflow-hidden rounded-[6px] border border-l-[3px] border-line border-l-run bg-surface">
+      <li
+        v-for="run in live"
+        :key="`${run.repo}#${run.issue}`"
+        class="relative grid grid-cols-[minmax(0,16rem)_minmax(0,1fr)_auto] items-center gap-6 px-5 py-4 hover:bg-run/4 not-first:border-t not-first:border-line max-[48rem]:grid-cols-[minmax(0,1fr)_auto] max-[48rem]:gap-x-4 max-[48rem]:gap-y-2"
+      >
+        <RouterLink
+          :to="runPath(run)"
+          class="group inline-flex min-w-0 items-baseline gap-2 text-ink no-underline after:absolute after:inset-0 max-[48rem]:col-span-full"
+        >
+          <span class="truncate font-semibold group-hover:underline group-hover:underline-offset-[0.2em]">{{
+            run.repo
+          }}</span>
+          <span class="font-medium text-muted tabular-nums group-hover:underline group-hover:underline-offset-[0.2em]"
+            >#{{ run.issue }}</span
+          >
         </RouterLink>
         <PhaseBadge :phase="run.phase" />
-        <span class="meta">
+        <span
+          class="flex gap-4 text-[0.875rem] whitespace-nowrap tabular-nums max-[48rem]:min-w-0 max-[48rem]:flex-wrap max-[48rem]:justify-end max-[48rem]:gap-y-1"
+        >
           <span v-if="run.attempts > 1">Attempt {{ run.attempts }}</span>
-          <span class="muted">{{ formatModel(run) }}</span>
+          <span class="text-muted">{{ formatModel(run) }}</span>
           <span>{{ formatCost(run.costUsd) }}</span>
-          <span class="muted">{{ timeAgo(run.updatedAt, now) }}</span>
+          <span class="text-muted">{{ timeAgo(run.updatedAt, now) }}</span>
         </span>
       </li>
     </ul>
   </section>
 
-  <section v-if="projects.length" class="finished" aria-labelledby="finished-heading">
-    <h2 id="finished-heading">Finished</h2>
-    <div class="panel">
-      <table>
-        <thead>
+  <section v-if="projects.length" class="mt-10" aria-labelledby="finished-heading">
+    <h2 id="finished-heading" class="mb-3 flex items-baseline gap-2 text-[1.125rem]">Finished</h2>
+    <div class="overflow-hidden rounded-[6px] border border-line bg-surface">
+      <table class="w-full whitespace-nowrap max-[48rem]:block max-[48rem]:whitespace-normal">
+        <thead
+          class="max-[48rem]:hidden [&_th]:px-5 [&_th]:py-3 [&_th]:text-[0.8125rem] [&_th]:font-medium [&_th]:text-muted"
+        >
           <tr>
-            <th>Issue</th>
-            <th>Outcome</th>
-            <th>Model</th>
-            <th class="num">Attempts</th>
-            <th class="num">Cost</th>
-            <th>Pull request</th>
-            <th class="num">Updated</th>
+            <th class="text-left">Issue</th>
+            <th class="text-left">Outcome</th>
+            <th class="text-left">Model</th>
+            <th class="text-right tabular-nums">Attempts</th>
+            <th class="text-right tabular-nums">Cost</th>
+            <th class="text-left">Pull request</th>
+            <th class="text-right tabular-nums">Updated</th>
           </tr>
         </thead>
-        <tbody v-for="project in projects" :key="project.repo">
-          <tr class="project">
-            <th colspan="7" scope="rowgroup">
-              {{ project.repo }} <span class="count">{{ project.runs.length }}</span>
+        <tbody
+          v-for="project in projects"
+          :key="project.repo"
+          class="max-[48rem]:block max-[48rem]:first-of-type:[&_th]:border-t-0"
+        >
+          <tr class="max-[48rem]:block">
+            <th
+              colspan="7"
+              scope="rowgroup"
+              class="border-y border-line bg-ink/3 px-5 py-2 text-left text-[0.875rem] font-semibold max-[48rem]:block"
+            >
+              {{ project.repo }} <span class="font-medium text-muted tabular-nums">{{ project.runs.length }}</span>
             </th>
           </tr>
-          <tr v-for="run in project.runs" :key="run.issue">
-            <td class="run">
-              <RouterLink :to="runPath(run)" class="row-link" :aria-label="`${run.repo} #${run.issue}`">
-                <span class="issue">#{{ run.issue }}</span>
+          <tr
+            v-for="run in project.runs"
+            :key="run.issue"
+            class="relative hover:bg-run/4 nth-[n+3]:border-t nth-[n+3]:border-line max-[48rem]:grid max-[48rem]:grid-cols-[repeat(4,auto)] max-[48rem]:justify-between max-[48rem]:gap-x-4 max-[48rem]:gap-y-3 max-[48rem]:px-5 max-[48rem]:py-4 [&>td]:px-5 [&>td]:py-3 max-[48rem]:[&>td]:p-0 max-[48rem]:[&>td[data-label]]:before:block max-[48rem]:[&>td[data-label]]:before:text-[0.75rem] max-[48rem]:[&>td[data-label]]:before:text-muted max-[48rem]:[&>td[data-label]]:before:content-[attr(data-label)]"
+          >
+            <td class="max-[48rem]:col-span-full">
+              <RouterLink
+                :to="runPath(run)"
+                class="group text-ink no-underline after:absolute after:inset-0"
+                :aria-label="`${run.repo} #${run.issue}`"
+              >
+                <span
+                  class="font-semibold text-ink tabular-nums group-hover:underline group-hover:underline-offset-[0.2em]"
+                  >#{{ run.issue }}</span
+                >
               </RouterLink>
             </td>
-            <td class="status">
+            <td class="max-[48rem]:col-span-full">
               <PhaseBadge :phase="run.phase" />
             </td>
-            <td data-label="Model">{{ formatModel(run) }}</td>
-            <td class="num" data-label="Attempts">{{ run.attempts }}</td>
-            <td class="num" data-label="Cost">{{ formatCost(run.costUsd) }}</td>
-            <td data-label="Pull request">
-              <a v-if="run.prUrl" :href="run.prUrl" target="_blank" rel="noopener" class="above">Open PR</a>
-              <span v-else class="muted">None</span>
+            <td data-label="Model" class="max-[48rem]:col-span-full">{{ formatModel(run) }}</td>
+            <td class="text-right tabular-nums max-[48rem]:text-left" data-label="Attempts">{{ run.attempts }}</td>
+            <td class="text-right tabular-nums max-[48rem]:text-left" data-label="Cost">
+              {{ formatCost(run.costUsd) }}
             </td>
-            <td class="num muted" data-label="Updated">{{ timeAgo(run.updatedAt, now) }}</td>
+            <td data-label="Pull request">
+              <a v-if="run.prUrl" :href="run.prUrl" target="_blank" rel="noopener" class="relative z-1">Open PR</a>
+              <span v-else class="text-muted">None</span>
+            </td>
+            <td class="text-right tabular-nums text-muted max-[48rem]:text-left" data-label="Updated">
+              {{ timeAgo(run.updatedAt, now) }}
+            </td>
           </tr>
         </tbody>
       </table>
     </div>
   </section>
 </template>
-
-<style scoped>
-h1 {
-  margin-bottom: 1.5rem;
-  font-size: 2.25rem;
-}
-h2 {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-  font-size: 1.125rem;
-}
-.count {
-  font-weight: 500;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.finished {
-  margin-top: 2.5rem;
-}
-.empty {
-  max-width: 36rem;
-  margin: 0;
-  color: var(--muted);
-}
-.panel {
-  overflow: hidden;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-.live ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border-left: 3px solid var(--run);
-}
-.live li,
-tbody tr:not(.project) {
-  position: relative;
-}
-.row-link::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-}
-.above {
-  position: relative;
-  z-index: 1;
-}
-.live li:hover,
-tbody tr:not(.project):hover {
-  background: color-mix(in srgb, var(--run) 4%, transparent);
-}
-.live li {
-  display: grid;
-  grid-template-columns: minmax(0, 16rem) minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 1.5rem;
-  padding: 1rem 1.25rem;
-}
-.live li + li {
-  border-top: 1px solid var(--line);
-}
-.name {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  min-width: 0;
-  color: var(--ink);
-  text-decoration: none;
-}
-.name:hover .repo,
-.name:hover .issue {
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-}
-.repo {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 600;
-}
-.issue {
-  font-weight: 500;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.meta {
-  display: flex;
-  gap: 1rem;
-  font-size: 0.875rem;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-  white-space: nowrap;
-}
-th,
-td {
-  padding: 0.75rem 1.25rem;
-  text-align: left;
-  vertical-align: middle;
-}
-thead th {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--muted);
-}
-.project th {
-  padding-block: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-tbody tr:not(.project) + tr td {
-  border-top: 1px solid var(--line);
-}
-td.run a {
-  color: var(--ink);
-  text-decoration: none;
-}
-td.run .issue {
-  color: var(--ink);
-  font-weight: 600;
-}
-td.run a:hover .issue {
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-}
-.num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-@media (max-width: 48rem) {
-  .live li {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.5rem 1rem;
-  }
-  .name {
-    grid-column: 1 / -1;
-  }
-  .meta {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 0.25rem 1rem;
-    min-width: 0;
-  }
-  thead {
-    display: none;
-  }
-  table,
-  tbody,
-  .project,
-  .project th {
-    display: block;
-    white-space: normal;
-  }
-  tbody tr:not(.project) {
-    display: grid;
-    grid-template-columns: repeat(4, auto);
-    justify-content: space-between;
-    gap: 0.75rem 1rem;
-    padding: 1rem 1.25rem;
-  }
-  tbody tr:not(.project) + tr {
-    border-top: 1px solid var(--line);
-  }
-  tbody tr:not(.project) + tr td {
-    border-top: 0;
-  }
-  tbody:first-of-type .project th {
-    border-top: 0;
-  }
-  td {
-    padding: 0;
-  }
-  td.run,
-  .status,
-  td[data-label="Model"] {
-    grid-column: 1 / -1;
-  }
-  td[data-label]::before {
-    content: attr(data-label);
-    display: block;
-    font-size: 0.75rem;
-    color: var(--muted);
-  }
-  .num {
-    text-align: left;
-  }
-}
-</style>

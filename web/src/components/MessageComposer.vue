@@ -39,13 +39,14 @@ async function send() {
 </script>
 
 <template>
-  <form class="composer" @submit.prevent="send">
-    <label for="message" class="label">
+  <form class="mt-4 grid gap-2 rounded-md border border-line bg-surface px-5 py-4" @submit.prevent="send">
+    <label for="message" class="text-[0.875rem] font-semibold text-muted">
       {{ finished ? "Continue this run with a follow-up" : "Steer the agent while it works" }}
     </label>
     <textarea
       id="message"
       v-model="text"
+      class="box-border min-h-18 w-full resize-y rounded-sm border border-line bg-bg px-3 py-2.5 leading-normal text-ink disabled:opacity-60"
       rows="3"
       :maxlength="MAX_CHARS"
       :disabled="sending"
@@ -53,74 +54,16 @@ async function send() {
       @keydown.enter.meta.prevent="send"
       @keydown.enter.ctrl.prevent="send"
     ></textarea>
-    <div class="actions">
-      <p v-if="error" class="error" role="alert">Couldn't send: {{ error }}</p>
-      <span class="hint muted">⌘/Ctrl + Enter</span>
-      <button type="submit" :disabled="!canSend">{{ sending ? "Sending…" : finished ? "Continue" : "Steer" }}</button>
+    <div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+      <p v-if="error" class="mr-auto text-[0.875rem] text-bad wrap-anywhere" role="alert">Couldn't send: {{ error }}</p>
+      <span class="text-[0.8125rem] text-muted">⌘/Ctrl + Enter</span>
+      <button
+        type="submit"
+        class="min-h-9 cursor-pointer rounded-sm bg-run px-4.5 font-semibold text-surface disabled:cursor-default disabled:opacity-50"
+        :disabled="!canSend"
+      >
+        {{ sending ? "Sending…" : finished ? "Continue" : "Steer" }}
+      </button>
     </div>
   </form>
 </template>
-
-<style scoped>
-.composer {
-  display: grid;
-  gap: 0.5rem;
-  margin-top: 1rem;
-  padding: 1rem 1.25rem;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-.label {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--muted);
-}
-textarea {
-  width: 100%;
-  box-sizing: border-box;
-  min-height: 4.5rem;
-  padding: 0.625rem 0.75rem;
-  resize: vertical;
-  font: inherit;
-  line-height: 1.5;
-  color: var(--ink);
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-}
-textarea:disabled {
-  opacity: 0.6;
-}
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.5rem 1rem;
-}
-.error {
-  margin: 0 auto 0 0;
-  font-size: 0.875rem;
-  color: var(--bad);
-  overflow-wrap: anywhere;
-}
-.hint {
-  font-size: 0.8125rem;
-}
-button {
-  min-height: 2.25rem;
-  padding: 0 1.125rem;
-  font: inherit;
-  font-weight: 600;
-  color: var(--surface);
-  background: var(--run);
-  border: 0;
-  border-radius: 4px;
-  cursor: pointer;
-}
-button:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-</style>

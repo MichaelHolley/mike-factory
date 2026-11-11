@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { IssuePhase } from "../../../src/runStatus.ts";
-import { phaseTone, pipelineSteps } from "../phase.ts";
+import { phaseTone, pipelineSteps, toneClass } from "../phase.ts";
 
 const props = defineProps<{ phase: IssuePhase; large?: boolean }>();
 
@@ -10,124 +10,37 @@ const steps = computed(() => pipelineSteps(props.phase));
 </script>
 
 <template>
-  <ol class="track" :class="[tone, { large }]" aria-label="Pipeline">
+  <ol
+    class="m-0 flex list-none flex-wrap items-center gap-y-1.5 p-0"
+    :class="[
+      toneClass[tone],
+      large
+        ? '-ml-2.5 text-[0.9375rem] max-[36rem]:-ml-[0.4375rem] max-[36rem]:text-[0.8125rem]'
+        : '-ml-[0.4375rem] text-[0.8125rem]',
+    ]"
+    aria-label="Pipeline"
+  >
     <li
       v-for="step in steps"
       :key="step.name"
-      :class="step.state"
+      class="flex items-center whitespace-nowrap not-first:flex-auto not-first:before:mx-1 not-first:before:h-0.5 not-first:before:min-w-1.5 not-first:before:flex-auto not-first:before:content-[''] max-[36rem]:not-first:flex-none max-[36rem]:not-first:before:w-2.5 max-[36rem]:not-first:before:flex-none"
+      :class="step.state === 'pending' ? 'not-first:before:bg-idle' : 'not-first:before:bg-(--tone)'"
       :aria-current="step.state === 'current' ? 'step' : undefined"
     >
-      <span class="label">{{ step.name }}</span>
+      <span
+        class="inline-flex items-center gap-1.5 rounded-[3px] leading-[1.4]"
+        :class="[
+          large ? 'px-2.5 py-1 max-[36rem]:px-[0.4375rem] max-[36rem]:py-0.5' : 'px-[0.4375rem] py-0.5',
+          {
+            'font-medium text-muted': step.state === 'pending',
+            'font-medium text-ink': step.state === 'passed',
+            'bg-(--tone) font-semibold text-white dark:text-bg': step.state === 'current',
+            'before:size-1.5 before:animate-pulse-dot before:rounded-full before:bg-current before:content-[\'\'] motion-reduce:before:animate-none':
+              tone === 'run' && step.state === 'current',
+          },
+        ]"
+        >{{ step.name }}</span
+      >
     </li>
   </ol>
 </template>
-
-<style scoped>
-.track {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  row-gap: 0.375rem;
-  margin: 0 0 0 -0.4375rem;
-  padding: 0;
-  list-style: none;
-  font-size: 0.8125rem;
-  --tone: var(--run);
-}
-.idle {
-  --tone: var(--muted);
-}
-.ok {
-  --tone: var(--ok);
-}
-.bad {
-  --tone: var(--bad);
-}
-.halt {
-  --tone: var(--halt);
-}
-li {
-  display: flex;
-  align-items: center;
-  white-space: nowrap;
-}
-li + li {
-  flex: 1 1 auto;
-}
-li + li::before {
-  content: "";
-  flex: 1 1 auto;
-  min-width: 0.375rem;
-  height: 2px;
-  margin: 0 0.25rem;
-  background: var(--idle);
-}
-.passed::before,
-.current::before {
-  background: var(--tone);
-}
-.label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.125rem 0.4375rem;
-  border-radius: 3px;
-  font-weight: 500;
-  line-height: 1.4;
-  color: var(--muted);
-}
-.passed .label {
-  color: var(--ink);
-}
-.current .label {
-  font-weight: 600;
-  color: #fff;
-  background: var(--tone);
-}
-.run .current .label::before {
-  content: "";
-  width: 0.375rem;
-  height: 0.375rem;
-  border-radius: 50%;
-  background: currentColor;
-  animation: pulse 1.4s ease-in-out infinite;
-}
-.large {
-  margin-left: -0.625rem;
-  font-size: 0.9375rem;
-}
-.large .label {
-  padding: 0.25rem 0.625rem;
-}
-@media (prefers-color-scheme: dark) {
-  .current .label {
-    color: var(--bg);
-  }
-}
-@keyframes pulse {
-  50% {
-    opacity: 0.3;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .run .current .label::before {
-    animation: none;
-  }
-}
-@media (max-width: 36rem) {
-  li + li,
-  li + li::before {
-    flex: none;
-  }
-  li + li::before {
-    width: 0.625rem;
-  }
-  .large {
-    margin-left: -0.4375rem;
-    font-size: 0.8125rem;
-  }
-  .large .label {
-    padding: 0.125rem 0.4375rem;
-  }
-}
-</style>
