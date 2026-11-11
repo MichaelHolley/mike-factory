@@ -6,8 +6,7 @@ import PhaseBadge from "../components/PhaseBadge.vue";
 import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
 import { formatCost, formatModel, timeAgo } from "../format.ts";
-
-const FINISHED: readonly RunStatus["phase"][] = ["done", "failed", "aborted"];
+import { isFinished } from "../phase.ts";
 
 const { runs, error, loaded } = useRuns();
 const now = useNow();
@@ -18,13 +17,13 @@ const runPath = (run: RunStatus) => `/runs/${run.repo}/${run.issue}`;
 // Oldest start first so live rows keep their place as updates stream in; queued runs go last.
 const live = computed(() =>
   runs.value
-    .filter((run) => !FINISHED.includes(run.phase))
+    .filter((run) => !isFinished(run.phase))
     .sort((a, b) => (time(a.startedAt) ?? Infinity) - (time(b.startedAt) ?? Infinity)),
 );
 
 const projects = computed(() => {
   const byRepo = new Map<string, RunStatus[]>();
-  for (const run of runs.value.filter((run) => FINISHED.includes(run.phase))) {
+  for (const run of runs.value.filter((run) => isFinished(run.phase))) {
     const list = byRepo.get(run.repo) ?? [];
     list.push(run);
     byRepo.set(run.repo, list);

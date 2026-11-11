@@ -6,6 +6,10 @@ export type StepState = "passed" | "current" | "pending";
 const FLOW = ["queued", "prepare", "implement", "verify", "fix", "revise", "publish", "report"] as const;
 const OUTCOMES: readonly IssuePhase[] = ["done", "failed", "aborted"];
 
+export function isFinished(phase: IssuePhase): boolean {
+  return OUTCOMES.includes(phase);
+}
+
 export function phaseTone(phase: IssuePhase): PhaseTone {
   switch (phase) {
     case "queued":
