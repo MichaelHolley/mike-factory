@@ -51,7 +51,7 @@ const WHO: Record<Message["kind"], string> = { user: "pt-3.5 text-muted", assist
 const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
   assistant: "max-w-[70ch] pt-0.5",
   human:
-    "w-fit max-w-[70ch] rounded-r-md border-l-[3px] border-you bg-[color-mix(in_srgb,var(--color-you)_10%,var(--color-surface))] px-4 py-2.5",
+    "w-fit max-w-[70ch] rounded-r-md border-l-3 border-you bg-[color-mix(in_srgb,var(--color-you)_10%,var(--color-surface))] px-4 py-2.5",
 };
 </script>
 
@@ -109,7 +109,7 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
                 <span
                   v-for="(call, i) in entry.calls.slice(0, MAX_MARKS)"
                   :key="i"
-                  class="h-3 w-[3px] rounded-[1px]"
+                  class="h-3 w-0.75 rounded-[1px]"
                   :class="tone(call)"
                 ></span>
               </span>

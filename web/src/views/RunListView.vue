@@ -40,7 +40,7 @@ const projects = computed(() => {
 
 <template>
   <h1 class="mb-6 text-[2.25rem]">Runs</h1>
-  <p v-if="error" class="mb-6 border-l-[3px] border-bad bg-surface px-4 py-3 text-bad">
+  <p v-if="error" class="mb-6 border-l-3 border-bad bg-surface px-4 py-3 text-bad">
     Couldn't load runs: {{ error }}. Reconnecting…
   </p>
 
@@ -51,7 +51,7 @@ const projects = computed(() => {
     <p v-if="!live.length" class="max-w-xl text-muted">
       Nothing running. Comment <code>/mike</code> on an issue in a configured repo to start a run.
     </p>
-    <ul v-else class="overflow-hidden rounded-[6px] border border-l-[3px] border-line border-l-run bg-surface">
+    <ul v-else class="overflow-hidden rounded-md border border-l-3 border-line border-l-run bg-surface">
       <li
         v-for="run in live"
         :key="`${run.repo}#${run.issue}`"
@@ -83,7 +83,7 @@ const projects = computed(() => {
 
   <section v-if="projects.length" class="mt-10" aria-labelledby="finished-heading">
     <h2 id="finished-heading" class="mb-3 flex items-baseline gap-2 text-[1.125rem]">Finished</h2>
-    <div class="overflow-hidden rounded-[6px] border border-line bg-surface">
+    <div class="overflow-hidden rounded-md border border-line bg-surface">
       <table class="w-full whitespace-nowrap max-[48rem]:block max-[48rem]:whitespace-normal">
         <thead
           class="max-[48rem]:hidden [&_th]:px-5 [&_th]:py-3 [&_th]:text-[0.8125rem] [&_th]:font-medium [&_th]:text-muted"

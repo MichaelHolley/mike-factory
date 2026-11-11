@@ -10,7 +10,7 @@ defineProps<{ call: Extract<TranscriptItem, { kind: "tool" }>; quiet?: boolean }
       class="flex min-h-9 cursor-pointer list-none items-center gap-2.5 px-3 text-[0.875rem] hover:bg-ink/4 focus-visible:-outline-offset-2 [&::-webkit-details-marker]:hidden"
     >
       <span
-        class="h-3 w-[3px] flex-none rounded-[1px]"
+        class="h-3 w-0.75 flex-none rounded-[1px]"
         :class="call.result ? (call.result.isError ? 'bg-bad' : 'bg-muted/55') : 'bg-run'"
         aria-hidden="true"
       ></span>

@@ -3,7 +3,7 @@ import { RouterLink, RouterView } from "vue-router";
 </script>
 
 <template>
-  <header class="flex h-[3.25rem] items-center bg-chrome px-[clamp(1rem,4vw,2rem)]">
+  <header class="flex h-13 items-center bg-chrome px-[clamp(1rem,4vw,2rem)]">
     <RouterLink to="/" class="text-[1.125rem] font-semibold tracking-[0.01em] text-chrome-ink no-underline">
       mike-factory
     </RouterLink>

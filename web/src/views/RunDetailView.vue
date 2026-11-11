@@ -31,7 +31,7 @@ const duration = computed(() => {
     class="mb-5 inline-block text-[0.875rem] font-medium text-muted no-underline before:content-['\2190\00a0'] hover:text-ink"
     >All runs</RouterLink
   >
-  <p v-if="error" class="mb-6 border-l-[3px] border-bad bg-surface px-4 py-3 text-bad">
+  <p v-if="error" class="mb-6 border-l-3 border-bad bg-surface px-4 py-3 text-bad">
     Couldn't load runs: {{ error }}. Reconnecting…
   </p>
   <template v-if="run">
@@ -45,7 +45,7 @@ const duration = computed(() => {
     <PhaseTrack :phase="run.phase" large class="mb-8" />
 
     <div
-      class="grid grid-cols-3 gap-px overflow-hidden rounded-[6px] border border-line bg-line max-[52rem]:grid-cols-1 [&>dl]:grid [&>dl]:grid-cols-[7rem_minmax(0,1fr)] [&>dl]:content-start [&>dl]:gap-x-4 [&>dl]:gap-y-2 [&>dl]:bg-surface [&>dl]:px-5 [&>dl]:py-[1.125rem] [&_dl>div]:col-span-full [&_dl>div]:grid [&_dl>div]:grid-cols-subgrid [&_dl>div]:items-baseline [&_dt]:text-[0.875rem] [&_dt]:text-muted [&_dd]:tabular-nums [&_dd]:wrap-anywhere"
+      class="grid grid-cols-3 gap-px overflow-hidden rounded-md border border-line bg-line max-[52rem]:grid-cols-1 [&>dl]:grid [&>dl]:grid-cols-[7rem_minmax(0,1fr)] [&>dl]:content-start [&>dl]:gap-x-4 [&>dl]:gap-y-2 [&>dl]:bg-surface [&>dl]:px-5 [&>dl]:py-4.5 [&_dl>div]:col-span-full [&_dl>div]:grid [&_dl>div]:grid-cols-subgrid [&_dl>div]:items-baseline [&_dt]:text-[0.875rem] [&_dt]:text-muted [&_dd]:tabular-nums [&_dd]:wrap-anywhere"
     >
       <dl>
         <div>
@@ -131,7 +131,7 @@ const duration = computed(() => {
     <section v-if="run.lastError" class="mt-8">
       <h2 class="mb-3 text-[1.125rem]">Last error</h2>
       <pre
-        class="overflow-x-auto rounded-r-[6px] border border-l-[3px] border-line border-l-bad bg-surface px-5 py-4 leading-[1.6] whitespace-pre-wrap wrap-anywhere"
+        class="overflow-x-auto rounded-r-md border border-l-3 border-line border-l-bad bg-surface px-5 py-4 leading-[1.6] whitespace-pre-wrap wrap-anywhere"
         >{{ run.lastError }}</pre>
     </section>
 

@@ -53,10 +53,10 @@ const html = computed(() => md.render(props.text));
   list-style-type: square;
 }
 .md :deep(code) {
-  @apply rounded-[4px] bg-ink/8 px-[0.35em] py-[0.1em] text-[0.9em];
+  @apply rounded-sm bg-ink/8 px-[0.35em] py-[0.1em] text-[0.9em];
 }
 .md :deep(pre) {
-  @apply overflow-x-auto rounded-[4px] border border-line bg-bg px-3.5 py-2.5 leading-normal;
+  @apply overflow-x-auto rounded-sm border border-line bg-bg px-3.5 py-2.5 leading-normal;
 }
 .md :deep(pre code) {
   @apply bg-transparent p-0 text-[length:inherit];

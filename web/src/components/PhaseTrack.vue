@@ -15,8 +15,8 @@ const steps = computed(() => pipelineSteps(props.phase));
     :class="[
       toneClass[tone],
       large
-        ? '-ml-2.5 text-[0.9375rem] max-[36rem]:-ml-[0.4375rem] max-[36rem]:text-[0.8125rem]'
-        : '-ml-[0.4375rem] text-[0.8125rem]',
+        ? '-ml-2.5 text-[0.9375rem] max-[36rem]:-ml-1.75 max-[36rem]:text-[0.8125rem]'
+        : '-ml-1.75 text-[0.8125rem]',
     ]"
     aria-label="Pipeline"
   >
@@ -30,7 +30,7 @@ const steps = computed(() => pipelineSteps(props.phase));
       <span
         class="inline-flex items-center gap-1.5 rounded-[3px] leading-[1.4]"
         :class="[
-          large ? 'px-2.5 py-1 max-[36rem]:px-[0.4375rem] max-[36rem]:py-0.5' : 'px-[0.4375rem] py-0.5',
+          large ? 'px-2.5 py-1 max-[36rem]:px-1.75 max-[36rem]:py-0.5' : 'px-1.75 py-0.5',
           {
             'font-medium text-muted': step.state === 'pending',
             'font-medium text-ink': step.state === 'passed',
