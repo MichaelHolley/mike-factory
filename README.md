@@ -26,7 +26,7 @@ A self-hosted coding agent that turns a GitHub issue into a pull request. Commen
 
 - Progress shows up in a single status comment on the issue, edited in place. No labels are added to your repos.
 - A status page, meant to sit behind reverse-proxy auth, lists runs with their model and effort, in progress first, then finished runs grouped by repo, and updates live.
-- Each run's page shows the agent's conversation with a **Download JSON** link for a current snapshot. When `PUBLIC_URL` is set, the status comment ends with a link to that run's page.
+- Each run's page shows status details and the agent's conversation with a **Download JSON** link for a current snapshot. Timestamps stay on one line; status fields move to new rows on smaller screens. When `PUBLIC_URL` is set, the status comment ends with a link to that run's page.
 - From a run's page you can message the agent: **Steer** reaches it during its current work, **Continue** starts a follow-up run on a finished one. Messages go through the pipeline, so every change is verified before it is pushed.
 
 ### Per-repo setup

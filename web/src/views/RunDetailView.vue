@@ -46,11 +46,11 @@ const run = computed(() =>
         </div>
         <div>
           <dt>Started</dt>
-          <dd>{{ formatDate(run.startedAt) }}</dd>
+          <dd class="timestamp">{{ formatDate(run.startedAt) }}</dd>
         </div>
         <div>
           <dt>Updated</dt>
-          <dd>
+          <dd class="timestamp">
             {{ formatDate(run.updatedAt) }} <span class="muted">({{ timeAgo(run.updatedAt, now) }})</span>
           </dd>
         </div>
@@ -139,15 +139,21 @@ dd {
   overflow-wrap: anywhere;
 }
 .facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  overflow-x: auto;
   border-bottom: 1px solid var(--line);
+  border-radius: 5px 5px 0 0;
+  background: var(--line);
 }
 .facts > div {
+  flex: 1 1 auto;
   padding: 1rem 1.25rem;
+  background: var(--surface);
 }
-.facts > div + div {
-  border-left: 1px solid var(--line);
+.timestamp {
+  white-space: nowrap;
 }
 .figure {
   font-family: var(--font-head);
@@ -185,21 +191,6 @@ pre {
   border-radius: 0 6px 6px 0;
 }
 @media (max-width: 40rem) {
-  .facts > div + div {
-    border-left: 0;
-  }
-  .facts > div:nth-child(even) {
-    border-left: 1px solid var(--line);
-  }
-  .facts > div:nth-child(n + 3) {
-    border-top: 1px solid var(--line);
-  }
-  .facts {
-    grid-template-columns: 1fr 1fr;
-  }
-  .facts > div:last-child:nth-child(odd) {
-    grid-column: 1 / -1;
-  }
   .links {
     grid-template-columns: 1fr;
     gap: 0;
