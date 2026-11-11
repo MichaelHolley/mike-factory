@@ -4,7 +4,7 @@
 
 ```sh
 pnpm install
-cp .env.example .env   # fill in the GitHub App values; leave OPENAI_API_KEY empty
+cp .env.example .env   # fill in the GitHub App values; leave OPENROUTER_API_KEY empty
 MODEL=faux DATA_DIR=./data pnpm dev
 pnpm test
 pnpm typecheck
@@ -12,7 +12,7 @@ pnpm lint          # oxlint
 pnpm format        # oxfmt; CI runs pnpm format:check
 ```
 
-`MODEL=faux` swaps every repo's model for the scripted faux provider, so no real model runs on your machine. Without it, `OPENAI_API_KEY` is required.
+`MODEL=faux` swaps every repo's model for the scripted faux provider, so no real model runs on your machine. Without it, `OPENROUTER_API_KEY` is required.
 
 CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck and tests on every pull request. Pushes to `main` publish the Docker image (`.github/workflows/docker.yml`), skipping docs- and test-only changes; a newer push cancels a build still in progress.
 
@@ -20,7 +20,7 @@ To work on the status UI (`web/`), run the server as above and `pnpm -C web dev`
 
 ## Configuration
 
-Configuration is in `config/repos.yaml` (owner, allowed sender id, per-repo `setup` and ordered `checks` commands, run in sequence on a clean working tree after the agent finishes, plus budgets). Each repo's `model` defaults to `gpt-6.1-sol` and its `thinkingLevel` (`off` to `max`) to `high`; both can be set under `defaults` or per repo. Environment variables are listed in `.env.example`; `PUBLIC_URL` (optional) is the public base URL, e.g. `https://factory.example.com`, used for the run link in status comments. Secrets are read once at startup and removed from `process.env` before any tool shell can inherit them. When committing, the configured bot identity takes precedence over inherited `GIT_AUTHOR_*` and `GIT_COMMITTER_*` names and emails.
+Configuration is in `config/repos.yaml` (owner, allowed sender id, per-repo `setup` and ordered `checks` commands, run in sequence on a clean working tree after the agent finishes, plus budgets). Each repo's `model` defaults to `openai/gpt-6.1-sol` via OpenRouter (any `openrouter` chat model in the catalog bundled with `@earendil-works/pi-ai`; others fail at run time) and its `thinkingLevel` (`off` to `max`) to `high`; both can be set under `defaults` or per repo. Environment variables are listed in `.env.example`; `PUBLIC_URL` (optional) is the public base URL, e.g. `https://factory.example.com`, used for the run link in status comments. Secrets are read once at startup and removed from `process.env` before any tool shell can inherit them. When committing, the configured bot identity takes precedence over inherited `GIT_AUTHOR_*` and `GIT_COMMITTER_*` names and emails.
 
 ## Commit and PR writing
 

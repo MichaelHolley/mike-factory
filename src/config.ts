@@ -28,7 +28,7 @@ export interface AppConfig {
 type RepoDefaults = Pick<RepoConfig, "model" | "thinkingLevel" | "maxTurns" | "maxCostUsd" | "maxFixAttempts">;
 
 const BUILTIN_DEFAULTS: RepoDefaults = {
-  model: { provider: "openai", modelId: "gpt-6.1-sol" },
+  model: { provider: "openrouter", modelId: "openai/gpt-6.1-sol" },
   thinkingLevel: "high",
   maxTurns: 60,
   maxCostUsd: 3,

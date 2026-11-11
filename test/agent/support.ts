@@ -125,7 +125,7 @@ export function createWorld(opts: {
     remoteUrl: (name) => remotes[name]!,
   });
   const faux = fauxProvider({
-    models: [{ id: "faux-1", cost: { input: 10, output: 10, cacheRead: 0, cacheWrite: 0 } }],
+    models: ["faux-1", "faux-2"].map((id) => ({ id, cost: { input: 10, output: 10, cacheRead: 0, cacheWrite: 0 } })),
   });
   const models = createModels();
   models.setProvider(faux.provider);

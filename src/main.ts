@@ -4,7 +4,7 @@ import { serve } from "@hono/node-server";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
+import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter";
 import { fauxProvider } from "@earendil-works/pi-ai/providers/faux";
 import { openAgentHarness } from "./agent/harness.ts";
 import { loadSkills, SKILLS_DIR } from "./agent/extensions/skills.ts";
@@ -20,7 +20,7 @@ const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const log = (msg: string, data: object = {}) =>
   console.log(JSON.stringify({ time: new Date().toISOString(), msg, ...data }));
 
-function buildModels(openaiApiKey: string | undefined, useFaux: boolean) {
+function buildModels(openrouterApiKey: string | undefined, useFaux: boolean) {
   if (useFaux) {
     const faux = fauxProvider();
     const models = createModels();
@@ -28,15 +28,15 @@ function buildModels(openaiApiKey: string | undefined, useFaux: boolean) {
     const model = faux.getModel();
     return { models, model: { provider: model.provider, modelId: model.id } };
   }
-  if (!openaiApiKey) throw new Error("OPENAI_API_KEY is required unless MODEL=faux");
-  // openaiProvider() resolves its key lazily from process.env, which takeSecrets has already scrubbed.
+  if (!openrouterApiKey) throw new Error("OPENROUTER_API_KEY is required unless MODEL=faux");
+  // openrouterProvider() resolves its key lazily from process.env, which takeSecrets has already scrubbed.
   const models = createModels({
     authContext: {
-      env: async (name) => (name === "OPENAI_API_KEY" ? openaiApiKey : undefined),
+      env: async (name) => (name === "OPENROUTER_API_KEY" ? openrouterApiKey : undefined),
       fileExists: async () => false,
     },
   });
-  models.setProvider(openaiProvider());
+  models.setProvider(openrouterProvider());
   return { models, model: undefined };
 }
 
@@ -63,7 +63,7 @@ async function main() {
 
   const worktrees = createWorktrees({ dataDir, owner: config.owner, token: (repo) => github.gitToken(repo) });
 
-  const { models, model } = buildModels(secrets.openaiApiKey, useFaux);
+  const { models, model } = buildModels(secrets.openrouterApiKey, useFaux);
   const effectiveConfig: AppConfig = model
     ? { ...config, repos: config.repos.map((repo) => ({ ...repo, model })) }
     : config;
@@ -101,7 +101,7 @@ async function main() {
   const server = serve({ fetch: app.fetch, port, hostname }, (info) =>
     log("listening", {
       port: info.port,
-      model: useFaux ? "faux" : "openai",
+      model: useFaux ? "faux" : "openrouter",
       skills: skills.map((skill) => skill.name),
     }),
   );

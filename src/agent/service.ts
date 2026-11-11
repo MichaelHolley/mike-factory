@@ -93,6 +93,9 @@ export function createIssueService(opts: {
           context,
         );
     if (!conversation) throw new Error(`conversation ${conversationId} for ${key} is missing`);
+    if (conversationId) {
+      await conversation.configure({ model: repoConfig.model, thinkingLevel: repoConfig.thinkingLevel }, context);
+    }
 
     const now = new Date().toISOString();
     await conversation.commit(async (tx) => {

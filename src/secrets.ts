@@ -5,10 +5,15 @@ export interface Secrets {
   appId: string;
   privateKey: string;
   webhookSecret: string;
-  openaiApiKey?: string;
+  openrouterApiKey?: string;
 }
 
-const SCRUBBED = ["GITHUB_PRIVATE_KEY", "GITHUB_PRIVATE_KEY_FILE", "GITHUB_WEBHOOK_SECRET", "OPENAI_API_KEY"] as const;
+const SCRUBBED = [
+  "GITHUB_PRIVATE_KEY",
+  "GITHUB_PRIVATE_KEY_FILE",
+  "GITHUB_WEBHOOK_SECRET",
+  "OPENROUTER_API_KEY",
+] as const;
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
   const value = env[name];
@@ -48,7 +53,7 @@ export function takeSecrets(env: NodeJS.ProcessEnv = process.env): Secrets {
     appId: required(env, "GITHUB_APP_ID"),
     privateKey: readPrivateKey(env),
     webhookSecret: required(env, "GITHUB_WEBHOOK_SECRET"),
-    openaiApiKey: env.OPENAI_API_KEY || undefined,
+    openrouterApiKey: env.OPENROUTER_API_KEY || undefined,
   };
   for (const name of SCRUBBED) delete env[name];
   return secrets;
