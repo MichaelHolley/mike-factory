@@ -67,6 +67,23 @@ describe("issue pipeline", () => {
     expect((await conversation.agent(ctx)).thinkingLevel).toBe("low");
   });
 
+  it("applies the repo's current model when /mike is sent again", async () => {
+    const world = createWorld({ dir });
+    autopilot(world.faux);
+    const { harness, service } = await launch(world);
+
+    await service.start(startAction(1, "comment-1"));
+    await pipelineResult(harness, 1);
+    const conversation = (await harness.conversation((await conversationIdOf(harness, 1))!, ctx))!;
+    expect((await conversation.agent(ctx)).model).toEqual({ provider: "faux", modelId: "faux-1" });
+
+    world.config.repos[0]!.model = { provider: "faux", modelId: "faux-2" };
+    await service.start(startAction(1, "comment-2"));
+    await pipelineResult(harness, 1);
+
+    expect((await conversation.agent(ctx)).model).toEqual({ provider: "faux", modelId: "faux-2" });
+  });
+
   it("turns an issue into exactly one pull request", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux);

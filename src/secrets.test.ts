@@ -14,14 +14,14 @@ describe("takeSecrets", () => {
     process.env.GITHUB_APP_ID = "123";
     process.env.GITHUB_PRIVATE_KEY = pem.replaceAll("\n", "\\n");
     process.env.GITHUB_WEBHOOK_SECRET = "SECRET-WEBHOOK";
-    process.env.OPENAI_API_KEY = "SECRET-OPENAI";
+    process.env.OPENROUTER_API_KEY = "SECRET-OPENROUTER";
 
     const secrets = takeSecrets();
     expect(secrets).toEqual({
       appId: "123",
       privateKey: pem,
       webhookSecret: "SECRET-WEBHOOK",
-      openaiApiKey: "SECRET-OPENAI",
+      openrouterApiKey: "SECRET-OPENROUTER",
     });
 
     let output = "";
@@ -36,7 +36,7 @@ describe("takeSecrets", () => {
     );
     expect(result.ok).toBe(true);
     expect(output).toContain("PATH=");
-    expect(output).not.toMatch(/SECRET|PRIVATE KEY|GITHUB_PRIVATE_KEY|GITHUB_WEBHOOK_SECRET|OPENAI_API_KEY/);
+    expect(output).not.toMatch(/SECRET|PRIVATE KEY|GITHUB_PRIVATE_KEY|GITHUB_WEBHOOK_SECRET|OPENROUTER_API_KEY/);
   });
 
   it("fails fast when a required secret is missing", () => {
