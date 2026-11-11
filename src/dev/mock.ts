@@ -14,6 +14,8 @@ function run(repo: string, issue: number, phase: RunStatus["phase"], extra: Part
     phase,
     attempts: 1,
     costUsd: 0.42,
+    model: "gpt-6.1-sol",
+    thinkingLevel: "high",
     prUrl: null,
     lastError: null,
     startedAt: ago(30),
@@ -85,7 +87,7 @@ const FINISHED: RunStatus["phase"][] = ["done", "failed", "aborted"];
 function createMockService(): IssueService {
   const runs: RunStatus[] = [
     run("mike-factory", 31, "implement", { startedAt: ago(4), updatedAt: ago(0), costUsd: 0.18 }),
-    run("mike-factory", 30, "fix", { attempts: 2, costUsd: 1.07 }),
+    run("mike-factory", 30, "fix", { attempts: 2, costUsd: 1.07, thinkingLevel: "low" }),
     run("web-shop", 12, "queued", { startedAt: null, updatedAt: null, costUsd: 0 }),
     run("web-shop", 9, "done", {
       prUrl: "https://github.com/example/web-shop/pull/14",
@@ -95,6 +97,8 @@ function createMockService(): IssueService {
     }),
     run("mike-factory", 27, "failed", {
       attempts: 3,
+      model: null,
+      thinkingLevel: null,
       lastError: "verify: `pnpm test` failed 3 times (test/agent/crash.test.ts)",
       startedAt: ago(600),
       updatedAt: ago(540),

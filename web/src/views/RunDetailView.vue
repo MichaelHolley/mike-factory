@@ -6,7 +6,7 @@ import MessageComposer from "../components/MessageComposer.vue";
 import PhaseTrack from "../components/PhaseTrack.vue";
 import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
-import { formatCost, formatDate, timeAgo } from "../format.ts";
+import { formatCost, formatDate, formatModel, timeAgo } from "../format.ts";
 
 const route = useRoute();
 const { runs, error, loaded } = useRuns();
@@ -39,6 +39,10 @@ const run = computed(() =>
         <div>
           <dt>Cost</dt>
           <dd class="figure">{{ formatCost(run.costUsd) }}</dd>
+        </div>
+        <div>
+          <dt>Model</dt>
+          <dd>{{ formatModel(run) }}</dd>
         </div>
         <div>
           <dt>Started</dt>
@@ -192,6 +196,9 @@ pre {
   }
   .facts {
     grid-template-columns: 1fr 1fr;
+  }
+  .facts > div:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
   .links {
     grid-template-columns: 1fr;

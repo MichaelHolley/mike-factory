@@ -146,6 +146,8 @@ describe("webhook server", () => {
       phase,
       attempts: 0,
       costUsd: 0,
+      model: null,
+      thinkingLevel: null,
       prUrl: null,
       lastError: null,
       startedAt: null,
