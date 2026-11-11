@@ -9,7 +9,7 @@ const tone = computed(() => toneClass[phaseTone(props.phase)]);
 
 <template>
   <span
-    class="inline-flex items-center gap-[0.4rem] text-sm font-semibold text-(--tone) before:size-2 before:rounded-full before:bg-current"
+    class="inline-flex items-center gap-1.5 text-sm font-semibold text-(--tone) before:size-2 before:rounded-full before:bg-current"
     :class="tone"
     >{{ phase }}</span
   >

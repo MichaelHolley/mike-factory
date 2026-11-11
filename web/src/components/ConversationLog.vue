@@ -59,7 +59,7 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
   <section class="mt-8">
     <header class="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
       <h2 class="text-[1.125rem]">Conversation</h2>
-      <a v-if="loaded && !error" class="text-[0.875rem]" :href="downloadUrl" download>Download JSON</a>
+      <a v-if="loaded && !error" class="text-sm" :href="downloadUrl" download>Download JSON</a>
     </header>
     <p v-if="error && !items.length" class="my-4 text-muted">Couldn't load the conversation: {{ error }}.</p>
     <p v-else-if="loaded && !items.length" class="my-4 text-muted">No messages yet.</p>
@@ -67,19 +67,19 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
       <li
         v-for="(entry, index) in entries"
         :key="index"
-        class="grid grid-cols-[6.5rem_minmax(0,1fr)] items-start first:mt-0 max-[40rem]:grid-cols-[minmax(0,1fr)]"
+        class="grid grid-cols-[6.5rem_minmax(0,1fr)] items-start first:mt-0 max-[40rem]:grid-cols-1"
         :class="startsTurn(index) ? 'mt-7' : 'mt-2'"
       >
         <span
           v-if="startsTurn(index)"
-          class="col-1 pt-1 text-[0.875rem] leading-normal font-semibold max-[40rem]:pt-0 max-[40rem]:pb-1"
+          class="col-1 pt-1 text-sm leading-normal font-semibold max-[40rem]:pt-0 max-[40rem]:pb-1"
           :class="WHO[speaker(entry)]"
           >{{ ROLES[speaker(entry)] }}</span
         >
         <template v-if="entry.kind === 'message'">
           <PipelineMessage v-if="entry.message.kind === 'user'" :text="entry.message.text" :class="SAY" />
           <div v-else :class="[SAY, TEXT[entry.message.kind]]">
-            <MarkdownText :text="entry.message.text" class="leading-[1.6] wrap-anywhere" />
+            <MarkdownText :text="entry.message.text" class="leading-relaxed wrap-anywhere" />
             <span
               v-if="entry.message.kind === 'human' && entry.message.pending"
               class="mt-1 block text-[0.8125rem] text-muted italic"
@@ -97,14 +97,14 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
           <ToolCall v-if="entry.calls.length === 1" :call="entry.calls[0]!" quiet />
           <details v-else class="group/tools">
             <summary
-              class="flex min-h-9 cursor-pointer list-none items-center gap-2.5 px-3 text-[0.875rem] text-muted group-open/tools:text-ink hover:bg-ink/4 hover:text-ink focus-visible:-outline-offset-2 [&::-webkit-details-marker]:hidden"
+              class="flex min-h-9 cursor-pointer list-none items-center gap-2.5 px-3 text-sm text-muted group-open/tools:text-ink hover:bg-ink/4 hover:text-ink focus-visible:-outline-offset-2 [&::-webkit-details-marker]:hidden"
             >
               <span
-                class="mr-0.5 size-1.5 flex-none -rotate-45 border-r-[1.5px] border-b-[1.5px] border-current transition-[rotate] duration-150 ease-[ease] group-open/tools:rotate-45 motion-reduce:transition-none"
+                class="mr-0.5 size-1.5 flex-none -rotate-45 border-r-[1.5px] border-b-[1.5px] border-current transition-transform duration-150 ease-in-out group-open/tools:rotate-45 motion-reduce:transition-none"
                 aria-hidden="true"
               ></span>
               <span class="flex-none font-medium">{{ entry.calls.length }} tools called</span>
-              <code class="min-w-0 truncate text-[0.75rem] text-muted opacity-80">{{ tally(entry.calls) }}</code>
+              <code class="min-w-0 truncate text-xs text-muted opacity-80">{{ tally(entry.calls) }}</code>
               <span class="ml-auto flex flex-none gap-0.5 max-[36rem]:hidden" aria-hidden="true">
                 <span
                   v-for="(call, i) in entry.calls.slice(0, MAX_MARKS)"

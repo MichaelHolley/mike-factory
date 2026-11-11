@@ -23,12 +23,12 @@ const steps = computed(() => pipelineSteps(props.phase));
     <li
       v-for="step in steps"
       :key="step.name"
-      class="flex items-center whitespace-nowrap not-first:flex-auto not-first:before:mx-1 not-first:before:h-0.5 not-first:before:min-w-1.5 not-first:before:flex-auto not-first:before:content-[''] max-[36rem]:not-first:flex-none max-[36rem]:not-first:before:w-2.5 max-[36rem]:not-first:before:flex-none"
+      class="flex items-center whitespace-nowrap not-first:flex-auto not-first:before:mx-1 not-first:before:h-0.5 not-first:before:min-w-1.5 not-first:before:flex-auto max-[36rem]:not-first:flex-none max-[36rem]:not-first:before:w-2.5 max-[36rem]:not-first:before:flex-none"
       :class="step.state === 'pending' ? 'not-first:before:bg-idle' : 'not-first:before:bg-(--tone)'"
       :aria-current="step.state === 'current' ? 'step' : undefined"
     >
       <span
-        class="inline-flex items-center gap-1.5 rounded-[3px] leading-[1.4]"
+        class="inline-flex items-center gap-1.5 rounded-xs leading-snug"
         :class="[
           large ? 'px-2.5 py-1 max-[36rem]:px-1.75 max-[36rem]:py-0.5' : 'px-1.75 py-0.5',
           {

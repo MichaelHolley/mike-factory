@@ -39,7 +39,7 @@ const projects = computed(() => {
 </script>
 
 <template>
-  <h1 class="mb-6 text-[2.25rem]">Runs</h1>
+  <h1 class="mb-6 text-4xl">Runs</h1>
   <p v-if="error" class="mb-6 border-l-3 border-bad bg-surface px-4 py-3 text-bad">
     Couldn't load runs: {{ error }}. Reconnecting…
   </p>
@@ -61,16 +61,16 @@ const projects = computed(() => {
           :to="runPath(run)"
           class="group inline-flex min-w-0 items-baseline gap-2 text-ink no-underline after:absolute after:inset-0 max-[48rem]:col-span-full"
         >
-          <span class="truncate font-semibold group-hover:underline group-hover:underline-offset-[0.2em]">{{
+          <span class="truncate font-semibold group-hover:underline group-hover:underline-offset-3">{{
             run.repo
           }}</span>
-          <span class="font-medium text-muted tabular-nums group-hover:underline group-hover:underline-offset-[0.2em]"
+          <span class="font-medium text-muted tabular-nums group-hover:underline group-hover:underline-offset-3"
             >#{{ run.issue }}</span
           >
         </RouterLink>
         <PhaseBadge :phase="run.phase" />
         <span
-          class="flex gap-4 text-[0.875rem] whitespace-nowrap tabular-nums max-[48rem]:min-w-0 max-[48rem]:flex-wrap max-[48rem]:justify-end max-[48rem]:gap-y-1"
+          class="flex gap-4 text-sm whitespace-nowrap tabular-nums max-[48rem]:min-w-0 max-[48rem]:flex-wrap max-[48rem]:justify-end max-[48rem]:gap-y-1"
         >
           <span v-if="run.attempts > 1">Attempt {{ run.attempts }}</span>
           <span class="text-muted">{{ formatModel(run) }}</span>
@@ -107,7 +107,7 @@ const projects = computed(() => {
             <th
               colspan="7"
               scope="rowgroup"
-              class="border-y border-line bg-ink/3 px-5 py-2 text-left text-[0.875rem] font-semibold max-[48rem]:block"
+              class="border-y border-line bg-ink/3 px-5 py-2 text-left text-sm font-semibold max-[48rem]:block"
             >
               {{ project.repo }} <span class="font-medium text-muted tabular-nums">{{ project.runs.length }}</span>
             </th>
@@ -115,7 +115,7 @@ const projects = computed(() => {
           <tr
             v-for="run in project.runs"
             :key="run.issue"
-            class="relative hover:bg-run/4 nth-[n+3]:border-t nth-[n+3]:border-line max-[48rem]:grid max-[48rem]:grid-cols-[repeat(4,auto)] max-[48rem]:justify-between max-[48rem]:gap-x-4 max-[48rem]:gap-y-3 max-[48rem]:px-5 max-[48rem]:py-4 [&>td]:px-5 [&>td]:py-3 max-[48rem]:[&>td]:p-0 max-[48rem]:[&>td[data-label]]:before:block max-[48rem]:[&>td[data-label]]:before:text-[0.75rem] max-[48rem]:[&>td[data-label]]:before:text-muted max-[48rem]:[&>td[data-label]]:before:content-[attr(data-label)]"
+            class="relative hover:bg-run/4 nth-[n+3]:border-t nth-[n+3]:border-line max-[48rem]:grid max-[48rem]:grid-cols-[repeat(4,auto)] max-[48rem]:justify-between max-[48rem]:gap-x-4 max-[48rem]:gap-y-3 max-[48rem]:px-5 max-[48rem]:py-4 [&>td]:px-5 [&>td]:py-3 max-[48rem]:[&>td]:p-0 max-[48rem]:[&>td[data-label]]:before:block max-[48rem]:[&>td[data-label]]:before:text-xs max-[48rem]:[&>td[data-label]]:before:text-muted max-[48rem]:[&>td[data-label]]:before:content-[attr(data-label)]"
           >
             <td class="max-[48rem]:col-span-full">
               <RouterLink
@@ -123,8 +123,7 @@ const projects = computed(() => {
                 class="group text-ink no-underline after:absolute after:inset-0"
                 :aria-label="`${run.repo} #${run.issue}`"
               >
-                <span
-                  class="font-semibold text-ink tabular-nums group-hover:underline group-hover:underline-offset-[0.2em]"
+                <span class="font-semibold text-ink tabular-nums group-hover:underline group-hover:underline-offset-3"
                   >#{{ run.issue }}</span
                 >
               </RouterLink>

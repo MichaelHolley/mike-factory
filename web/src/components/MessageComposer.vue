@@ -40,7 +40,7 @@ async function send() {
 
 <template>
   <form class="mt-4 grid gap-2 rounded-md border border-line bg-surface px-5 py-4" @submit.prevent="send">
-    <label for="message" class="text-[0.875rem] font-semibold text-muted">
+    <label for="message" class="text-sm font-semibold text-muted">
       {{ finished ? "Continue this run with a follow-up" : "Steer the agent while it works" }}
     </label>
     <textarea
@@ -55,7 +55,7 @@ async function send() {
       @keydown.enter.ctrl.prevent="send"
     ></textarea>
     <div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
-      <p v-if="error" class="mr-auto text-[0.875rem] text-bad wrap-anywhere" role="alert">Couldn't send: {{ error }}</p>
+      <p v-if="error" class="mr-auto text-sm text-bad wrap-anywhere" role="alert">Couldn't send: {{ error }}</p>
       <span class="text-[0.8125rem] text-muted">⌘/Ctrl + Enter</span>
       <button
         type="submit"

@@ -23,7 +23,7 @@ watch(() => props.text, measure, { flush: "post" });
   <div class="rounded-md border border-line bg-surface">
     <div
       ref="body"
-      class="px-5 py-3.5 font-mono text-[0.8125rem] leading-[1.65] wrap-anywhere text-[color-mix(in_srgb,var(--color-ink)_82%,var(--color-muted))]"
+      class="px-5 py-3.5 font-mono text-[0.8125rem] leading-relaxed wrap-anywhere text-[color-mix(in_srgb,var(--color-ink)_82%,var(--color-muted))]"
       :class="
         expanded
           ? 'max-h-160 overflow-auto'
@@ -35,7 +35,7 @@ watch(() => props.text, measure, { flush: "post" });
     <button
       v-if="clipped"
       type="button"
-      class="block w-full cursor-pointer rounded-b-md border-t border-line px-5 py-2 text-left text-[0.875rem] font-medium text-muted hover:bg-ink/4 hover:text-ink"
+      class="block w-full cursor-pointer rounded-b-md border-t border-line px-5 py-2 text-left text-sm font-medium text-muted hover:bg-ink/4 hover:text-ink"
       :aria-expanded="expanded"
       @click="expanded = !expanded"
     >

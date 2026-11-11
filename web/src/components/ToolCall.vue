@@ -7,7 +7,7 @@ defineProps<{ call: Extract<TranscriptItem, { kind: "tool" }>; quiet?: boolean }
 <template>
   <details class="group/call">
     <summary
-      class="flex min-h-9 cursor-pointer list-none items-center gap-2.5 px-3 text-[0.875rem] hover:bg-ink/4 focus-visible:-outline-offset-2 [&::-webkit-details-marker]:hidden"
+      class="flex min-h-9 cursor-pointer list-none items-center gap-2.5 px-3 text-sm hover:bg-ink/4 focus-visible:-outline-offset-2 [&::-webkit-details-marker]:hidden"
     >
       <span
         class="h-3 w-0.75 flex-none rounded-[1px]"
@@ -26,12 +26,12 @@ defineProps<{ call: Extract<TranscriptItem, { kind: "tool" }>; quiet?: boolean }
     <div class="pt-1 pr-3 pb-3 pl-[calc(0.75rem+3px+0.625rem)]">
       <h3 class="mt-3 mb-1.5 text-[0.8125rem] font-semibold text-muted">Input</h3>
       <pre
-        class="max-h-96 overflow-auto rounded-sm bg-bg px-3.5 py-2.5 leading-[1.6] wrap-anywhere whitespace-pre-wrap"
+        class="max-h-96 overflow-auto rounded-sm bg-bg px-3.5 py-2.5 leading-relaxed wrap-anywhere whitespace-pre-wrap"
         >{{ call.args }}</pre>
       <template v-if="call.result">
         <h3 class="mt-3 mb-1.5 text-[0.8125rem] font-semibold text-muted">Output</h3>
         <pre
-          class="max-h-96 overflow-auto rounded-sm bg-bg px-3.5 py-2.5 leading-[1.6] wrap-anywhere whitespace-pre-wrap"
+          class="max-h-96 overflow-auto rounded-sm bg-bg px-3.5 py-2.5 leading-relaxed wrap-anywhere whitespace-pre-wrap"
           >{{ call.result.text || "(empty)" }}</pre>
       </template>
     </div>
