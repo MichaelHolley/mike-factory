@@ -1,5 +1,6 @@
 import type { Context } from "@earendil-works/chord";
 import {
+  AgentDoc,
   InboxDoc,
   type ConversationId,
   type Cursor,
@@ -185,7 +186,10 @@ export function createIssueService(opts: {
       do {
         const page = await storage.scanConversations({}, 100, cursor, context);
         for (const { id } of page.items) {
-          const state = await harness.snapshot(IssueState, id as ConversationId, context);
+          const [state, agent] = await Promise.all([
+            harness.snapshot(IssueState, id as ConversationId, context),
+            harness.snapshot(AgentDoc, id as ConversationId, context),
+          ]);
           if (!state?.repo) continue;
           states.push({
             repo: state.repo,
@@ -195,6 +199,8 @@ export function createIssueService(opts: {
             phase: state.phase,
             attempts: state.attempts,
             costUsd: state.costUsd,
+            model: agent?.model?.modelId ?? null,
+            thinkingLevel: agent?.thinkingLevel ?? null,
             prUrl: state.prUrl,
             lastError: state.lastError,
             startedAt: state.startedAt ?? null,

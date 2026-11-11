@@ -206,6 +206,8 @@ describe("issue pipeline", () => {
       phase: "done",
       attempts: 0,
       costUsd: done!.costUsd,
+      model: "faux-1",
+      thinkingLevel: "high",
       prUrl: world.github.prs[0]!.url,
       lastError: null,
       startedAt: done!.startedAt,

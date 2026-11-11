@@ -1,3 +1,10 @@
+import type { RunStatus } from "../../src/runStatus.ts";
+
+export function formatModel(run: Pick<RunStatus, "model" | "thinkingLevel">): string {
+  if (!run.model) return "-";
+  return run.thinkingLevel ? `${run.model} · ${run.thinkingLevel}` : run.model;
+}
+
 export function timeAgo(iso: string | null, now = Date.now()): string {
   if (!iso) return "-";
   const seconds = Math.max(0, Math.round((now - Date.parse(iso)) / 1000));

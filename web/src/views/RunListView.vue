@@ -5,7 +5,7 @@ import type { RunStatus } from "../../../src/runStatus.ts";
 import PhaseBadge from "../components/PhaseBadge.vue";
 import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
-import { formatCost, timeAgo } from "../format.ts";
+import { formatCost, formatModel, timeAgo } from "../format.ts";
 
 const FINISHED: readonly RunStatus["phase"][] = ["done", "failed", "aborted"];
 
@@ -59,6 +59,7 @@ const projects = computed(() => {
         <PhaseBadge :phase="run.phase" />
         <span class="meta">
           <span v-if="run.attempts > 1">Attempt {{ run.attempts }}</span>
+          <span class="muted">{{ formatModel(run) }}</span>
           <span>{{ formatCost(run.costUsd) }}</span>
           <span class="muted">{{ timeAgo(run.updatedAt, now) }}</span>
         </span>
@@ -74,6 +75,7 @@ const projects = computed(() => {
           <tr>
             <th>Issue</th>
             <th>Outcome</th>
+            <th>Model</th>
             <th class="num">Attempts</th>
             <th class="num">Cost</th>
             <th>Pull request</th>
@@ -82,7 +84,7 @@ const projects = computed(() => {
         </thead>
         <tbody v-for="project in projects" :key="project.repo">
           <tr class="project">
-            <th colspan="6" scope="rowgroup">
+            <th colspan="7" scope="rowgroup">
               {{ project.repo }} <span class="count">{{ project.runs.length }}</span>
             </th>
           </tr>
@@ -95,6 +97,7 @@ const projects = computed(() => {
             <td class="status">
               <PhaseBadge :phase="run.phase" />
             </td>
+            <td data-label="Model">{{ formatModel(run) }}</td>
             <td class="num" data-label="Attempts">{{ run.attempts }}</td>
             <td class="num" data-label="Cost">{{ formatCost(run.costUsd) }}</td>
             <td data-label="Pull request">
@@ -256,6 +259,12 @@ td.run a:hover .issue {
   .name {
     grid-column: 1 / -1;
   }
+  .meta {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.25rem 1rem;
+    min-width: 0;
+  }
   thead {
     display: none;
   }
@@ -286,7 +295,8 @@ td.run a:hover .issue {
     padding: 0;
   }
   td.run,
-  .status {
+  .status,
+  td[data-label="Model"] {
     grid-column: 1 / -1;
   }
   td[data-label]::before {

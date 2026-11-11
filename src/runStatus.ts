@@ -24,6 +24,8 @@ export type RunStatus = {
   phase: IssuePhase;
   attempts: number;
   costUsd: number;
+  model: string | null;
+  thinkingLevel: string | null;
   prUrl: string | null;
   lastError: string | null;
   startedAt: string | null;
