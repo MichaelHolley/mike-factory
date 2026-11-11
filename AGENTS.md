@@ -30,9 +30,10 @@ Self-hosted agent that turns a `/mike` comment on a GitHub issue into a pull req
 
 ## Documentation
 
-- Documentation must be kept short and concise.
-- Do not bloat a docs file content.
-- When a change affects behavior, setup, config, or commands, update `README.md` and `docs/` in the same change.
+- `README.md` is a landing page for first-time visitors: what mike-factory is, how to use it, and how it works at a glance.
+- `docs/setup.md` is setup instructions: the steps and settings an operator needs to run it.
+- Document what a reader needs, and leave implementation details, API shapes, UI behavior and change history to the code and git log.
+- When a change affects usage, setup, config or commands, update these docs in the same change; keep each edit a line or two.
 
 ## Commit
 
