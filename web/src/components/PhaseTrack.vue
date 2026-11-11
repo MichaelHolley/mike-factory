@@ -35,7 +35,7 @@ const steps = computed(() => pipelineSteps(props.phase));
             'font-medium text-muted': step.state === 'pending',
             'font-medium text-ink': step.state === 'passed',
             'bg-(--tone) font-semibold text-white dark:text-bg': step.state === 'current',
-            'before:size-1.5 before:animate-pulse-dot before:rounded-full before:bg-current before:content-[\'\'] motion-reduce:before:animate-none':
+            'before:size-1.5 before:animate-pulse-dot before:rounded-full before:bg-current motion-reduce:before:animate-none':
               tone === 'run' && step.state === 'current',
           },
         ]"
