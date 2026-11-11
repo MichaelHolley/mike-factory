@@ -6,7 +6,8 @@ import MessageComposer from "../components/MessageComposer.vue";
 import PhaseTrack from "../components/PhaseTrack.vue";
 import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
-import { formatCost, formatDate, formatModel, timeAgo } from "../format.ts";
+import { formatCost, formatDuration, formatModel, formatTime, timeAgo } from "../format.ts";
+import { isFinished } from "../phase.ts";
 
 const route = useRoute();
 const { runs, error, loaded } = useRuns();
@@ -15,6 +16,13 @@ const now = useNow();
 const run = computed(() =>
   runs.value.find((r) => r.repo === route.params.repo && String(r.issue) === route.params.issue),
 );
+const finished = computed(() => !!run.value && isFinished(run.value.phase));
+const duration = computed(() => {
+  const { startedAt, updatedAt } = run.value ?? {};
+  if (!startedAt) return null;
+  const end = finished.value && updatedAt ? Date.parse(updatedAt) : now.value;
+  return formatDuration(end - Date.parse(startedAt));
+});
 </script>
 
 <template>
@@ -31,44 +39,76 @@ const run = computed(() =>
     <PhaseTrack :phase="run.phase" large class="track" />
 
     <div class="panel">
-      <dl class="facts">
-        <div>
-          <dt>Attempts</dt>
-          <dd class="figure">{{ run.attempts }}</dd>
-        </div>
-        <div>
-          <dt>Cost</dt>
-          <dd class="figure">{{ formatCost(run.costUsd) }}</dd>
-        </div>
+      <dl>
         <div>
           <dt>Model</dt>
           <dd>{{ formatModel(run) }}</dd>
         </div>
         <div>
-          <dt>Started</dt>
-          <dd class="timestamp">{{ formatDate(run.startedAt) }}</dd>
+          <dt>Attempts</dt>
+          <dd>{{ run.attempts }}</dd>
         </div>
         <div>
-          <dt>Updated</dt>
-          <dd class="timestamp">
-            {{ formatDate(run.updatedAt) }} <span class="muted">({{ timeAgo(run.updatedAt, now) }})</span>
-          </dd>
+          <dt>Cost</dt>
+          <dd>{{ formatCost(run.costUsd) }}</dd>
         </div>
       </dl>
-      <dl class="links">
-        <dt>Issue</dt>
-        <dd>
-          <a :href="run.issueUrl" target="_blank" rel="noopener">{{ run.issueUrl }}</a>
-        </dd>
-        <dt>Pull request</dt>
-        <dd>
-          <a v-if="run.prUrl" :href="run.prUrl" target="_blank" rel="noopener">{{ run.prUrl }}</a>
-          <span v-else class="muted">None</span>
-        </dd>
-        <dt>Branch</dt>
-        <dd>
-          <code>{{ run.branch }}</code>
-        </dd>
+      <dl>
+        <template v-if="run.startedAt">
+          <div>
+            <dt>Started</dt>
+            <dd>
+              <time :datetime="run.startedAt" :title="new Date(run.startedAt).toLocaleString()">
+                {{ formatTime(run.startedAt, now) }}
+              </time>
+            </dd>
+          </div>
+          <div v-if="finished && run.updatedAt">
+            <dt>Ended</dt>
+            <dd>
+              <time :datetime="run.updatedAt" :title="new Date(run.updatedAt).toLocaleString()">
+                {{ formatTime(run.updatedAt, now) }}
+              </time>
+            </dd>
+          </div>
+          <div v-else>
+            <dt>Last activity</dt>
+            <dd :title="run.updatedAt ? new Date(run.updatedAt).toLocaleString() : undefined">
+              {{ timeAgo(run.updatedAt, now) }}
+            </dd>
+          </div>
+          <div>
+            <dt>{{ finished ? "Took" : "Running for" }}</dt>
+            <dd>{{ duration }}</dd>
+          </div>
+        </template>
+        <div v-else>
+          <dt>Started</dt>
+          <dd class="muted">Waiting in the queue</dd>
+        </div>
+      </dl>
+      <dl>
+        <div>
+          <dt>Issue</dt>
+          <dd>
+            <a :href="run.issueUrl" :title="run.issueUrl" target="_blank" rel="noopener">#{{ run.issue }}</a>
+          </dd>
+        </div>
+        <div>
+          <dt>Pull request</dt>
+          <dd>
+            <a v-if="run.prUrl" :href="run.prUrl" :title="run.prUrl" target="_blank" rel="noopener">
+              #{{ run.prUrl.split("/").pop() }}
+            </a>
+            <span v-else class="muted">Not opened yet</span>
+          </dd>
+        </div>
+        <div>
+          <dt>Branch</dt>
+          <dd>
+            <code>{{ run.branch }}</code>
+          </dd>
+        </div>
       </dl>
     </div>
 
@@ -123,53 +163,40 @@ h1 {
   margin-bottom: 2rem;
 }
 .panel {
-  background: var(--surface);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  background: var(--line);
   border: 1px solid var(--line);
   border-radius: 6px;
 }
 dl {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  align-content: start;
+  gap: 0.5rem 1rem;
   margin: 0;
+  padding: 1.125rem 1.25rem;
+  background: var(--surface);
+}
+dl > div {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
 }
 dt {
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--muted);
 }
 dd {
   margin: 0;
+  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
-.facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1px;
-  overflow-x: auto;
-  border-bottom: 1px solid var(--line);
-  border-radius: 5px 5px 0 0;
-  background: var(--line);
-}
-.facts > div {
-  flex: 1 1 auto;
-  padding: 1rem 1.25rem;
-  background: var(--surface);
-}
-.timestamp {
+time {
   white-space: nowrap;
-}
-.figure {
-  font-family: var(--font-head);
-  font-size: 1.5rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.links {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  align-items: baseline;
-  gap: 0.625rem 2rem;
-  padding: 1.25rem;
-}
-.links dt {
-  font-size: 0.875rem;
 }
 .error {
   margin-top: 2rem;
@@ -190,13 +217,9 @@ pre {
   border-left: 3px solid var(--bad);
   border-radius: 0 6px 6px 0;
 }
-@media (max-width: 40rem) {
-  .links {
-    grid-template-columns: 1fr;
-    gap: 0;
-  }
-  .links dd {
-    margin-bottom: 0.75rem;
+@media (max-width: 52rem) {
+  .panel {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>
