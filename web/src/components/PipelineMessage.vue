@@ -20,56 +20,22 @@ watch(() => props.text, measure, { flush: "post" });
 </script>
 
 <template>
-  <div class="ticket" :class="{ collapsed: !expanded, clipped }">
-    <div ref="body" class="text"><MarkdownText :text="text" /></div>
-    <button v-if="clipped" type="button" :aria-expanded="expanded" @click="expanded = !expanded">
+  <div class="rounded-md border border-line bg-surface">
+    <div
+      ref="body"
+      class="px-5 py-3.5 font-mono text-sm leading-relaxed wrap-anywhere text-ink/80"
+      :class="expanded ? 'max-h-160 overflow-auto' : ['max-h-42 overflow-hidden', clipped && 'mask-b-from-60%']"
+    >
+      <MarkdownText :text="text" />
+    </div>
+    <button
+      v-if="clipped"
+      type="button"
+      class="block w-full cursor-pointer rounded-b-md border-t border-line px-5 py-2 text-left text-sm font-medium text-muted hover:bg-ink/4 hover:text-ink"
+      :aria-expanded="expanded"
+      @click="expanded = !expanded"
+    >
       {{ expanded ? "Show less" : "Show full prompt" }}
     </button>
   </div>
 </template>
-
-<style scoped>
-.ticket {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-.text {
-  padding: 0.875rem 1.25rem;
-  font-family: var(--font-code);
-  font-size: 0.8125rem;
-  line-height: 1.65;
-  overflow-wrap: anywhere;
-  color: color-mix(in srgb, var(--ink) 82%, var(--muted));
-}
-.collapsed .text {
-  max-height: 10.5rem;
-  overflow: hidden;
-}
-.collapsed.clipped .text {
-  mask-image: linear-gradient(to bottom, #000 60%, transparent);
-}
-.ticket:not(.collapsed) .text {
-  max-height: 40rem;
-  overflow: auto;
-}
-button {
-  display: block;
-  width: 100%;
-  padding: 0.5rem 1.25rem;
-  border: 0;
-  border-top: 1px solid var(--line);
-  border-radius: 0 0 6px 6px;
-  background: none;
-  font: inherit;
-  font-size: 0.875rem;
-  font-weight: 500;
-  text-align: left;
-  color: var(--muted);
-  cursor: pointer;
-}
-button:hover {
-  color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-}
-</style>

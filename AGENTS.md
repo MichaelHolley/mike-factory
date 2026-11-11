@@ -19,6 +19,7 @@ Self-hosted agent that turns a `/mike` comment on a GitHub issue into a pull req
 - Every pipeline phase must be safe to rerun from its top after a crash; `test/agent/crash.test.ts` checks this.
 - Secrets never reach `process.env` or tool shells; see `src/secrets.ts`.
 - Only pipeline code pushes, opens PRs or comments on GitHub. The agent only edits and commits locally.
+- Style the web UI with Tailwind utilities and the theme tokens in `web/src/style.css`, not custom CSS. Avoid arbitrary values like `w-[6px]` or `max-[48rem]:`; use the nearest scale class or breakpoint, even if it isn't pixel-identical.
 
 ## Tests
 

@@ -16,87 +16,64 @@ const html = computed(() => md.render(props.text));
 </script>
 
 <template>
-  <div class="md" v-html="html"></div>
+  <div class="md wrap-anywhere" v-html="html"></div>
 </template>
 
 <style scoped>
-.md {
-  overflow-wrap: anywhere;
-}
+@reference "../style.css";
+
 .md :deep(> :first-child) {
   margin-top: 0;
 }
 .md :deep(> :last-child) {
   margin-bottom: 0;
 }
-.md :deep(p),
-.md :deep(ul),
-.md :deep(ol),
-.md :deep(pre),
-.md :deep(blockquote),
-.md :deep(table) {
-  margin: 0.5em 0;
+.md :deep(:is(p, ul, ol, pre, blockquote, table)) {
+  @apply my-2;
 }
-.md :deep(h1),
-.md :deep(h2),
-.md :deep(h3),
-.md :deep(h4),
-.md :deep(h5),
-.md :deep(h6) {
-  margin: 1em 0 0.25em;
-  font-size: 1em;
-  font-weight: 700;
-  line-height: inherit;
+.md :deep(:is(h1, h2, h3, h4, h5, h6)) {
+  @apply mt-4 mb-1 leading-normal font-bold;
 }
-.md :deep(ul),
+.md :deep(:is(ul, ol)) {
+  @apply pl-6;
+}
+.md :deep(ul) {
+  @apply list-disc;
+}
 .md :deep(ol) {
-  padding-left: 1.5em;
+  @apply list-decimal;
 }
-.md :deep(li > ul),
-.md :deep(li > ol) {
-  margin: 0;
+.md :deep(:is(li > ul, li > ol)) {
+  @apply m-0;
+}
+.md :deep(li > ul) {
+  list-style-type: circle;
+}
+.md :deep(li li > ul) {
+  list-style-type: square;
 }
 .md :deep(code) {
-  padding: 0.1em 0.35em;
-  border-radius: 4px;
-  font-size: 0.9em;
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  @apply rounded-sm bg-ink/8 px-1 py-0.5;
 }
 .md :deep(pre) {
-  padding: 0.625rem 0.875rem;
-  overflow-x: auto;
-  border-radius: 4px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  line-height: 1.5;
+  @apply overflow-x-auto rounded-sm border border-line bg-bg px-3.5 py-2.5 leading-normal;
 }
 .md :deep(pre code) {
-  padding: 0;
-  background: none;
-  font-size: inherit;
+  @apply bg-transparent p-0;
 }
 .md :deep(blockquote) {
-  padding-left: 0.875em;
-  border-left: 3px solid var(--line);
-  color: var(--muted);
+  @apply border-l-3 border-line pl-3.5 text-muted;
 }
 .md :deep(table) {
-  display: block;
-  max-width: 100%;
-  overflow-x: auto;
-  border-collapse: collapse;
+  @apply block max-w-full overflow-x-auto;
 }
-.md :deep(th),
-.md :deep(td) {
-  padding: 0.25em 0.625em;
-  border: 1px solid var(--line);
+.md :deep(:is(th, td)) {
+  @apply border border-line px-2.5 py-1;
 }
 .md :deep(hr) {
-  border: 0;
-  border-top: 1px solid var(--line);
-  margin: 1em 0;
+  @apply my-4 border-0 border-t border-line;
 }
-.md :deep(a) {
-  color: var(--run);
+.md :deep(img) {
+  display: inline;
 }
 </style>

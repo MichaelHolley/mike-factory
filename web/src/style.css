@@ -1,91 +1,74 @@
-:root {
-  color-scheme: light dark;
-  --bg: #edf0f3;
-  --surface: #ffffff;
-  --ink: #18212b;
-  --muted: #5d6a78;
-  --line: #d7dde3;
-  --chrome: #18212b;
-  --chrome-ink: #e9edf1;
-  --run: #2f4dd8;
-  --ok: #1e8556;
-  --bad: #c2362e;
-  --halt: #6e6a86;
-  --you: #0e7490;
-  --idle: #c3cbd3;
+@import "tailwindcss";
 
-  --font-ui: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --font-head: var(--font-ui);
-  --font-code: "IBM Plex Mono", ui-monospace, monospace;
+@theme {
+  --color-bg: #edf0f3;
+  --color-surface: #ffffff;
+  --color-ink: #18212b;
+  --color-muted: #5d6a78;
+  --color-line: #d7dde3;
+  --color-chrome: #18212b;
+  --color-chrome-ink: #e9edf1;
+  --color-run: #2f4dd8;
+  --color-ok: #1e8556;
+  --color-bad: #c2362e;
+  --color-halt: #6e6a86;
+  --color-you: #0e7490;
+  --color-idle: #c3cbd3;
 
-  font-family: var(--font-ui);
-  font-size: 100%;
-  line-height: 1.5;
-  color: var(--ink);
-  background: var(--bg);
-  -webkit-font-smoothing: antialiased;
+  --font-sans: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --animate-pulse-dot: pulse-dot 1.4s ease-in-out infinite;
+  @keyframes pulse-dot {
+    50% {
+      opacity: 0.3;
+    }
+  }
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #14181e;
-    --surface: #1c2129;
-    --ink: #e6eaee;
-    --muted: #94a0ad;
-    --line: #2c333d;
-    --chrome: #0e1216;
-    --run: #8195ff;
-    --ok: #4cc28a;
-    --bad: #f0706a;
-    --halt: #a9a3c9;
-    --you: #5cc8d8;
-    --idle: #38414c;
+    --color-bg: #14181e;
+    --color-surface: #1c2129;
+    --color-ink: #e6eaee;
+    --color-muted: #94a0ad;
+    --color-line: #2c333d;
+    --color-chrome: #0e1216;
+    --color-run: #8195ff;
+    --color-ok: #4cc28a;
+    --color-bad: #f0706a;
+    --color-halt: #a9a3c9;
+    --color-you: #5cc8d8;
+    --color-idle: #38414c;
   }
 }
 
-body {
-  margin: 0;
-  min-height: 100vh;
-}
+@layer base {
+  :root {
+    color-scheme: light dark;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
 
-h1,
-h2 {
-  margin: 0;
-  font-family: var(--font-head);
-  font-weight: 600;
-  line-height: 1.15;
-}
+  body {
+    @apply min-h-screen bg-bg font-sans text-ink;
+  }
 
-a {
-  color: var(--run);
-  text-underline-offset: 0.2em;
-  text-decoration-thickness: 1px;
-}
+  h1,
+  h2 {
+    @apply leading-tight font-semibold;
+  }
 
-a:hover {
-  text-decoration-thickness: 2px;
-}
+  a {
+    @apply text-run underline decoration-1 underline-offset-3 hover:decoration-2;
+  }
 
-:focus-visible {
-  outline: 2px solid var(--run);
-  outline-offset: 2px;
-  border-radius: 2px;
-}
+  :focus-visible {
+    @apply rounded-xs outline-2 outline-offset-2 outline-run;
+  }
 
-code,
-pre {
-  font-family: var(--font-code);
-  font-size: 0.8125rem;
-}
-
-.muted {
-  color: var(--muted);
-}
-
-.notice {
-  margin: 0 0 1.5rem;
-  padding: 0.75rem 1rem;
-  border-left: 3px solid var(--bad);
-  background: var(--surface);
-  color: var(--bad);
+  code,
+  pre {
+    @apply font-mono text-sm;
+  }
 }

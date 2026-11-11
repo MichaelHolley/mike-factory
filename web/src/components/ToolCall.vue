@@ -1,101 +1,39 @@
 <script setup lang="ts">
 import type { TranscriptItem } from "../../../src/runStatus.ts";
 
-defineProps<{ call: Extract<TranscriptItem, { kind: "tool" }> }>();
+defineProps<{ call: Extract<TranscriptItem, { kind: "tool" }>; quiet?: boolean }>();
 </script>
 
 <template>
-  <details class="call" :class="call.result ? (call.result.isError ? 'failed' : 'done') : 'pending'">
-    <summary>
-      <span class="mark" aria-hidden="true"></span>
-      <code class="name">{{ call.name }}</code>
-      <code v-if="call.summary" class="summary">{{ call.summary }}</code>
-      <span v-if="call.result?.isError" class="flag">failed</span>
-      <span v-else-if="!call.result" class="flag">no result yet</span>
+  <details class="group/call">
+    <summary
+      class="flex min-h-9 cursor-pointer list-none items-center gap-2.5 px-3 text-sm hover:bg-ink/4 focus-visible:-outline-offset-2 marker:hidden"
+    >
+      <span
+        class="h-3 w-0.75 flex-none rounded-full"
+        :class="call.result ? (call.result.isError ? 'bg-bad' : 'bg-muted/55') : 'bg-run'"
+        aria-hidden="true"
+      ></span>
+      <code
+        class="flex-none font-medium"
+        :class="quiet && 'text-muted group-open/call:text-ink group-hover/call:text-ink'"
+        >{{ call.name }}</code
+      >
+      <code v-if="call.summary" class="min-w-0 truncate text-muted">{{ call.summary }}</code>
+      <span v-if="call.result?.isError" class="ml-auto flex-none text-xs font-semibold text-bad">failed</span>
+      <span v-else-if="!call.result" class="ml-auto flex-none text-xs font-semibold text-run">no result yet</span>
     </summary>
-    <div class="body">
-      <h3>Input</h3>
-      <pre>{{ call.args }}</pre>
+    <div class="pt-1 pr-3 pb-3 pl-6.25">
+      <h3 class="mt-3 mb-1.5 text-xs font-semibold text-muted">Input</h3>
+      <pre
+        class="max-h-96 overflow-auto rounded-sm bg-bg px-3.5 py-2.5 leading-relaxed wrap-anywhere whitespace-pre-wrap"
+        >{{ call.args }}</pre>
       <template v-if="call.result">
-        <h3>Output</h3>
-        <pre>{{ call.result.text || "(empty)" }}</pre>
+        <h3 class="mt-3 mb-1.5 text-xs font-semibold text-muted">Output</h3>
+        <pre
+          class="max-h-96 overflow-auto rounded-sm bg-bg px-3.5 py-2.5 leading-relaxed wrap-anywhere whitespace-pre-wrap"
+          >{{ call.result.text || "(empty)" }}</pre>
       </template>
     </div>
   </details>
 </template>
-
-<style scoped>
-.call {
-  --tone: color-mix(in srgb, var(--muted) 55%, transparent);
-}
-.failed {
-  --tone: var(--bad);
-}
-.pending {
-  --tone: var(--run);
-}
-summary {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  min-height: 2.25rem;
-  padding: 0 0.75rem;
-  font-size: 0.875rem;
-  cursor: pointer;
-  list-style: none;
-}
-summary:focus-visible {
-  outline-offset: -2px;
-}
-summary::-webkit-details-marker {
-  display: none;
-}
-summary:hover {
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-}
-.mark {
-  flex: none;
-  width: 3px;
-  height: 0.75rem;
-  border-radius: 1px;
-  background: var(--tone);
-}
-.name {
-  flex: none;
-  font-weight: 500;
-}
-.summary {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted);
-}
-.flag {
-  flex: none;
-  margin-left: auto;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--tone);
-}
-.body {
-  padding: 0.25rem 0.75rem 0.75rem calc(0.75rem + 3px + 0.625rem);
-}
-h3 {
-  margin: 0.75rem 0 0.375rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--muted);
-}
-pre {
-  margin: 0;
-  padding: 0.625rem 0.875rem;
-  max-height: 24rem;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  line-height: 1.6;
-  background: var(--bg);
-  border-radius: 4px;
-}
-</style>

@@ -6,6 +6,14 @@ export type StepState = "passed" | "current" | "pending";
 const FLOW = ["queued", "prepare", "implement", "verify", "fix", "revise", "publish", "report"] as const;
 const OUTCOMES: readonly IssuePhase[] = ["done", "failed", "aborted"];
 
+export const toneClass: Record<PhaseTone, { text: string; bg: string }> = {
+  idle: { text: "text-muted", bg: "bg-muted" },
+  run: { text: "text-run", bg: "bg-run" },
+  ok: { text: "text-ok", bg: "bg-ok" },
+  bad: { text: "text-bad", bg: "bg-bad" },
+  halt: { text: "text-halt", bg: "bg-halt" },
+};
+
 export function isFinished(phase: IssuePhase): boolean {
   return OUTCOMES.includes(phase);
 }

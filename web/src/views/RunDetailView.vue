@@ -26,19 +26,25 @@ const duration = computed(() => {
 </script>
 
 <template>
-  <RouterLink to="/" class="back">All runs</RouterLink>
-  <p v-if="error" class="notice">Couldn't load runs: {{ error }}. Reconnecting…</p>
+  <RouterLink to="/" class="mb-5 inline-flex gap-1 text-sm font-medium text-muted no-underline hover:text-ink"
+    ><span aria-hidden="true">←</span>All runs</RouterLink
+  >
+  <p v-if="error" class="mb-6 border-l-3 border-bad bg-surface px-4 py-3 text-bad">
+    Couldn't load runs: {{ error }}. Reconnecting…
+  </p>
   <template v-if="run">
-    <header class="head">
-      <h1>
+    <header class="mb-7 flex flex-wrap items-baseline gap-x-4 gap-y-2">
+      <h1 class="flex flex-wrap gap-x-2.5 text-3xl sm:text-4xl lg:text-5xl wrap-anywhere">
         <span>{{ run.repo }}</span>
-        <span class="issue">#{{ run.issue }}</span>
+        <span class="font-medium text-muted tabular-nums">#{{ run.issue }}</span>
       </h1>
     </header>
 
-    <PhaseTrack :phase="run.phase" large class="track" />
+    <PhaseTrack :phase="run.phase" large class="mb-8" />
 
-    <div class="panel">
+    <div
+      class="grid grid-cols-3 gap-px overflow-hidden rounded-md border border-line bg-line max-lg:grid-cols-1 *:grid *:grid-cols-[7rem_minmax(0,1fr)] *:content-start *:gap-x-4 *:gap-y-2 *:bg-surface *:px-5 *:py-4.5 [&_dl>div]:col-span-full [&_dl>div]:grid [&_dl>div]:grid-cols-subgrid [&_dl>div]:items-baseline [&_dt]:text-sm [&_dt]:text-muted [&_dd]:tabular-nums [&_dd]:wrap-anywhere"
+    >
       <dl>
         <div>
           <dt>Model</dt>
@@ -58,7 +64,11 @@ const duration = computed(() => {
           <div>
             <dt>Started</dt>
             <dd>
-              <time :datetime="run.startedAt" :title="new Date(run.startedAt).toLocaleString()">
+              <time
+                class="whitespace-nowrap"
+                :datetime="run.startedAt"
+                :title="new Date(run.startedAt).toLocaleString()"
+              >
                 {{ formatTime(run.startedAt, now) }}
               </time>
             </dd>
@@ -66,7 +76,11 @@ const duration = computed(() => {
           <div v-if="finished && run.updatedAt">
             <dt>Ended</dt>
             <dd>
-              <time :datetime="run.updatedAt" :title="new Date(run.updatedAt).toLocaleString()">
+              <time
+                class="whitespace-nowrap"
+                :datetime="run.updatedAt"
+                :title="new Date(run.updatedAt).toLocaleString()"
+              >
                 {{ formatTime(run.updatedAt, now) }}
               </time>
             </dd>
@@ -84,7 +98,7 @@ const duration = computed(() => {
         </template>
         <div v-else>
           <dt>Started</dt>
-          <dd class="muted">Waiting in the queue</dd>
+          <dd class="text-muted">Waiting in the queue</dd>
         </div>
       </dl>
       <dl>
@@ -100,7 +114,7 @@ const duration = computed(() => {
             <a v-if="run.prUrl" :href="run.prUrl" :title="run.prUrl" target="_blank" rel="noopener">
               #{{ run.prUrl.split("/").pop() }}
             </a>
-            <span v-else class="muted">Not opened yet</span>
+            <span v-else class="text-muted">Not opened yet</span>
           </dd>
         </div>
         <div>
@@ -112,114 +126,17 @@ const duration = computed(() => {
       </dl>
     </div>
 
-    <section v-if="run.lastError" class="error">
-      <h2>Last error</h2>
-      <pre>{{ run.lastError }}</pre>
+    <section v-if="run.lastError" class="mt-8">
+      <h2 class="mb-3 text-lg">Last error</h2>
+      <pre
+        class="overflow-x-auto rounded-r-md border border-l-3 border-line border-l-bad bg-surface px-5 py-4 leading-relaxed whitespace-pre-wrap wrap-anywhere"
+        >{{ run.lastError }}</pre>
     </section>
 
     <ConversationLog :repo="run.repo" :issue="String(run.issue)" />
     <MessageComposer :repo="run.repo" :issue="String(run.issue)" :phase="run.phase" />
   </template>
-  <p v-else-if="loaded && !error" class="muted">
+  <p v-else-if="loaded && !error" class="text-muted">
     No run found for {{ route.params.repo }} #{{ route.params.issue }}. It may not have started yet.
   </p>
 </template>
-
-<style scoped>
-.back {
-  display: inline-block;
-  margin-bottom: 1.25rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--muted);
-  text-decoration: none;
-}
-.back::before {
-  content: "\2190\00a0";
-}
-.back:hover {
-  color: var(--ink);
-}
-.head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.5rem 1rem;
-  margin-bottom: 1.75rem;
-}
-h1 {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 0.625rem;
-  font-size: clamp(2rem, 5vw, 3rem);
-  overflow-wrap: anywhere;
-}
-.issue {
-  font-weight: 500;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.track {
-  margin-bottom: 2rem;
-}
-.panel {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  background: var(--line);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-dl {
-  display: grid;
-  grid-template-columns: 7rem minmax(0, 1fr);
-  align-content: start;
-  gap: 0.5rem 1rem;
-  margin: 0;
-  padding: 1.125rem 1.25rem;
-  background: var(--surface);
-}
-dl > div {
-  display: grid;
-  grid-column: 1 / -1;
-  grid-template-columns: subgrid;
-  align-items: baseline;
-}
-dt {
-  font-size: 0.875rem;
-  color: var(--muted);
-}
-dd {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-time {
-  white-space: nowrap;
-}
-.error {
-  margin-top: 2rem;
-}
-h2 {
-  margin-bottom: 0.75rem;
-  font-size: 1.125rem;
-}
-pre {
-  margin: 0;
-  padding: 1rem 1.25rem;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  line-height: 1.6;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--bad);
-  border-radius: 0 6px 6px 0;
-}
-@media (max-width: 52rem) {
-  .panel {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-</style>
