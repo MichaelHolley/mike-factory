@@ -26,17 +26,15 @@ const duration = computed(() => {
 </script>
 
 <template>
-  <RouterLink
-    to="/"
-    class="mb-5 inline-block text-sm font-medium text-muted no-underline before:content-['\2190\00a0'] hover:text-ink"
-    >All runs</RouterLink
+  <RouterLink to="/" class="mb-5 inline-flex gap-1 text-sm font-medium text-muted no-underline hover:text-ink"
+    ><span aria-hidden="true">←</span>All runs</RouterLink
   >
   <p v-if="error" class="mb-6 border-l-3 border-bad bg-surface px-4 py-3 text-bad">
     Couldn't load runs: {{ error }}. Reconnecting…
   </p>
   <template v-if="run">
     <header class="mb-7 flex flex-wrap items-baseline gap-x-4 gap-y-2">
-      <h1 class="flex flex-wrap gap-x-2.5 text-[clamp(2rem,5vw,3rem)] wrap-anywhere">
+      <h1 class="flex flex-wrap gap-x-2.5 text-3xl sm:text-4xl lg:text-5xl wrap-anywhere">
         <span>{{ run.repo }}</span>
         <span class="font-medium text-muted tabular-nums">#{{ run.issue }}</span>
       </h1>
@@ -45,7 +43,7 @@ const duration = computed(() => {
     <PhaseTrack :phase="run.phase" large class="mb-8" />
 
     <div
-      class="grid grid-cols-3 gap-px overflow-hidden rounded-md border border-line bg-line max-[52rem]:grid-cols-1 [&>dl]:grid [&>dl]:grid-cols-[7rem_minmax(0,1fr)] [&>dl]:content-start [&>dl]:gap-x-4 [&>dl]:gap-y-2 [&>dl]:bg-surface [&>dl]:px-5 [&>dl]:py-4.5 [&_dl>div]:col-span-full [&_dl>div]:grid [&_dl>div]:grid-cols-subgrid [&_dl>div]:items-baseline [&_dt]:text-sm [&_dt]:text-muted [&_dd]:tabular-nums [&_dd]:wrap-anywhere"
+      class="grid grid-cols-3 gap-px overflow-hidden rounded-md border border-line bg-line max-lg:grid-cols-1 *:grid *:grid-cols-[7rem_minmax(0,1fr)] *:content-start *:gap-x-4 *:gap-y-2 *:bg-surface *:px-5 *:py-4.5 [&_dl>div]:col-span-full [&_dl>div]:grid [&_dl>div]:grid-cols-subgrid [&_dl>div]:items-baseline [&_dt]:text-sm [&_dt]:text-muted [&_dd]:tabular-nums [&_dd]:wrap-anywhere"
     >
       <dl>
         <div>
@@ -129,7 +127,7 @@ const duration = computed(() => {
     </div>
 
     <section v-if="run.lastError" class="mt-8">
-      <h2 class="mb-3 text-[1.125rem]">Last error</h2>
+      <h2 class="mb-3 text-lg">Last error</h2>
       <pre
         class="overflow-x-auto rounded-r-md border border-l-3 border-line border-l-bad bg-surface px-5 py-4 leading-relaxed whitespace-pre-wrap wrap-anywhere"
         >{{ run.lastError }}</pre>

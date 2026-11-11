@@ -29,13 +29,13 @@ const html = computed(() => md.render(props.text));
   margin-bottom: 0;
 }
 .md :deep(:is(p, ul, ol, pre, blockquote, table)) {
-  @apply my-[0.5em];
+  @apply my-2;
 }
 .md :deep(:is(h1, h2, h3, h4, h5, h6)) {
-  @apply mt-[1em] mb-[0.25em] text-[1em] leading-[inherit] font-bold;
+  @apply mt-4 mb-1 leading-normal font-bold;
 }
 .md :deep(:is(ul, ol)) {
-  @apply pl-[1.5em];
+  @apply pl-6;
 }
 .md :deep(ul) {
   @apply list-disc;
@@ -53,25 +53,25 @@ const html = computed(() => md.render(props.text));
   list-style-type: square;
 }
 .md :deep(code) {
-  @apply rounded-sm bg-ink/8 px-[0.35em] py-[0.1em] text-[0.9em];
+  @apply rounded-sm bg-ink/8 px-1 py-0.5;
 }
 .md :deep(pre) {
   @apply overflow-x-auto rounded-sm border border-line bg-bg px-3.5 py-2.5 leading-normal;
 }
 .md :deep(pre code) {
-  @apply bg-transparent p-0 text-[length:inherit];
+  @apply bg-transparent p-0;
 }
 .md :deep(blockquote) {
-  @apply border-l-3 border-line pl-[0.875em] text-muted;
+  @apply border-l-3 border-line pl-3.5 text-muted;
 }
 .md :deep(table) {
   @apply block max-w-full overflow-x-auto;
 }
 .md :deep(:is(th, td)) {
-  @apply border border-line px-[0.625em] py-[0.25em];
+  @apply border border-line px-2.5 py-1;
 }
 .md :deep(hr) {
-  @apply my-[1em] border-0 border-t border-line;
+  @apply my-4 border-0 border-t border-line;
 }
 .md :deep(img) {
   display: inline;

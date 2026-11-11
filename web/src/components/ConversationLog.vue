@@ -46,19 +46,18 @@ const startsTurn = (index: number) =>
 
 const tone = (call: Call) => (call.result ? (call.result.isError ? "bg-bad" : "bg-muted/55") : "bg-run");
 
-const SAY = "col-2 min-w-0 max-[40rem]:col-1";
+const SAY = "col-2 min-w-0 max-sm:col-1";
 const WHO: Record<Message["kind"], string> = { user: "pt-3.5 text-muted", assistant: "", human: "pt-2.5 text-you" };
 const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
-  assistant: "max-w-[70ch] pt-0.5",
-  human:
-    "w-fit max-w-[70ch] rounded-r-md border-l-3 border-you bg-[color-mix(in_srgb,var(--color-you)_10%,var(--color-surface))] px-4 py-2.5",
+  assistant: "max-w-prose pt-0.5",
+  human: "w-fit max-w-prose rounded-r-md border-l-3 border-you bg-you/10 px-4 py-2.5",
 };
 </script>
 
 <template>
   <section class="mt-8">
     <header class="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-      <h2 class="text-[1.125rem]">Conversation</h2>
+      <h2 class="text-lg">Conversation</h2>
       <a v-if="loaded && !error" class="text-sm" :href="downloadUrl" download>Download JSON</a>
     </header>
     <p v-if="error && !items.length" class="my-4 text-muted">Couldn't load the conversation: {{ error }}.</p>
@@ -67,12 +66,12 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
       <li
         v-for="(entry, index) in entries"
         :key="index"
-        class="grid grid-cols-[6.5rem_minmax(0,1fr)] items-start first:mt-0 max-[40rem]:grid-cols-1"
+        class="grid grid-cols-[6.5rem_minmax(0,1fr)] items-start first:mt-0 max-sm:grid-cols-1"
         :class="startsTurn(index) ? 'mt-7' : 'mt-2'"
       >
         <span
           v-if="startsTurn(index)"
-          class="col-1 pt-1 text-sm leading-normal font-semibold max-[40rem]:pt-0 max-[40rem]:pb-1"
+          class="col-1 pt-1 text-sm leading-normal font-semibold max-sm:pt-0 max-sm:pb-1"
           :class="WHO[speaker(entry)]"
           >{{ ROLES[speaker(entry)] }}</span
         >
@@ -82,7 +81,7 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
             <MarkdownText :text="entry.message.text" class="leading-relaxed wrap-anywhere" />
             <span
               v-if="entry.message.kind === 'human' && entry.message.pending"
-              class="mt-1 block text-[0.8125rem] text-muted italic"
+              class="mt-1 block text-xs text-muted italic"
               >Queued</span
             >
           </div>
@@ -91,25 +90,25 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
           v-else
           :class="[
             SAY,
-            'ml-[calc(-0.75rem-1px)] overflow-hidden rounded-md border border-transparent has-[details[open]]:border-line has-[details[open]]:bg-surface',
+            '-ml-3.25 overflow-hidden rounded-md border border-transparent has-open:border-line has-open:bg-surface',
           ]"
         >
           <ToolCall v-if="entry.calls.length === 1" :call="entry.calls[0]!" quiet />
           <details v-else class="group/tools">
             <summary
-              class="flex min-h-9 cursor-pointer list-none items-center gap-2.5 px-3 text-sm text-muted group-open/tools:text-ink hover:bg-ink/4 hover:text-ink focus-visible:-outline-offset-2 [&::-webkit-details-marker]:hidden"
+              class="flex min-h-9 cursor-pointer list-none items-center gap-2.5 px-3 text-sm text-muted group-open/tools:text-ink hover:bg-ink/4 hover:text-ink focus-visible:-outline-offset-2 marker:hidden"
             >
               <span
-                class="mr-0.5 size-1.5 flex-none -rotate-45 border-r-[1.5px] border-b-[1.5px] border-current transition-transform duration-150 ease-in-out group-open/tools:rotate-45 motion-reduce:transition-none"
+                class="mr-0.5 size-1.5 flex-none -rotate-45 border-r-2 border-b-2 border-current transition-transform duration-150 ease-in-out group-open/tools:rotate-45 motion-reduce:transition-none"
                 aria-hidden="true"
               ></span>
               <span class="flex-none font-medium">{{ entry.calls.length }} tools called</span>
               <code class="min-w-0 truncate text-xs text-muted opacity-80">{{ tally(entry.calls) }}</code>
-              <span class="ml-auto flex flex-none gap-0.5 max-[36rem]:hidden" aria-hidden="true">
+              <span class="ml-auto flex flex-none gap-0.5 max-sm:hidden" aria-hidden="true">
                 <span
                   v-for="(call, i) in entry.calls.slice(0, MAX_MARKS)"
                   :key="i"
-                  class="h-3 w-0.75 rounded-[1px]"
+                  class="h-3 w-0.75 rounded-full"
                   :class="tone(call)"
                 ></span>
               </span>

@@ -56,19 +56,19 @@
 
   h1,
   h2 {
-    @apply leading-[1.15] font-semibold;
+    @apply leading-tight font-semibold;
   }
 
   a {
-    @apply text-run underline decoration-1 underline-offset-[0.2em] hover:decoration-2;
+    @apply text-run underline decoration-1 underline-offset-3 hover:decoration-2;
   }
 
   :focus-visible {
-    @apply rounded-[2px] outline-2 outline-offset-2 outline-run;
+    @apply rounded-xs outline-2 outline-offset-2 outline-run;
   }
 
   code,
   pre {
-    @apply font-mono text-[0.8125rem];
+    @apply font-mono text-sm;
   }
 }

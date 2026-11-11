@@ -45,7 +45,7 @@ const projects = computed(() => {
   </p>
 
   <section v-if="loaded" aria-labelledby="live-heading">
-    <h2 id="live-heading" class="mb-3 flex items-baseline gap-2 text-[1.125rem]">
+    <h2 id="live-heading" class="mb-3 flex items-baseline gap-2 text-lg">
       Working now <span v-if="live.length" class="font-medium text-muted tabular-nums">{{ live.length }}</span>
     </h2>
     <p v-if="!live.length" class="max-w-xl text-muted">
@@ -55,11 +55,11 @@ const projects = computed(() => {
       <li
         v-for="run in live"
         :key="`${run.repo}#${run.issue}`"
-        class="relative grid grid-cols-[minmax(0,16rem)_minmax(0,1fr)_auto] items-center gap-6 px-5 py-4 hover:bg-run/4 not-first:border-t not-first:border-line max-[48rem]:grid-cols-[minmax(0,1fr)_auto] max-[48rem]:gap-x-4 max-[48rem]:gap-y-2"
+        class="relative grid grid-cols-[minmax(0,16rem)_minmax(0,1fr)_auto] items-center gap-6 px-5 py-4 hover:bg-run/4 not-first:border-t not-first:border-line max-md:grid-cols-[minmax(0,1fr)_auto] max-md:gap-x-4 max-md:gap-y-2"
       >
         <RouterLink
           :to="runPath(run)"
-          class="group inline-flex min-w-0 items-baseline gap-2 text-ink no-underline after:absolute after:inset-0 max-[48rem]:col-span-full"
+          class="group inline-flex min-w-0 items-baseline gap-2 text-ink no-underline after:absolute after:inset-0 max-md:col-span-full"
         >
           <span class="truncate font-semibold group-hover:underline group-hover:underline-offset-3">{{
             run.repo
@@ -70,7 +70,7 @@ const projects = computed(() => {
         </RouterLink>
         <PhaseBadge :phase="run.phase" />
         <span
-          class="flex gap-4 text-sm whitespace-nowrap tabular-nums max-[48rem]:min-w-0 max-[48rem]:flex-wrap max-[48rem]:justify-end max-[48rem]:gap-y-1"
+          class="flex gap-4 text-sm whitespace-nowrap tabular-nums max-md:min-w-0 max-md:flex-wrap max-md:justify-end max-md:gap-y-1"
         >
           <span v-if="run.attempts > 1">Attempt {{ run.attempts }}</span>
           <span class="text-muted">{{ formatModel(run) }}</span>
@@ -82,12 +82,10 @@ const projects = computed(() => {
   </section>
 
   <section v-if="projects.length" class="mt-10" aria-labelledby="finished-heading">
-    <h2 id="finished-heading" class="mb-3 flex items-baseline gap-2 text-[1.125rem]">Finished</h2>
+    <h2 id="finished-heading" class="mb-3 flex items-baseline gap-2 text-lg">Finished</h2>
     <div class="overflow-hidden rounded-md border border-line bg-surface">
-      <table class="w-full whitespace-nowrap max-[48rem]:block max-[48rem]:whitespace-normal">
-        <thead
-          class="max-[48rem]:hidden [&_th]:px-5 [&_th]:py-3 [&_th]:text-[0.8125rem] [&_th]:font-medium [&_th]:text-muted"
-        >
+      <table class="w-full whitespace-nowrap max-md:block max-md:whitespace-normal">
+        <thead class="max-md:hidden [&_th]:px-5 [&_th]:py-3 [&_th]:text-xs [&_th]:font-medium [&_th]:text-muted">
           <tr>
             <th class="text-left">Issue</th>
             <th class="text-left">Outcome</th>
@@ -101,13 +99,13 @@ const projects = computed(() => {
         <tbody
           v-for="project in projects"
           :key="project.repo"
-          class="max-[48rem]:block max-[48rem]:first-of-type:[&_th]:border-t-0"
+          class="max-md:block max-md:first-of-type:[&_th]:border-t-0"
         >
-          <tr class="max-[48rem]:block">
+          <tr class="max-md:block">
             <th
               colspan="7"
               scope="rowgroup"
-              class="border-y border-line bg-ink/3 px-5 py-2 text-left text-sm font-semibold max-[48rem]:block"
+              class="border-y border-line bg-ink/3 px-5 py-2 text-left text-sm font-semibold max-md:block"
             >
               {{ project.repo }} <span class="font-medium text-muted tabular-nums">{{ project.runs.length }}</span>
             </th>
@@ -115,9 +113,9 @@ const projects = computed(() => {
           <tr
             v-for="run in project.runs"
             :key="run.issue"
-            class="relative hover:bg-run/4 nth-[n+3]:border-t nth-[n+3]:border-line max-[48rem]:grid max-[48rem]:grid-cols-[repeat(4,auto)] max-[48rem]:justify-between max-[48rem]:gap-x-4 max-[48rem]:gap-y-3 max-[48rem]:px-5 max-[48rem]:py-4 [&>td]:px-5 [&>td]:py-3 max-[48rem]:[&>td]:p-0 max-[48rem]:[&>td[data-label]]:before:block max-[48rem]:[&>td[data-label]]:before:text-xs max-[48rem]:[&>td[data-label]]:before:text-muted max-[48rem]:[&>td[data-label]]:before:content-[attr(data-label)]"
+            class="relative hover:bg-run/4 not-nth-2:border-t not-nth-2:border-line max-md:grid max-md:grid-cols-4 max-md:gap-x-4 max-md:gap-y-3 max-md:px-5 max-md:py-4 *:px-5 *:py-3 max-md:*:p-0 max-md:[&>td[data-label]]:before:block max-md:[&>td[data-label]]:before:text-xs max-md:[&>td[data-label]]:before:text-muted max-md:[&>td[data-label]]:before:content-[attr(data-label)]"
           >
-            <td class="max-[48rem]:col-span-full">
+            <td class="max-md:col-span-full">
               <RouterLink
                 :to="runPath(run)"
                 class="group text-ink no-underline after:absolute after:inset-0"
@@ -128,19 +126,19 @@ const projects = computed(() => {
                 >
               </RouterLink>
             </td>
-            <td class="max-[48rem]:col-span-full">
+            <td class="max-md:col-span-full">
               <PhaseBadge :phase="run.phase" />
             </td>
-            <td data-label="Model" class="max-[48rem]:col-span-full">{{ formatModel(run) }}</td>
-            <td class="text-right tabular-nums max-[48rem]:text-left" data-label="Attempts">{{ run.attempts }}</td>
-            <td class="text-right tabular-nums max-[48rem]:text-left" data-label="Cost">
+            <td data-label="Model" class="max-md:col-span-full">{{ formatModel(run) }}</td>
+            <td class="text-right tabular-nums max-md:text-left" data-label="Attempts">{{ run.attempts }}</td>
+            <td class="text-right tabular-nums max-md:text-left" data-label="Cost">
               {{ formatCost(run.costUsd) }}
             </td>
             <td data-label="Pull request">
               <a v-if="run.prUrl" :href="run.prUrl" target="_blank" rel="noopener" class="relative z-1">Open PR</a>
               <span v-else class="text-muted">None</span>
             </td>
-            <td class="text-right tabular-nums text-muted max-[48rem]:text-left" data-label="Updated">
+            <td class="text-right tabular-nums text-muted max-md:text-left" data-label="Updated">
               {{ timeAgo(run.updatedAt, now) }}
             </td>
           </tr>

@@ -56,7 +56,7 @@ async function send() {
     ></textarea>
     <div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
       <p v-if="error" class="mr-auto text-sm text-bad wrap-anywhere" role="alert">Couldn't send: {{ error }}</p>
-      <span class="text-[0.8125rem] text-muted">⌘/Ctrl + Enter</span>
+      <span class="text-xs text-muted">⌘/Ctrl + Enter</span>
       <button
         type="submit"
         class="min-h-9 cursor-pointer rounded-sm bg-run px-4.5 font-semibold text-surface disabled:cursor-default disabled:opacity-50"

@@ -23,12 +23,8 @@ watch(() => props.text, measure, { flush: "post" });
   <div class="rounded-md border border-line bg-surface">
     <div
       ref="body"
-      class="px-5 py-3.5 font-mono text-[0.8125rem] leading-relaxed wrap-anywhere text-[color-mix(in_srgb,var(--color-ink)_82%,var(--color-muted))]"
-      :class="
-        expanded
-          ? 'max-h-160 overflow-auto'
-          : ['max-h-42 overflow-hidden', clipped && '[mask-image:linear-gradient(to_bottom,#000_60%,transparent)]']
-      "
+      class="px-5 py-3.5 font-mono text-sm leading-relaxed wrap-anywhere text-ink/80"
+      :class="expanded ? 'max-h-160 overflow-auto' : ['max-h-42 overflow-hidden', clipped && 'mask-b-from-60%']"
     >
       <MarkdownText :text="text" />
     </div>
