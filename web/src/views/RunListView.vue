@@ -1,7 +1,11 @@
 <script setup lang="ts">
+import { Coffee, GitPullRequest } from "@lucide/vue";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import type { RunStatus } from "../../../src/runStatus.ts";
+import EmptyState from "../components/EmptyState.vue";
+import ErrorBanner from "../components/ErrorBanner.vue";
+import OutboundLink from "../components/OutboundLink.vue";
 import PhaseBadge from "../components/PhaseBadge.vue";
 import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
@@ -40,17 +44,15 @@ const projects = computed(() => {
 
 <template>
   <h1 class="mb-6 text-4xl">Runs</h1>
-  <p v-if="error" class="mb-6 border-l-3 border-bad bg-surface px-4 py-3 text-bad">
-    Couldn't load runs: {{ error }}. Reconnecting…
-  </p>
+  <ErrorBanner v-if="error" class="mb-6" retrying>Couldn't load runs: {{ error }}. Reconnecting…</ErrorBanner>
 
   <section v-if="loaded" aria-labelledby="live-heading">
     <h2 id="live-heading" class="mb-3 flex items-baseline gap-2 text-lg">
       Working now <span v-if="live.length" class="font-medium text-muted tabular-nums">{{ live.length }}</span>
     </h2>
-    <p v-if="!live.length" class="max-w-xl text-muted">
+    <EmptyState v-if="!live.length" :icon="Coffee" class="rounded-md border border-line bg-surface">
       Nothing running. Comment <code>/mike</code> on an issue in a configured repo to start a run.
-    </p>
+    </EmptyState>
     <ul v-else class="overflow-hidden rounded-md border border-l-3 border-line border-l-run bg-surface">
       <li
         v-for="run in live"
@@ -135,7 +137,9 @@ const projects = computed(() => {
               {{ formatCost(run.costUsd) }}
             </td>
             <td data-label="Pull request">
-              <a v-if="run.prUrl" :href="run.prUrl" target="_blank" rel="noopener" class="relative z-1">Open PR</a>
+              <OutboundLink v-if="run.prUrl" :href="run.prUrl" :icon="GitPullRequest" class="relative z-1"
+                >Open PR</OutboundLink
+              >
               <span v-else class="text-muted">None</span>
             </td>
             <td class="text-right tabular-nums text-muted max-md:text-left" data-label="Updated">

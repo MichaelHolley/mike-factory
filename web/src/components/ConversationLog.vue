@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { Bot, ChevronRight, Download, Hourglass, MessageSquareDashed, User, Workflow } from "@lucide/vue";
+import { type Component, computed } from "vue";
 import type { TranscriptItem } from "../../../src/runStatus.ts";
 import { useTranscript } from "../composables/useTranscript.ts";
+import EmptyState from "./EmptyState.vue";
+import ErrorBanner from "./ErrorBanner.vue";
+import IconButton from "./IconButton.vue";
 import MarkdownText from "./MarkdownText.vue";
 import PipelineMessage from "./PipelineMessage.vue";
 import ToolCall from "./ToolCall.vue";
@@ -38,7 +42,11 @@ const tally = (calls: Call[]) =>
     .map(([name, count]) => (count > 1 ? `${name} ×${count}` : name))
     .join(", ");
 
-const ROLES: Record<Message["kind"], string> = { user: "Pipeline", assistant: "Agent", human: "You" };
+const ROLES: Record<Message["kind"], { label: string; icon: Component }> = {
+  user: { label: "Pipeline", icon: Workflow },
+  assistant: { label: "Agent", icon: Bot },
+  human: { label: "You", icon: User },
+};
 
 const speaker = (entry: Entry) => (entry.kind === "tools" ? "assistant" : entry.message.kind);
 const startsTurn = (index: number) =>
@@ -56,12 +64,18 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
 
 <template>
   <section class="mt-8">
-    <header class="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+    <header class="mb-3 flex items-center justify-between gap-4">
       <h2 class="text-lg">Conversation</h2>
-      <a v-if="loaded && !error" class="text-sm" :href="downloadUrl" download>Download JSON</a>
+      <IconButton
+        v-if="loaded && !error"
+        :icon="Download"
+        label="Download conversation as JSON"
+        :href="downloadUrl"
+        download
+      />
     </header>
-    <p v-if="error && !items.length" class="my-4 text-muted">Couldn't load the conversation: {{ error }}.</p>
-    <p v-else-if="loaded && !items.length" class="my-4 text-muted">No messages yet.</p>
+    <ErrorBanner v-if="error && !items.length" class="my-4">Couldn't load the conversation: {{ error }}.</ErrorBanner>
+    <EmptyState v-else-if="loaded && !items.length" :icon="MessageSquareDashed">No messages yet.</EmptyState>
     <ol v-else>
       <li
         v-for="(entry, index) in entries"
@@ -71,9 +85,11 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
       >
         <span
           v-if="startsTurn(index)"
-          class="col-1 pt-1 text-sm leading-normal font-semibold max-sm:pt-0 max-sm:pb-1"
+          class="col-1 flex items-center gap-1.5 pt-1 text-sm leading-normal font-semibold max-sm:pt-0 max-sm:pb-1"
           :class="WHO[speaker(entry)]"
-          >{{ ROLES[speaker(entry)] }}</span
+          ><component :is="ROLES[speaker(entry)].icon" class="size-3.5 flex-none" aria-hidden="true" />{{
+            ROLES[speaker(entry)].label
+          }}</span
         >
         <template v-if="entry.kind === 'message'">
           <PipelineMessage v-if="entry.message.kind === 'user'" :text="entry.message.text" :class="SAY" />
@@ -81,8 +97,8 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
             <MarkdownText :text="entry.message.text" class="leading-relaxed wrap-anywhere" />
             <span
               v-if="entry.message.kind === 'human' && entry.message.pending"
-              class="mt-1 block text-xs text-muted italic"
-              >Queued</span
+              class="mt-1 flex items-center gap-1 text-xs text-muted italic"
+              ><Hourglass class="size-3" aria-hidden="true" />Queued</span
             >
           </div>
         </template>
@@ -98,10 +114,10 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
             <summary
               class="flex min-h-9 cursor-pointer list-none items-center gap-2.5 px-3 text-sm text-muted group-open/tools:text-ink hover:bg-ink/4 hover:text-ink focus-visible:-outline-offset-2 marker:hidden"
             >
-              <span
-                class="mr-0.5 size-1.5 flex-none -rotate-45 border-r-2 border-b-2 border-current transition-transform duration-150 ease-in-out group-open/tools:rotate-45 motion-reduce:transition-none"
+              <ChevronRight
+                class="size-3.5 flex-none transition-transform duration-150 ease-in-out group-open/tools:rotate-90 motion-reduce:transition-none"
                 aria-hidden="true"
-              ></span>
+              />
               <span class="flex-none font-medium">{{ entry.calls.length }} tools called</span>
               <code class="min-w-0 truncate text-xs text-muted opacity-80">{{ tally(entry.calls) }}</code>
               <span class="ml-auto flex flex-none gap-0.5 max-sm:hidden" aria-hidden="true">

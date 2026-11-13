@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ChevronsDown, ChevronsUp } from "@lucide/vue";
 import { onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
 import MarkdownText from "./MarkdownText.vue";
 
@@ -31,10 +32,11 @@ watch(() => props.text, measure, { flush: "post" });
     <button
       v-if="clipped"
       type="button"
-      class="block w-full cursor-pointer rounded-b-md border-t border-line px-5 py-2 text-left text-sm font-medium text-muted hover:bg-ink/4 hover:text-ink"
+      class="flex w-full cursor-pointer items-center gap-1.5 rounded-b-md border-t border-line px-5 py-2 text-left text-sm font-medium text-muted hover:bg-ink/4 hover:text-ink"
       :aria-expanded="expanded"
       @click="expanded = !expanded"
     >
+      <component :is="expanded ? ChevronsUp : ChevronsDown" class="size-4" aria-hidden="true" />
       {{ expanded ? "Show less" : "Show full prompt" }}
     </button>
   </div>

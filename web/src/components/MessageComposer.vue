@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Command, CornerDownLeft, LoaderCircle, Play, Send } from "@lucide/vue";
 import { computed, ref, watch } from "vue";
 import type { IssuePhase } from "../../../src/runStatus.ts";
 
@@ -15,6 +16,7 @@ let id = crypto.randomUUID();
 watch(text, () => (id = crypto.randomUUID()));
 
 const finished = computed(() => FINISHED.includes(props.phase));
+const submitIcon = computed(() => (sending.value ? LoaderCircle : finished.value ? Play : Send));
 const canSend = computed(() => !sending.value && text.value.trim() !== "" && text.value.length <= MAX_CHARS);
 
 async function send() {
@@ -56,12 +58,22 @@ async function send() {
     ></textarea>
     <div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
       <p v-if="error" class="mr-auto text-sm text-bad wrap-anywhere" role="alert">Couldn't send: {{ error }}</p>
-      <span class="text-xs text-muted">⌘/Ctrl + Enter</span>
+      <span class="flex items-center gap-1 text-xs text-muted">
+        <span class="sr-only">Command or Control plus Enter</span>
+        <Command class="size-3" aria-hidden="true" /><span aria-hidden="true">/ Ctrl +</span
+        ><CornerDownLeft class="size-3" aria-hidden="true" />
+      </span>
       <button
         type="submit"
-        class="min-h-9 cursor-pointer rounded-sm bg-run px-4.5 font-semibold text-surface disabled:cursor-default disabled:opacity-50"
+        class="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-sm bg-run px-4.5 font-semibold text-surface disabled:cursor-default disabled:opacity-50"
         :disabled="!canSend"
       >
+        <component
+          :is="submitIcon"
+          class="size-4"
+          :class="sending && 'animate-spin motion-reduce:animate-none'"
+          aria-hidden="true"
+        />
         {{ sending ? "Sending…" : finished ? "Continue" : "Steer" }}
       </button>
     </div>
