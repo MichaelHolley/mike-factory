@@ -138,6 +138,7 @@ export function createWorld(opts: {
     config,
     github,
     worktrees,
+    env: (cwd) => new NodeExecutionEnv({ cwd }),
     log: (msg, data) => logs.push({ msg, data }),
     maxConcurrent: opts.maxConcurrent,
     skills: opts.skills,

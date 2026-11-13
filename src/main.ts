@@ -2,7 +2,6 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter";
@@ -13,6 +12,7 @@ import { DEFAULT_MAX_CONCURRENT } from "./agent/tasks/issuePipeline.ts";
 import { loadConfig, type AppConfig } from "./config.ts";
 import { createGitHubClient } from "./github/app.ts";
 import { createWorktrees } from "./git/worktrees.ts";
+import { openWorkspace } from "./runner.ts";
 import { createServer } from "./server.ts";
 import { takeSecrets } from "./secrets.ts";
 
@@ -58,13 +58,12 @@ async function main() {
   const secrets = takeSecrets();
 
   const github = createGitHubClient({ appId: secrets.appId, privateKey: secrets.privateKey, owner: config.owner });
-  const identity = await github.botIdentity();
-  // Env instead of `git config --global`, so local dev never rewrites the developer's git identity.
-  process.env.GIT_AUTHOR_NAME = process.env.GIT_COMMITTER_NAME = identity.name;
-  process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = identity.email;
+  const runnerHost = process.env.RUNNER_HOST || undefined;
+  const workspace = await openWorkspace({ runnerHost, dataDir, gitIdentity: await github.botIdentity() });
+  if (!runnerHost) log("RUNNER_HOST is unset: agent tools run unsandboxed in the server process");
 
   const worktrees = createWorktrees({
-    env: new NodeExecutionEnv({ cwd: dataDir }),
+    env: workspace.env(dataDir),
     dataDir,
     mirrorDir,
     owner: config.owner,
@@ -82,7 +81,7 @@ async function main() {
     {
       storage,
       models,
-      deps: { config: effectiveConfig, github, worktrees, log, maxConcurrent, publicUrl, skills },
+      deps: { config: effectiveConfig, github, worktrees, env: workspace.env, log, maxConcurrent, publicUrl, skills },
       crashAt: process.env.CRASH_AT,
     },
     BACKGROUND_CONTEXT,
@@ -125,6 +124,7 @@ async function main() {
     if ("closeAllConnections" in server) setTimeout(() => server.closeAllConnections(), 5_000).unref();
     await serverClosed;
     await harness.close(BACKGROUND_CONTEXT);
+    workspace.close();
     process.exit(0);
   };
   process.on("SIGTERM", () => void shutdown("SIGTERM"));

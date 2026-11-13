@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
+import { Connection, localDaemon, RemoteExecutionEnv } from "@earendil-works/pi-env";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { RepoConfig } from "../config.ts";
 import { createWorktrees } from "./worktrees.ts";
@@ -150,6 +151,27 @@ describe("createWorktrees", () => {
     await worktrees.push(repo, 1);
     expect(await git(remote, "rev-parse", "refs/heads/agent/issue-1")).toBe(await git(path, "rev-parse", "HEAD"));
     expect(await git(remote, "rev-parse", "refs/heads/main")).not.toBe(await git(path, "rev-parse", "HEAD"));
+  });
+
+  it("prepares and publishes through a remote execution environment", async () => {
+    const connection = new Connection({ command: [localDaemon()] });
+    try {
+      const remoteWorktrees = createWorktrees({
+        env: new RemoteExecutionEnv({ connection, id: "pi-env:test", cwd: root }),
+        dataDir,
+        mirrorDir: join(root, "mirrors"),
+        owner: "o",
+        remoteUrl: () => remote,
+      });
+      const { path } = await remoteWorktrees.prepare(repo, 1);
+      await writeFile(join(path, "new.txt"), "x");
+      await git(path, "add", "new.txt");
+      await commit(path, "feat: new");
+      await remoteWorktrees.push(repo, 1);
+      expect(await git(remote, "rev-parse", "refs/heads/agent/issue-1")).toBe(await git(path, "rev-parse", "HEAD"));
+    } finally {
+      connection.close();
+    }
   });
 
   it("publishes without running the agent clone's hooks or fsmonitor with credentials", async () => {
