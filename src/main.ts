@@ -45,6 +45,7 @@ async function main() {
   const config = await loadConfig(process.env.REPOS_CONFIG ?? "config/repos.yaml");
   const skills = await loadSkills(SKILLS_DIR);
   const dataDir = process.env.DATA_DIR ?? "/data";
+  const mirrorDir = process.env.MIRRORS_DIR ?? join(dataDir, "mirrors");
   const port = Number(process.env.PORT ?? 3000);
   const hostname = process.env.HOST ?? "127.0.0.1";
   const useFaux = process.env.MODEL === "faux";
@@ -65,6 +66,7 @@ async function main() {
   const worktrees = createWorktrees({
     env: new NodeExecutionEnv({ cwd: dataDir }),
     dataDir,
+    mirrorDir,
     owner: config.owner,
     token: (repo) => github.gitToken(repo),
   });

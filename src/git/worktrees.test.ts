@@ -30,6 +30,7 @@ const repo: RepoConfig = {
 
 let root: string;
 let remote: string;
+let seed: string;
 let dataDir: string;
 let worktrees: ReturnType<typeof createWorktrees>;
 
@@ -37,7 +38,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "worktrees-test-"));
   remote = join(root, "remote.git");
   dataDir = join(root, "data");
-  const seed = join(root, "seed");
+  seed = join(root, "seed");
   await run("git", ["init", "--bare", "--initial-branch=main", remote]);
   await run("git", ["init", "--initial-branch=main", seed]);
   await writeFile(join(seed, "README.md"), "hello\n");
@@ -47,8 +48,10 @@ beforeEach(async () => {
   worktrees = createWorktrees({
     env: new NodeExecutionEnv({ cwd: root }),
     dataDir,
+    mirrorDir: join(root, "mirrors"),
     owner: "o",
     remoteUrl: () => remote,
+    token: async () => "test-token",
   });
 });
 
@@ -92,6 +95,17 @@ describe("createWorktrees", () => {
     expect(await worktrees.commitsAhead(repo, 1)).toBe(1);
   });
 
+  it("starts a new worktree from the remote issue branch when there is no local one", async () => {
+    await worktrees.prepare(repo, 2);
+    await git(seed, "checkout", "-qb", "agent/issue-1");
+    await writeFile(join(seed, "README.md"), "resumed\n");
+    await commit(seed, "resume");
+    await git(seed, "push", remote, "agent/issue-1");
+
+    const { path } = await worktrees.prepare(repo, 1);
+    expect(await git(path, "rev-parse", "HEAD")).toBe(await git(seed, "rev-parse", "HEAD"));
+  });
+
   it("keeps parallel issues in separate trees", async () => {
     const [a, b] = await Promise.all([worktrees.prepare(repo, 1), worktrees.prepare(repo, 2)]);
     await writeFile(join(a.path, "only-a.txt"), "a");
@@ -132,10 +146,26 @@ describe("createWorktrees", () => {
     await writeFile(join(path, "new.txt"), "x");
     await git(path, "add", "new.txt");
     await commit(path, "feat: new");
-    await worktrees.push("demo", 1);
-    await worktrees.push("demo", 1);
+    await worktrees.push(repo, 1);
+    await worktrees.push(repo, 1);
     expect(await git(remote, "rev-parse", "refs/heads/agent/issue-1")).toBe(await git(path, "rev-parse", "HEAD"));
     expect(await git(remote, "rev-parse", "refs/heads/main")).not.toBe(await git(path, "rev-parse", "HEAD"));
+  });
+
+  it("publishes without running the agent clone's hooks or fsmonitor with credentials", async () => {
+    const { path } = await worktrees.prepare(repo, 1);
+    const marker = join(root, "planted.log");
+    const planted = `#!/bin/sh\nenv >> "${marker}"\n`;
+    const bare = join(dataDir, "repos", "demo.git");
+    await writeFile(join(root, "fsmonitor.sh"), planted, { mode: 0o755 });
+    await writeFile(join(bare, "hooks", "pre-push"), planted, { mode: 0o755 });
+    await git(bare, "config", "core.fsmonitor", join(root, "fsmonitor.sh"));
+    await writeFile(join(path, "README.md"), "changed\n");
+    await commit(path, "feat: change");
+
+    await worktrees.push(repo, 1);
+    expect(await git(remote, "rev-parse", "refs/heads/agent/issue-1")).toBe(await git(path, "rev-parse", "HEAD"));
+    expect(await readFile(marker, "utf8").catch(() => "")).not.toContain("AUTHORIZATION");
   });
 
   it("removes worktree and branch, and is idempotent", async () => {

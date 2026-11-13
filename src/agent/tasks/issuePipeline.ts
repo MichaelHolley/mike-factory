@@ -428,7 +428,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
         const config = repoOf(repo);
         if ((await worktrees.commitsAhead(config, issue)) === 0)
           throw new PipelineFailure("no changes: the agent produced no commits");
-        await worktrees.push(repo, issue);
+        await worktrees.push(config, issue);
         const state = await rt.snapshot(IssueState, rt.conversationId, context);
         const head = state?.branch ?? "";
         let pr = await github.findOpenPr(repo, head);

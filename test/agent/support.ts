@@ -124,6 +124,7 @@ export function createWorld(opts: {
   const worktrees = createWorktrees({
     env: new NodeExecutionEnv({ cwd: opts.dir }),
     dataDir: join(opts.dir, "data"),
+    mirrorDir: join(opts.dir, "mirrors"),
     owner: OWNER,
     remoteUrl: (name) => remotes[name]!,
   });

@@ -57,7 +57,7 @@ export interface Worktrees {
   /** `git status --porcelain` of the worktree: uncommitted, non-ignored changes, empty when clean. */
   uncommitted(repo: string, issue: number): Promise<string>;
   /** Pushes `agent/issue-<n>` (and only that ref) to origin. Idempotent. */
-  push(repo: string, issue: number): Promise<void>;
+  push(repo: RepoConfig, issue: number): Promise<void>;
   /** Number of commits on the issue branch that are not on `origin/<defaultBranch>`. */
   commitsAhead(repo: RepoConfig, issue: number): Promise<number>;
   /** Subject of the latest commit on the issue branch. */
