@@ -53,11 +53,12 @@ const duration = computed(() => {
   >
   <ErrorBanner v-if="error" class="mb-6" retrying>Couldn't load runs: {{ error }}. Reconnecting…</ErrorBanner>
   <template v-if="run">
-    <header class="mb-7 flex flex-wrap items-baseline gap-x-4 gap-y-2">
-      <h1 class="flex flex-wrap gap-x-2.5 text-3xl sm:text-4xl lg:text-5xl wrap-anywhere">
+    <header class="mb-7 flex flex-col gap-1.5">
+      <component :is="run.title ? 'p' : 'h1'" class="flex flex-wrap gap-x-1.5 font-semibold wrap-anywhere">
         <span>{{ run.repo }}</span>
         <span class="font-medium text-muted tabular-nums">#{{ run.issue }}</span>
-      </h1>
+      </component>
+      <h1 v-if="run.title" class="text-2xl text-balance wrap-anywhere sm:text-3xl">{{ run.title }}</h1>
     </header>
 
     <PhaseTrack :phase="run.phase" class="mb-8" />
