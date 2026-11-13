@@ -13,6 +13,9 @@
   --color-bad: #c2362e;
   --color-halt: #6e6a86;
   --color-you: #0e7490;
+  --color-setup: #4f6479;
+  --color-check: #a35f00;
+  --color-ship: #7440d4;
   --color-idle: #c3cbd3;
 
   --font-sans: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -39,6 +42,9 @@
     --color-bad: #f0706a;
     --color-halt: #a9a3c9;
     --color-you: #5cc8d8;
+    --color-setup: #9db0c4;
+    --color-check: #eeb150;
+    --color-ship: #b896ff;
     --color-idle: #38414c;
   }
 }

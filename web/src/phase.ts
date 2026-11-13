@@ -1,36 +1,41 @@
+import {
+  Ban,
+  Check,
+  Code,
+  FlaskConical,
+  FolderGit2,
+  GitPullRequestArrow,
+  Hourglass,
+  MessageSquareReply,
+  MessageSquareText,
+  Wrench,
+  X,
+} from "@lucide/vue";
+import type { Component } from "vue";
 import type { IssuePhase } from "../../src/runStatus.ts";
 
-export type PhaseTone = "idle" | "run" | "ok" | "bad" | "halt";
 export type StepState = "passed" | "current" | "pending";
 
 const FLOW = ["queued", "prepare", "implement", "verify", "fix", "revise", "publish", "report"] as const;
 const OUTCOMES: readonly IssuePhase[] = ["done", "failed", "aborted"];
 
-export const toneClass: Record<PhaseTone, { text: string; bg: string }> = {
-  idle: { text: "text-muted", bg: "bg-muted" },
-  run: { text: "text-run", bg: "bg-run" },
-  ok: { text: "text-ok", bg: "bg-ok" },
-  bad: { text: "text-bad", bg: "bg-bad" },
-  halt: { text: "text-halt", bg: "bg-halt" },
+// Hue groups the kind of work: setup, building, checking, your notes, shipping, outcome.
+export const stepLook: Record<IssuePhase, { icon: Component; hue: string }> = {
+  queued: { icon: Hourglass, hue: "text-setup" },
+  prepare: { icon: FolderGit2, hue: "text-setup" },
+  implement: { icon: Code, hue: "text-run" },
+  verify: { icon: FlaskConical, hue: "text-check" },
+  fix: { icon: Wrench, hue: "text-run" },
+  revise: { icon: MessageSquareReply, hue: "text-you" },
+  publish: { icon: GitPullRequestArrow, hue: "text-ship" },
+  report: { icon: MessageSquareText, hue: "text-ship" },
+  done: { icon: Check, hue: "text-ok" },
+  failed: { icon: X, hue: "text-bad" },
+  aborted: { icon: Ban, hue: "text-halt" },
 };
 
 export function isFinished(phase: IssuePhase): boolean {
   return OUTCOMES.includes(phase);
-}
-
-export function phaseTone(phase: IssuePhase): PhaseTone {
-  switch (phase) {
-    case "queued":
-      return "idle";
-    case "done":
-      return "ok";
-    case "failed":
-      return "bad";
-    case "aborted":
-      return "halt";
-    default:
-      return "run";
-  }
 }
 
 /** Every pipeline state in order, ending in the run's outcome slot (done, failed or aborted). */
