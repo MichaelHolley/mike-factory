@@ -46,3 +46,23 @@ Run the Docker image behind a reverse proxy; the app listens on port 3000 and ha
 - Don't buffer or compress `text/event-stream` responses; the status page streams live updates.
 - Set `PUBLIC_URL` to the public URL so status comments link to the run page.
 - `config/repos.yaml` is baked into the image; rebuild it, or mount the file and point `REPOS_CONFIG` at it.
+
+Run it as two services: the server, which holds the secrets, and a runner, where the agent's tools and its git commands run over SSH. Give secrets to the server only.
+
+```yaml
+services:
+  server:
+    image: <user>/mike-factory:latest
+    env_file: stack.env
+    environment: { RUNNER_HOST: runner, MIRRORS_DIR: /mirrors }
+    volumes: [state:/data, mirrors:/mirrors, ssh:/ssh]
+    depends_on: [runner]
+  runner:
+    image: <user>/mike-factory:latest
+    command: ["/app/runner.sh"]
+    volumes: [work:/data, mirrors:/mirrors:ro, ssh:/ssh:ro]
+volumes: { state: {}, mirrors: {}, work: {}, ssh: {} }
+```
+
+- The server trusts the runner's host key, kept on `work`, on first connect. If `work` is recreated, the server refuses to start until you delete `ssh/known_hosts` from `state`.
+- To switch a single-container deployment, finish or stop open runs first. Its volume becomes `state` and keeps `agent.sqlite`; its `repos/`, `worktrees/` and `pnpm-store/` are unused afterwards.

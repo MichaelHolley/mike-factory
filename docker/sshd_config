@@ -1,0 +1,16 @@
+Port 2222
+HostKey /data/sshd/ssh_host_ed25519_key
+PidFile none
+AuthorizedKeysFile /ssh/authorized_keys
+AllowUsers agent
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+UsePAM no
+PermitRootLogin no
+AllowTcpForwarding no
+AllowAgentForwarding no
+AllowStreamLocalForwarding no
+X11Forwarding no
+PermitTunnel no
+PrintMotd no
