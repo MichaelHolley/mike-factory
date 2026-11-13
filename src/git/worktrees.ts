@@ -107,6 +107,8 @@ export function createWorktrees(opts: {
         bare,
       ]);
     }
+    // Clones made before the mirror existed still fetch from GitHub, without credentials.
+    await git(bare, ["remote", "set-url", "origin", mirrorPath(repo)]);
   };
 
   const refExists = (repo: string, ref: string) =>
@@ -118,7 +120,7 @@ export function createWorktrees(opts: {
   return {
     worktreePath,
 
-    prepare: (repo: RepoConfig, issue) =>
+    prepare: (repo: RepoConfig, issue, { openPr }) =>
       withLock(repo.name, async () => {
         const path = worktreePath(repo.name, issue);
         const branch = branchName(issue);
@@ -133,8 +135,9 @@ export function createWorktrees(opts: {
         if (await refExists(repo.name, `refs/heads/${branch}`)) {
           await git(bare, ["worktree", "add", path, branch]);
         } else {
-          // A continued issue must build on its open PR's branch, not restart from the default branch.
-          const base = (await refExists(repo.name, `refs/remotes/origin/${branch}`)) ? branch : repo.defaultBranch;
+          // A closed PR's branch may survive on the remote, already squash-merged, so only an open one is continued.
+          const base =
+            openPr && (await refExists(repo.name, `refs/remotes/origin/${branch}`)) ? branch : repo.defaultBranch;
           await git(bare, ["worktree", "add", "-b", branch, path, `origin/${base}`]);
         }
         return { path, branch, created: true };
@@ -153,11 +156,23 @@ export function createWorktrees(opts: {
         const bundle = getOrThrow(await workspace.createTempFile({ prefix: "publish-", suffix: ".bundle" }, ctx));
         const local = await mkdtemp(join(tmpdir(), "publish-"));
         try {
-          await git(barePath(repo.name), ["bundle", "create", bundle, `origin/${repo.defaultBranch}..${branch}`]);
+          await git(barePath(repo.name), [
+            "bundle",
+            "create",
+            bundle,
+            `refs/remotes/origin/${repo.defaultBranch}..${ref}`,
+          ]);
           const localBundle = join(local, "issue.bundle");
           await writeFile(localBundle, getOrThrow(await workspace.readBinaryFile(bundle, ctx)));
           const mirror = mirrorPath(repo.name);
-          await mirrorGit(mirror, ["-c", "fetch.fsckObjects=true", "fetch", localBundle, `+${ref}:${ref}`]);
+          await mirrorGit(mirror, [
+            "-c",
+            "fetch.fsckObjects=true",
+            "fetch",
+            "--no-tags",
+            localBundle,
+            `+${ref}:${ref}`,
+          ]);
           await mirrorGit(mirror, ["push", "origin", `${ref}:${ref}`], await authEnv(repo.name));
         } finally {
           await workspace.remove(bundle, { force: true }, ctx);

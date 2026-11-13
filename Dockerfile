@@ -1,4 +1,5 @@
-FROM node:22-bookworm-slim AS base
+# trixie for git 2.46+, the first to fsck objects fetched from a bundle.
+FROM node:22-trixie-slim AS base
 RUN corepack enable
 WORKDIR /app
 
