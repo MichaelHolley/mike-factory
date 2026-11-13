@@ -5,7 +5,7 @@ import { RouterLink } from "vue-router";
 import type { RunStatus } from "../../../src/runStatus.ts";
 import EmptyState from "../components/EmptyState.vue";
 import ErrorBanner from "../components/ErrorBanner.vue";
-import OutboundLink from "../components/OutboundLink.vue";
+import IconButton from "../components/IconButton.vue";
 import PhaseBadge from "../components/PhaseBadge.vue";
 import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
@@ -152,10 +152,16 @@ const projects = computed(() => {
                 <PhaseBadge :phase="run.phase" />
               </td>
               <td data-label="Pull request">
-                <OutboundLink v-if="run.prUrl" :href="run.prUrl" :icon="GitPullRequest" class="relative z-1"
-                  >Open PR</OutboundLink
-                >
-                <span v-else class="text-muted">None</span>
+                <IconButton
+                  v-if="run.prUrl"
+                  :href="run.prUrl"
+                  :icon="GitPullRequest"
+                  label="Open pull request"
+                  target="_blank"
+                  rel="noopener"
+                  class="relative z-1 -my-1 -ml-1.5 align-middle"
+                />
+                <span v-else class="text-muted">-</span>
               </td>
               <td class="text-right tabular-nums text-muted max-md:text-left" data-label="Updated">
                 {{ timeAgo(run.updatedAt, now) }}
