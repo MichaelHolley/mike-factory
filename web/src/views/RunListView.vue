@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Coffee, GitPullRequest } from "@lucide/vue";
-import { computed } from "vue";
+import { ChevronRight, Coffee, GitPullRequest } from "@lucide/vue";
+import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import type { RunStatus } from "../../../src/runStatus.ts";
 import EmptyState from "../components/EmptyState.vue";
@@ -14,6 +14,12 @@ import { isFinished } from "../phase.ts";
 
 const { runs, error, loaded } = useRuns();
 const now = useNow();
+const expandedRepos = ref(new Set<string>());
+
+function toggleRepo(repo: string) {
+  if (expandedRepos.value.has(repo)) expandedRepos.value.delete(repo);
+  else expandedRepos.value.add(repo);
+}
 
 const time = (iso: string | null) => (iso ? Date.parse(iso) : null);
 const runPath = (run: RunStatus) => `/runs/${run.repo}/${run.issue}`;
@@ -107,45 +113,60 @@ const projects = computed(() => {
             <th
               colspan="7"
               scope="rowgroup"
-              class="border-y border-line bg-ink/3 px-5 py-2 text-left text-sm font-semibold max-md:block"
+              class="border-y border-line bg-ink/3 text-left text-sm font-semibold max-md:block"
             >
-              {{ project.repo }} <span class="font-medium text-muted tabular-nums">{{ project.runs.length }}</span>
+              <button
+                type="button"
+                :aria-expanded="expandedRepos.has(project.repo)"
+                class="flex w-full cursor-pointer items-center gap-2 px-5 py-2 text-left hover:bg-ink/4 focus-visible:-outline-offset-2"
+                @click="toggleRepo(project.repo)"
+              >
+                <ChevronRight
+                  class="size-4 flex-none text-muted transition-transform duration-150 ease-in-out motion-reduce:transition-none"
+                  :class="{ 'rotate-90': expandedRepos.has(project.repo) }"
+                  aria-hidden="true"
+                />
+                <span class="min-w-0 truncate">{{ project.repo }}</span>
+                <span class="font-medium text-muted tabular-nums">{{ project.runs.length }}</span>
+              </button>
             </th>
           </tr>
-          <tr
-            v-for="run in project.runs"
-            :key="run.issue"
-            class="relative hover:bg-run/4 not-nth-2:border-t not-nth-2:border-line max-md:grid max-md:grid-cols-4 max-md:gap-x-4 max-md:gap-y-3 max-md:px-5 max-md:py-4 *:px-5 *:py-3 max-md:*:p-0 max-md:[&>td[data-label]]:before:block max-md:[&>td[data-label]]:before:text-xs max-md:[&>td[data-label]]:before:text-muted max-md:[&>td[data-label]]:before:content-[attr(data-label)]"
-          >
-            <td class="max-md:col-span-full">
-              <RouterLink
-                :to="runPath(run)"
-                class="group text-ink no-underline after:absolute after:inset-0"
-                :aria-label="`${run.repo} #${run.issue}`"
-              >
-                <span class="font-semibold text-ink tabular-nums group-hover:underline group-hover:underline-offset-3"
-                  >#{{ run.issue }}</span
+          <template v-if="expandedRepos.has(project.repo)">
+            <tr
+              v-for="run in project.runs"
+              :key="run.issue"
+              class="relative hover:bg-run/4 not-nth-2:border-t not-nth-2:border-line max-md:grid max-md:grid-cols-4 max-md:gap-x-4 max-md:gap-y-3 max-md:px-5 max-md:py-4 *:px-5 *:py-3 max-md:*:p-0 max-md:[&>td[data-label]]:before:block max-md:[&>td[data-label]]:before:text-xs max-md:[&>td[data-label]]:before:text-muted max-md:[&>td[data-label]]:before:content-[attr(data-label)]"
+            >
+              <td class="max-md:col-span-full">
+                <RouterLink
+                  :to="runPath(run)"
+                  class="group text-ink no-underline after:absolute after:inset-0"
+                  :aria-label="`${run.repo} #${run.issue}`"
                 >
-              </RouterLink>
-            </td>
-            <td class="max-md:col-span-full">
-              <PhaseBadge :phase="run.phase" />
-            </td>
-            <td data-label="Model" class="max-md:col-span-full">{{ formatModel(run) }}</td>
-            <td class="text-right tabular-nums max-md:text-left" data-label="Attempts">{{ run.attempts }}</td>
-            <td class="text-right tabular-nums max-md:text-left" data-label="Cost">
-              {{ formatCost(run.costUsd) }}
-            </td>
-            <td data-label="Pull request">
-              <OutboundLink v-if="run.prUrl" :href="run.prUrl" :icon="GitPullRequest" class="relative z-1"
-                >Open PR</OutboundLink
-              >
-              <span v-else class="text-muted">None</span>
-            </td>
-            <td class="text-right tabular-nums text-muted max-md:text-left" data-label="Updated">
-              {{ timeAgo(run.updatedAt, now) }}
-            </td>
-          </tr>
+                  <span class="font-semibold text-ink tabular-nums group-hover:underline group-hover:underline-offset-3"
+                    >#{{ run.issue }}</span
+                  >
+                </RouterLink>
+              </td>
+              <td class="max-md:col-span-full">
+                <PhaseBadge :phase="run.phase" />
+              </td>
+              <td data-label="Model" class="max-md:col-span-full">{{ formatModel(run) }}</td>
+              <td class="text-right tabular-nums max-md:text-left" data-label="Attempts">{{ run.attempts }}</td>
+              <td class="text-right tabular-nums max-md:text-left" data-label="Cost">
+                {{ formatCost(run.costUsd) }}
+              </td>
+              <td data-label="Pull request">
+                <OutboundLink v-if="run.prUrl" :href="run.prUrl" :icon="GitPullRequest" class="relative z-1"
+                  >Open PR</OutboundLink
+                >
+                <span v-else class="text-muted">None</span>
+              </td>
+              <td class="text-right tabular-nums text-muted max-md:text-left" data-label="Updated">
+                {{ timeAgo(run.updatedAt, now) }}
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table>
     </div>

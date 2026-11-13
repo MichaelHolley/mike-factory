@@ -12,6 +12,8 @@ MODEL=faux DATA_DIR=./data pnpm dev
 
 For the status UI, run `pnpm -C web dev` next to the server and open http://localhost:5173. Without GitHub App secrets, run `pnpm dev:mock` instead of `pnpm dev` to serve sample runs.
 
+Verify changes offline with `pnpm lint`, `pnpm format:check`, `pnpm typecheck` and `pnpm test`; tests include the status UI and need no GitHub App secrets.
+
 ## Configuration
 
 Repos are configured in `config/repos.yaml`: the owner, the allowed sender id, and per repo the `setup` command, ordered `checks`, budgets, and optionally `model` (any OpenRouter model) and `thinkingLevel`. Environment variables are documented in `.env.example`.
