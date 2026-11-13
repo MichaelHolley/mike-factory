@@ -61,6 +61,7 @@ async function main() {
   const runnerHost = process.env.RUNNER_HOST || undefined;
   const workspace = await openWorkspace({ runnerHost, dataDir, gitIdentity: await github.botIdentity() });
   if (!runnerHost) log("RUNNER_HOST is unset: agent tools run unsandboxed in the server process");
+  if (!secrets.proxySecret) log("PROXY_SECRET is unset: anything that reaches the port can use the status API");
 
   const worktrees = createWorktrees({
     env: workspace.env(dataDir),
@@ -103,6 +104,7 @@ async function main() {
     service,
     webhook: { config: effectiveConfig, secret: secrets.webhookSecret },
     log,
+    proxySecret: secrets.proxySecret,
     shutdownSignal: shutdownController.signal,
   });
   const server = serve({ fetch: app.fetch, port, hostname }, (info) =>

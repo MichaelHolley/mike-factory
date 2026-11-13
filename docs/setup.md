@@ -43,6 +43,7 @@ Only `SKILL.md` is served to the agent, so pick self-contained skills that run u
 Run the Docker image behind a reverse proxy; the app listens on port 3000 and has no auth of its own.
 
 - Put everything except `/webhooks/github` behind proxy auth; GitHub calls the webhook, verified by signature.
+- Set `PROXY_SECRET` (e.g. `openssl rand -hex 32`) and have the proxy set it as the `X-Proxy-Secret` header on every request, e.g. Caddy's `header_up X-Proxy-Secret {env.PROXY_SECRET}`. The app rejects other requests, so the runner can't call it directly.
 - Don't buffer or compress `text/event-stream` responses; the status page streams live updates.
 - Set `PUBLIC_URL` to the public URL so status comments link to the run page.
 - `config/repos.yaml` is baked into the image; rebuild it, or mount the file and point `REPOS_CONFIG` at it.
@@ -60,6 +61,7 @@ services:
   runner:
     image: <user>/mike-factory:latest
     command: ["/app/runner.sh"]
+    cap_drop: [NET_RAW]
     volumes: [work:/data, mirrors:/mirrors:ro, ssh:/ssh:ro]
 volumes: { state: {}, mirrors: {}, work: {}, ssh: {} }
 ```

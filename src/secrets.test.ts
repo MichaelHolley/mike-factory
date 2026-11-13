@@ -15,6 +15,7 @@ describe("takeSecrets", () => {
     process.env.GITHUB_PRIVATE_KEY = pem.replaceAll("\n", "\\n");
     process.env.GITHUB_WEBHOOK_SECRET = "SECRET-WEBHOOK";
     process.env.OPENROUTER_API_KEY = "SECRET-OPENROUTER";
+    process.env.PROXY_SECRET = "SECRET-PROXY";
 
     const secrets = takeSecrets();
     expect(secrets).toEqual({
@@ -22,6 +23,7 @@ describe("takeSecrets", () => {
       privateKey: pem,
       webhookSecret: "SECRET-WEBHOOK",
       openrouterApiKey: "SECRET-OPENROUTER",
+      proxySecret: "SECRET-PROXY",
     });
 
     let output = "";
@@ -36,7 +38,9 @@ describe("takeSecrets", () => {
     );
     expect(result.ok).toBe(true);
     expect(output).toContain("PATH=");
-    expect(output).not.toMatch(/SECRET|PRIVATE KEY|GITHUB_PRIVATE_KEY|GITHUB_WEBHOOK_SECRET|OPENROUTER_API_KEY/);
+    expect(output).not.toMatch(
+      /SECRET|PRIVATE KEY|GITHUB_PRIVATE_KEY|GITHUB_WEBHOOK_SECRET|OPENROUTER_API_KEY|PROXY_SECRET/,
+    );
   });
 
   it("fails fast when a required secret is missing", () => {

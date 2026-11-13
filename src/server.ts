@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -12,6 +13,8 @@ export interface ServerDeps {
   /** Serves `/webhooks/github`; without it the server has no GitHub integration. */
   webhook?: { config: AppConfig; secret: string };
   log: (msg: string, data?: object) => void;
+  /** When set, every request except the webhook must carry it in `X-Proxy-Secret`, which the reverse proxy adds. */
+  proxySecret?: string;
   uiDir?: string;
   /** Ends open live streams so `server.close()` can finish. */
   shutdownSignal?: AbortSignal;
@@ -25,8 +28,27 @@ const RETRY_MS = 5_000;
 
 const DEFAULT_UI_DIR = fileURLToPath(new URL("../web/dist", import.meta.url));
 
-export function createServer({ service, webhook, log, uiDir = DEFAULT_UI_DIR, shutdownSignal }: ServerDeps): Hono {
+// Hashed so `timingSafeEqual` compares equal lengths without leaking the secret's length.
+const digest = (value: string) => createHash("sha256").update(value).digest();
+
+export function createServer({
+  service,
+  webhook,
+  log,
+  proxySecret,
+  uiDir = DEFAULT_UI_DIR,
+  shutdownSignal,
+}: ServerDeps): Hono {
   const app = new Hono();
+
+  if (proxySecret) {
+    const expected = digest(proxySecret);
+    app.use("*", async (c, next) => {
+      if (c.req.path === "/webhooks/github") return next();
+      if (!timingSafeEqual(digest(c.req.header("x-proxy-secret") ?? ""), expected)) return c.text("unauthorized", 401);
+      return next();
+    });
+  }
 
   /**
    * Streams `{ from, items }` events: the full list first, then only the tail from the first item that changed.

@@ -25,7 +25,7 @@ const config: AppConfig = {
   ],
 };
 
-function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui")) {
+function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui"), proxySecret?: string) {
   const listeners = new Set<() => void>();
   const subscribe = (listener: () => void) => {
     listeners.add(listener);
@@ -45,7 +45,14 @@ function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui")) {
   };
   const log = vi.fn();
   const shutdown = new AbortController();
-  const app = createServer({ service, webhook: { config, secret }, log, uiDir, shutdownSignal: shutdown.signal });
+  const app = createServer({
+    service,
+    webhook: { config, secret },
+    log,
+    proxySecret,
+    uiDir,
+    shutdownSignal: shutdown.signal,
+  });
   const post = (senderId: number, signature?: string) => {
     const body = JSON.stringify({
       action: "created",
@@ -242,6 +249,15 @@ describe("webhook server", () => {
       vi.mocked(service.message).mockResolvedValue("not_found");
       expect((await send(app, { id, text: "hi" })).status).toBe(404);
     });
+  });
+
+  it("with a proxy secret, rejects requests that don't carry it, except the webhook", async () => {
+    const { app, post } = setup(undefined, "proxy-secret");
+    const status = (headers?: Record<string, string>) => app.request("/status", { headers });
+    expect((await status()).status).toBe(401);
+    expect((await status({ "x-proxy-secret": "proxy-secre" })).status).toBe(401);
+    expect((await status({ "x-proxy-secret": "proxy-secret" })).status).toBe(200);
+    expect((await post(42)).status).toBe(202);
   });
 
   it("returns 404 for everything else", async () => {
