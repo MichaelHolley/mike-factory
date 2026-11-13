@@ -219,6 +219,7 @@ describe("issue pipeline", () => {
       repo: REPO,
       issue: 1,
       issueUrl: `https://github.com/${world.config.owner}/${REPO}/issues/1`,
+      title: "Add hello",
       branch: "agent/issue-1",
       phase: "done",
       attempts: 0,

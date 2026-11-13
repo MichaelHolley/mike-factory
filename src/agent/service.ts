@@ -75,7 +75,10 @@ export function createIssueService(opts: {
   const launch = async (repoConfig: RepoConfig, conversationId: ConversationId | undefined, input: PipelineInput) => {
     const { repo, issue, requestId } = input;
     const key = issueKey(config.owner, repo, issue);
-    await upsertStatus(deps, repo, issue, WORKING_STATUS);
+    const [{ title }] = await Promise.all([
+      github.getIssue(repo, issue),
+      upsertStatus(deps, repo, issue, WORKING_STATUS),
+    ]);
     const worktreePath = worktrees.worktreePath(repo, issue);
     const conversation = conversationId
       ? await harness.conversation(conversationId, context)
@@ -105,6 +108,7 @@ export function createIssueService(opts: {
       Object.assign(await tx.doc(IssueState, conversation.id), {
         repo,
         issue,
+        title,
         branch: branchName(issue),
         worktreePath,
         phase: "queued",
@@ -200,6 +204,7 @@ export function createIssueService(opts: {
             repo: state.repo,
             issue: state.issue,
             issueUrl: `https://github.com/${config.owner}/${state.repo}/issues/${state.issue}`,
+            title: state.title ?? null,
             branch: state.branch,
             phase: state.phase,
             attempts: state.attempts,

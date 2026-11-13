@@ -17,6 +17,7 @@ export const IssueIndex = defineDocFamily<IssueIndexValue, null>({
 export type IssueStateValue = {
   repo: string;
   issue: number;
+  title?: string | null;
   branch: string;
   worktreePath: string;
   phase: IssuePhase;
@@ -44,6 +45,7 @@ export const IssueState = defineDoc<IssueStateValue>({
   initial: () => ({
     repo: "",
     issue: 0,
+    title: null,
     branch: "",
     worktreePath: "",
     phase: "prepare",

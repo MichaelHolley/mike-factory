@@ -20,6 +20,7 @@ export type RunStatus = {
   repo: string;
   issue: number;
   issueUrl: string;
+  title: string | null;
   branch: string;
   phase: IssuePhase;
   attempts: number;

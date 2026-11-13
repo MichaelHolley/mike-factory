@@ -142,6 +142,7 @@ describe("webhook server", () => {
       repo: "byok-imagen",
       issue,
       issueUrl: "",
+      title: null,
       branch: "",
       phase,
       attempts: 0,

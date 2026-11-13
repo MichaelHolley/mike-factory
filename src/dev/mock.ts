@@ -5,11 +5,18 @@ import { createServer } from "../server.ts";
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
-function run(repo: string, issue: number, phase: RunStatus["phase"], extra: Partial<RunStatus> = {}): RunStatus {
+function run(
+  repo: string,
+  issue: number,
+  title: string,
+  phase: RunStatus["phase"],
+  extra: Partial<RunStatus> = {},
+): RunStatus {
   return {
     repo,
     issue,
     issueUrl: `https://github.com/example/${repo}/issues/${issue}`,
+    title,
     branch: branchName(issue),
     phase,
     attempts: 1,
@@ -86,16 +93,28 @@ const FINISHED: RunStatus["phase"][] = ["done", "failed", "aborted"];
 /** In-memory runs and conversations; messages get a canned reply instead of reaching an agent. */
 function createMockService(): IssueService {
   const runs: RunStatus[] = [
-    run("mike-factory", 31, "implement", { startedAt: ago(4), updatedAt: ago(0), costUsd: 0.18 }),
-    run("mike-factory", 30, "fix", { attempts: 2, costUsd: 1.07, thinkingLevel: "low" }),
-    run("web-shop", 12, "queued", { startedAt: null, updatedAt: null, costUsd: 0 }),
-    run("web-shop", 9, "done", {
+    run("mike-factory", 31, "Add a dark mode toggle to the status page", "implement", {
+      startedAt: ago(4),
+      updatedAt: ago(0),
+      costUsd: 0.18,
+    }),
+    run("mike-factory", 30, "Retry flaky webhook deliveries with exponential backoff", "fix", {
+      attempts: 2,
+      costUsd: 1.07,
+      thinkingLevel: "low",
+    }),
+    run("web-shop", 12, "Checkout button stays disabled after removing a coupon", "queued", {
+      startedAt: null,
+      updatedAt: null,
+      costUsd: 0,
+    }),
+    run("web-shop", 9, "Show delivery estimates on the product page", "done", {
       prUrl: "https://github.com/example/web-shop/pull/14",
       startedAt: ago(180),
       updatedAt: ago(150),
       costUsd: 2.31,
     }),
-    run("mike-factory", 27, "failed", {
+    run("mike-factory", 27, "Recover worktrees after the server crashes mid-run", "failed", {
       attempts: 3,
       model: null,
       thinkingLevel: null,
@@ -103,7 +122,11 @@ function createMockService(): IssueService {
       startedAt: ago(600),
       updatedAt: ago(540),
     }),
-    run("web-shop", 7, "aborted", { startedAt: ago(1500), updatedAt: ago(1490), costUsd: 0.05 }),
+    run("web-shop", 7, "Translate the footer", "aborted", {
+      startedAt: ago(1500),
+      updatedAt: ago(1490),
+      costUsd: 0.05,
+    }),
   ];
   const key = (repo: string, issue: number) => `${repo}/${issue}`;
   const conversations = new Map(runs.map((r) => [key(r.repo, r.issue), sampleConversation()]));
@@ -124,7 +147,7 @@ function createMockService(): IssueService {
     "failed",
     "aborted",
   ];
-  const demo = run("phase-demo", 1, "queued", { startedAt: ago(0), updatedAt: ago(0) });
+  const demo = run("phase-demo", 1, "Walk through every phase", "queued", { startedAt: ago(0), updatedAt: ago(0) });
   runs.unshift(demo);
   conversations.set(key(demo.repo, demo.issue), sampleConversation());
   setInterval(() => {

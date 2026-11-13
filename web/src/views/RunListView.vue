@@ -9,7 +9,7 @@ import OutboundLink from "../components/OutboundLink.vue";
 import PhaseBadge from "../components/PhaseBadge.vue";
 import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
-import { formatCost, formatModel, timeAgo } from "../format.ts";
+import { timeAgo } from "../format.ts";
 import { isFinished } from "../phase.ts";
 
 const { runs, error, loaded } = useRuns();
@@ -63,7 +63,7 @@ const projects = computed(() => {
       <li
         v-for="run in live"
         :key="`${run.repo}#${run.issue}`"
-        class="relative grid grid-cols-[minmax(0,16rem)_minmax(0,1fr)_auto] items-center gap-6 px-5 py-4 hover:bg-run/4 not-first:border-t not-first:border-line max-md:grid-cols-[minmax(0,1fr)_auto] max-md:gap-x-4 max-md:gap-y-2"
+        class="relative grid grid-cols-[minmax(0,16rem)_minmax(0,1fr)_8rem_5rem] items-center gap-6 px-5 py-4 hover:bg-run/4 not-first:border-t not-first:border-line max-md:grid-cols-[minmax(0,1fr)_auto] max-md:gap-x-4 max-md:gap-y-2"
       >
         <RouterLink
           :to="runPath(run)"
@@ -76,15 +76,11 @@ const projects = computed(() => {
             >#{{ run.issue }}</span
           >
         </RouterLink>
+        <span class="truncate max-md:col-span-full" :title="run.title ?? undefined">{{ run.title }}</span>
         <PhaseBadge :phase="run.phase" />
-        <span
-          class="flex gap-4 text-sm whitespace-nowrap tabular-nums max-md:min-w-0 max-md:flex-wrap max-md:justify-end max-md:gap-y-1"
-        >
-          <span v-if="run.attempts > 1">Attempt {{ run.attempts }}</span>
-          <span class="text-muted">{{ formatModel(run) }}</span>
-          <span>{{ formatCost(run.costUsd) }}</span>
-          <span class="text-muted">{{ timeAgo(run.updatedAt, now) }}</span>
-        </span>
+        <span class="text-right text-sm whitespace-nowrap text-muted tabular-nums">{{
+          timeAgo(run.updatedAt, now)
+        }}</span>
       </li>
     </ul>
   </section>
@@ -96,10 +92,8 @@ const projects = computed(() => {
         <thead class="max-md:hidden [&_th]:px-5 [&_th]:py-3 [&_th]:text-xs [&_th]:font-medium [&_th]:text-muted">
           <tr>
             <th class="text-left">Issue</th>
+            <th class="text-left">Title</th>
             <th class="text-left">Outcome</th>
-            <th class="text-left">Model</th>
-            <th class="text-right tabular-nums">Attempts</th>
-            <th class="text-right tabular-nums">Cost</th>
             <th class="text-left">Pull request</th>
             <th class="text-right tabular-nums">Updated</th>
           </tr>
@@ -111,7 +105,7 @@ const projects = computed(() => {
         >
           <tr class="max-md:block">
             <th
-              colspan="7"
+              colspan="5"
               scope="rowgroup"
               class="border-y border-line bg-ink/3 text-left text-sm font-semibold max-md:block"
             >
@@ -148,13 +142,14 @@ const projects = computed(() => {
                   >
                 </RouterLink>
               </td>
+              <td
+                class="w-full max-w-0 truncate max-md:col-span-full max-md:max-w-none"
+                :title="run.title ?? undefined"
+              >
+                {{ run.title }}
+              </td>
               <td class="max-md:col-span-full">
                 <PhaseBadge :phase="run.phase" />
-              </td>
-              <td data-label="Model" class="max-md:col-span-full">{{ formatModel(run) }}</td>
-              <td class="text-right tabular-nums max-md:text-left" data-label="Attempts">{{ run.attempts }}</td>
-              <td class="text-right tabular-nums max-md:text-left" data-label="Cost">
-                {{ formatCost(run.costUsd) }}
               </td>
               <td data-label="Pull request">
                 <OutboundLink v-if="run.prUrl" :href="run.prUrl" :icon="GitPullRequest" class="relative z-1"
