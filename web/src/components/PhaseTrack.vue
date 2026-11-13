@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { IssuePhase } from "../../../src/runStatus.ts";
-import { phaseTone, pipelineSteps, stepLook } from "../phase.ts";
+import { isFinished, pipelineSteps, stepLook } from "../phase.ts";
 
 const props = defineProps<{ phase: IssuePhase }>();
 
-const running = computed(() => phaseTone(props.phase) === "run");
+const running = computed(() => props.phase !== "queued" && !isFinished(props.phase));
 const steps = computed(() => pipelineSteps(props.phase).map((step) => ({ ...step, ...stepLook[step.name] })));
 </script>
 
