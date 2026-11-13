@@ -67,6 +67,22 @@ describe("issue pipeline", () => {
     expect((await conversation.agent(ctx)).thinkingLevel).toBe("low");
   });
 
+  it("gives the agent the repo's AGENTS.md in its system prompt", async () => {
+    const world = createWorld({ dir });
+    let instructions: string | null | undefined;
+    autopilot(world.faux, (messages) => {
+      const system = messages.find((message) => message.role === "system");
+      instructions ??= system?.sections?.["project-instructions"];
+      return undefined;
+    });
+    const { harness, service } = await launch(world);
+
+    await service.start(startAction(1, "comment-1"));
+    await pipelineResult(harness, 1);
+
+    expect(instructions).toContain("AGENTS.md\nUse tabs.");
+  });
+
   it("applies the repo's current model when /mike is sent again", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux);

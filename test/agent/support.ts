@@ -46,6 +46,7 @@ function seedRemote(dir: string, repo: string) {
   mkdirSync(seed, { recursive: true });
   git(seed, "init", "--initial-branch=main");
   writeFileSync(join(seed, "README.md"), "# demo\n");
+  writeFileSync(join(seed, "AGENTS.md"), "Use tabs.\n");
   git(seed, "add", "-A");
   git(seed, "commit", "-m", "seed");
   git(dir, "clone", "--bare", seed, remote);

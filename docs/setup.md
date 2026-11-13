@@ -16,6 +16,8 @@ For the status UI, run `pnpm -C web dev` next to the server and open http://loca
 
 Repos are configured in `config/repos.yaml`: the owner, the allowed sender id, and per repo the `setup` command, ordered `checks`, budgets, and optionally `model` (any OpenRouter model) and `thinkingLevel`. Environment variables are documented in `.env.example`.
 
+To give the agent repo-specific instructions, commit an `AGENTS.md` at the root of the target repo; the agent gets it in its system prompt on every run.
+
 ## GitHub App
 
 Create the app under your account and install it on selected repositories. Every repo must also be listed in `config/repos.yaml`.

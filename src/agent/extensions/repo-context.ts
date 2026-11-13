@@ -3,7 +3,8 @@ import { findRepo, type AppConfig } from "../../config.ts";
 import { IssueState } from "../docs.ts";
 
 const MAX_DOC_CHARS = 20_000;
-const CONTEXT_FILES = ["AGENTS.md", "README.md"];
+const CONTEXT_FILES = ["AGENTS.md", "CLAUDE.md", "README.md"];
+const NESTED_HINT = "Subdirectories may have their own AGENTS.md; read it before changing files there.";
 
 export function createRepoContext(config: AppConfig) {
   return defineExtension({
@@ -25,9 +26,14 @@ export function createRepoContext(config: AppConfig) {
         if (!state || !input.env) return undefined;
         for (const name of CONTEXT_FILES) {
           const file = await input.env.readTextFile(`${state.worktreePath}/${name}`, context);
-          if (file.ok) return `${name}\n${file.value.slice(0, MAX_DOC_CHARS)}`;
+          if (!file.ok) continue;
+          const truncated =
+            file.value.length > MAX_DOC_CHARS
+              ? `\n[Truncated at ${MAX_DOC_CHARS} characters; read ${name} for the rest.]`
+              : "";
+          return `${NESTED_HINT}\n\n${name}\n${file.value.slice(0, MAX_DOC_CHARS)}${truncated}`;
         }
-        return undefined;
+        return NESTED_HINT;
       }),
     ],
   });
