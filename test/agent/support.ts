@@ -12,6 +12,7 @@ import {
   type FauxProviderHandle,
 } from "@earendil-works/pi-ai/providers/faux";
 import type { Harness } from "@earendil-works/pi-durable";
+import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import type { TaskId } from "@earendil-works/pi-durable";
 import { asConversationId, IssueIndex, IssueState } from "../../src/agent/docs.ts";
 import type { Skill } from "../../src/agent/extensions/skills.ts";
@@ -121,6 +122,7 @@ export function createWorld(opts: {
       : new FakeGitHub();
   const github = opts.githubFile ? persisted(fake, opts.githubFile) : fake;
   const worktrees = createWorktrees({
+    env: new NodeExecutionEnv({ cwd: opts.dir }),
     dataDir: join(opts.dir, "data"),
     owner: OWNER,
     remoteUrl: (name) => remotes[name]!,

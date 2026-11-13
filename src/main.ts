@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter";
@@ -61,7 +62,12 @@ async function main() {
   process.env.GIT_AUTHOR_NAME = process.env.GIT_COMMITTER_NAME = identity.name;
   process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = identity.email;
 
-  const worktrees = createWorktrees({ dataDir, owner: config.owner, token: (repo) => github.gitToken(repo) });
+  const worktrees = createWorktrees({
+    env: new NodeExecutionEnv({ cwd: dataDir }),
+    dataDir,
+    owner: config.owner,
+    token: (repo) => github.gitToken(repo),
+  });
 
   const { models, model } = buildModels(secrets.openrouterApiKey, useFaux);
   const effectiveConfig: AppConfig = model

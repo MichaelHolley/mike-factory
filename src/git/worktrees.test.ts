@@ -3,6 +3,7 @@ import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { RepoConfig } from "../config.ts";
 import { createWorktrees } from "./worktrees.ts";
@@ -43,7 +44,12 @@ beforeEach(async () => {
   await git(seed, "add", "-A");
   await git(seed, "-c", "user.name=seed", "-c", "user.email=seed@example.com", "commit", "-m", "seed");
   await git(seed, "push", remote, "main");
-  worktrees = createWorktrees({ dataDir, owner: "o", remoteUrl: () => remote });
+  worktrees = createWorktrees({
+    env: new NodeExecutionEnv({ cwd: root }),
+    dataDir,
+    owner: "o",
+    remoteUrl: () => remote,
+  });
 });
 
 afterEach(async () => {

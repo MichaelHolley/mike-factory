@@ -1,36 +1,41 @@
-import { execFile } from "node:child_process";
-import { access, mkdir, readdir } from "node:fs/promises";
+import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { type ExecutionEnv, getOrThrow } from "@earendil-works/pi-durable/env";
 import { dirname, join } from "node:path";
-import { promisify } from "node:util";
 import type { RepoConfig } from "../config.ts";
 import { branchName, type Worktrees } from "../contracts.ts";
 
-const execFileAsync = promisify(execFile);
-
-const exists = (path: string) =>
-  access(path).then(
-    () => true,
-    () => false,
-  );
-
 export function createWorktrees(opts: {
+  env: ExecutionEnv;
   dataDir: string;
   owner: string;
   remoteUrl?: (repo: string) => string;
   token?: (repo: string) => Promise<string>;
 }): Worktrees {
-  const { dataDir, owner } = opts;
+  const { env: workspace, dataDir, owner } = opts;
   const remoteUrl = opts.remoteUrl ?? ((repo) => `https://github.com/${owner}/${repo}.git`);
   const locks = new Map<string, Promise<unknown>>();
 
   const barePath = (repo: string) => join(dataDir, "repos", `${repo}.git`);
   const worktreePath = (repo: string, issue: number) => join(dataDir, "worktrees", repo, `issue-${issue}`);
 
+  const exists = async (path: string) => getOrThrow(await workspace.exists(path, ctx));
+  const mkdir = async (path: string) => getOrThrow(await workspace.createDir(path, { recursive: true }, ctx));
+
   const git = async (cwd: string, args: string[], env: Record<string, string> = {}) => {
-    const { stdout } = await execFileAsync("git", args, {
-      cwd,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...env },
-    });
+    let stdout = "";
+    let stderr = "";
+    const { exitCode } = getOrThrow(
+      await workspace.exec(
+        ["git", ...args],
+        {
+          cwd,
+          env: { GIT_TERMINAL_PROMPT: "0", ...env },
+          onOutput: (text, _context, { stream }) => (stream === "stdout" ? (stdout += text) : (stderr += text)),
+        },
+        ctx,
+      ),
+    );
+    if (exitCode !== 0) throw new Error(`git ${args.join(" ")} failed with exit code ${exitCode}: ${stderr.trim()}`);
     return stdout.trim();
   };
 
@@ -58,8 +63,8 @@ export function createWorktrees(opts: {
   const ensureRepo = async (repo: string) => {
     const bare = barePath(repo);
     if (!(await exists(join(bare, "HEAD")))) {
-      await mkdir(dirname(bare), { recursive: true });
-      await git(dataDir, ["clone", "--bare", remoteUrl(repo), bare], await authEnv(repo));
+      await mkdir(dirname(bare));
+      await git(dirname(bare), ["clone", "--bare", remoteUrl(repo), bare], await authEnv(repo));
       await git(bare, ["config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"]);
     }
   };
@@ -81,7 +86,7 @@ export function createWorktrees(opts: {
         if (await exists(path)) return { path, branch, created: false };
 
         await fetchOrigin(repo.name);
-        await mkdir(dirname(path), { recursive: true });
+        await mkdir(dirname(path));
         await git(barePath(repo.name), ["worktree", "prune"]);
         if (await branchExists(repo.name, branch)) {
           await git(barePath(repo.name), ["worktree", "add", path, branch]);
@@ -124,9 +129,9 @@ export function createWorktrees(opts: {
 
     async issues(repo) {
       const numbers = new Set<number>();
-      const dirs = await readdir(join(dataDir, "worktrees", repo)).catch(() => []);
-      for (const dir of dirs) {
-        const match = /^issue-(\d+)$/.exec(dir);
+      const dirs = await workspace.listDir(join(dataDir, "worktrees", repo), ctx);
+      for (const { name } of dirs.ok ? dirs.value : []) {
+        const match = /^issue-(\d+)$/.exec(name);
         if (match) numbers.add(Number(match[1]));
       }
       if (await exists(join(barePath(repo), "HEAD"))) {
