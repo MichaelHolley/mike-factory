@@ -133,6 +133,8 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
       if (cached && cached.expiresAt - Date.now() > TOKEN_REFRESH_MARGIN_MS) return cached.token;
       const { data } = await app.octokit.request("POST /app/installations/{installation_id}/access_tokens", {
         installation_id: await installationId(repo),
+        repositories: [repo],
+        permissions: { contents: "write" },
       });
       tokens.set(repo, { token: data.token, expiresAt: Date.parse(data.expires_at) });
       return data.token;
