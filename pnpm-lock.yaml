@@ -54,6 +54,9 @@ importers:
 
   web:
     dependencies:
+      '@lucide/vue':
+        specifier: 1.72.0
+        version: 1.72.0(vue@3.5.44(typescript@6.0.3))
       markdown-it:
         specifier: 15.0.3
         version: 15.0.3
@@ -422,6 +425,11 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@lucide/vue@1.72.0':
+    resolution: {integrity: sha512-BPcYejGErv+kg4ilXyPU7j6YdA0kQaMiBnlcCElTsoLdQgD+6aoquA/0I4amN5yzkJrZgpULvpDonXui94ez8A==}
+    peerDependencies:
+      vue: '>=3.0.1'
 
   '@octokit/app@16.1.4':
     resolution: {integrity: sha512-g70WONQyGoBgqIJtv4O0MUEfOF1iJpTfFt3qAW7HaiwiJ6k607xg/gBezCa4tuq6BpO6qXn7qvq8v9tjWtgGQg==}
@@ -2360,6 +2368,10 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@lucide/vue@1.72.0(vue@3.5.44(typescript@6.0.3))':
+    dependencies:
+      vue: 3.5.44(typescript@6.0.3)
 
   '@octokit/app@16.1.4':
     dependencies:

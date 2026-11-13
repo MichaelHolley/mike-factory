@@ -40,7 +40,7 @@ const duration = computed(() => {
       </h1>
     </header>
 
-    <PhaseTrack :phase="run.phase" large class="mb-8" />
+    <PhaseTrack :phase="run.phase" class="mb-8" />
 
     <div
       class="grid grid-cols-3 gap-px overflow-hidden rounded-md border border-line bg-line max-lg:grid-cols-1 *:grid *:grid-cols-[7rem_minmax(0,1fr)] *:content-start *:gap-x-4 *:gap-y-2 *:bg-surface *:px-5 *:py-4.5 [&_dl>div]:col-span-full [&_dl>div]:grid [&_dl>div]:grid-cols-subgrid [&_dl>div]:items-baseline [&_dt]:text-sm [&_dt]:text-muted [&_dd]:tabular-nums [&_dd]:wrap-anywhere"

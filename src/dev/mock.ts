@@ -111,6 +111,28 @@ function createMockService(): IssueService {
   const transcriptListeners = new Map<string, Set<() => void>>();
   const notify = (listeners: Set<() => void> | undefined) => listeners?.forEach((listener) => listener());
 
+  const cycle: RunStatus["phase"][] = [
+    "queued",
+    "prepare",
+    "implement",
+    "verify",
+    "fix",
+    "revise",
+    "publish",
+    "report",
+    "done",
+    "failed",
+    "aborted",
+  ];
+  const demo = run("phase-demo", 1, "queued", { startedAt: ago(0), updatedAt: ago(0) });
+  runs.unshift(demo);
+  conversations.set(key(demo.repo, demo.issue), sampleConversation());
+  setInterval(() => {
+    demo.phase = cycle[(cycle.indexOf(demo.phase) + 1) % cycle.length]!;
+    demo.updatedAt = new Date().toISOString();
+    notify(statusListeners);
+  }, 2000);
+
   return {
     start: async () => {},
     stop: async () => {},
