@@ -95,9 +95,17 @@ export function createWorktrees(opts: {
     const bare = barePath(repo);
     if (!(await exists(join(bare, "HEAD")))) {
       await createDir(dirname(bare));
-      // `--no-local` so the clone never hardlinks the mirror's object files when both share a file system.
-      await git(dirname(bare), ["clone", "--bare", "--no-local", mirrorPath(repo), bare]);
-      await git(bare, ["config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"]);
+      // `--no-local` so the clone never hardlinks the mirror's object files when both share a file system. The refspec
+      // goes in with the clone, so a crash right after it cannot leave a clone that never fills `origin/*`.
+      await git(dirname(bare), [
+        "clone",
+        "--bare",
+        "--no-local",
+        "--config",
+        "remote.origin.fetch=+refs/heads/*:refs/remotes/origin/*",
+        mirrorPath(repo),
+        bare,
+      ]);
     }
   };
 
