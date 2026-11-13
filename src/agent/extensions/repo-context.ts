@@ -2,7 +2,7 @@ import { defineExtension, section } from "@earendil-works/pi-durable";
 import { findRepo, type AppConfig } from "../../config.ts";
 import { IssueState } from "../docs.ts";
 
-const MAX_DOC_CHARS = 20_000;
+export const MAX_DOC_CHARS = 20_000;
 const CONTEXT_FILES = ["AGENTS.md", "CLAUDE.md", "README.md"];
 const NESTED_HINT = "Subdirectories may have their own AGENTS.md; read it before changing files there.";
 
@@ -23,18 +23,24 @@ export function createRepoContext(config: AppConfig) {
       }),
       section("project-instructions", async (input, context) => {
         const state = await input.read.snapshot(IssueState, input.conversationId, context);
-        if (!state || !input.env) return undefined;
-        for (const name of CONTEXT_FILES) {
-          const file = await input.env.readTextFile(`${state.worktreePath}/${name}`, context);
-          if (!file.ok) continue;
-          const truncated =
-            file.value.length > MAX_DOC_CHARS
-              ? `\n[Truncated at ${MAX_DOC_CHARS} characters; read ${name} for the rest.]`
-              : "";
-          return `${NESTED_HINT}\n\n${name}\n${file.value.slice(0, MAX_DOC_CHARS)}${truncated}`;
-        }
-        return NESTED_HINT;
+        const env = input.env;
+        if (!state || !env) return undefined;
+        return projectInstructions(async (name) => {
+          const file = await env.readTextFile(`${state.worktreePath}/${name}`, context);
+          return file.ok ? file.value : undefined;
+        });
       }),
     ],
   });
+}
+
+export async function projectInstructions(read: (name: string) => Promise<string | undefined>) {
+  for (const name of CONTEXT_FILES) {
+    const content = await read(name);
+    if (content === undefined) continue;
+    const truncated =
+      content.length > MAX_DOC_CHARS ? `\n[Truncated at ${MAX_DOC_CHARS} characters; read ${name} for the rest.]` : "";
+    return `${NESTED_HINT}\n\n${name}\n${content.slice(0, MAX_DOC_CHARS)}${truncated}`;
+  }
+  return NESTED_HINT;
 }
