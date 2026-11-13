@@ -19,6 +19,7 @@ Progress appears in a single status comment on the issue. A status page lists al
 - The agent edits and commits locally; the pipeline runs the repo's checks and pushes only verified commits.
 - Run state lives in SQLite, so a restart resumes where it left off and still opens exactly one PR.
 - Each repo configures its own setup command, checks, model and budgets.
+- The repo's root `AGENTS.md` (else `CLAUDE.md`, else `README.md`) is part of the agent's system prompt.
 - Skills in `.agents/skills/` are offered to the agent and loaded on demand.
 
 ## Docs
