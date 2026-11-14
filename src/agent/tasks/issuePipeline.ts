@@ -11,7 +11,7 @@ import {
   type TaskRuntime,
 } from "@earendil-works/pi-durable";
 import { findRepo, type AppConfig, type RepoConfig } from "../../config.ts";
-import type { GitHubClient, IssueComment, IssueData, Worktrees } from "../../contracts.ts";
+import { branchName, type GitHubClient, type IssueComment, type IssueData, type Worktrees } from "../../contracts.ts";
 import { HUMAN_ENTRY, IssueNotes, IssueState, type IssueStateValue, type Note } from "../docs.ts";
 import { budgetBreach, lastAssistantText, spentOf, totalCostUsd } from "../extensions/guards.ts";
 import { closingRef, CONVENTIONAL_TITLE, prBodyLimit } from "../extensions/pull-request.ts";
@@ -354,7 +354,8 @@ export function createIssuePipeline(deps: PipelineDeps) {
         const { repo, issue } = task.input;
         const config = repoOf(repo);
         const state = await rt.snapshot(IssueState, rt.conversationId, context);
-        const worktree = await worktrees.prepare(config, issue);
+        const openPr = (await github.findOpenPr(repo, branchName(issue))) !== undefined;
+        const worktree = await worktrees.prepare(config, issue, { openPr });
         if (config.setup && (worktree.created || !state?.setupDone)) {
           const result = await run(rt, context, config.setup, worktree.path);
           if (!result.ok) throw new PipelineFailure(`setup failed: ${config.setup}`, result.output);
@@ -428,7 +429,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
         const config = repoOf(repo);
         if ((await worktrees.commitsAhead(config, issue)) === 0)
           throw new PipelineFailure("no changes: the agent produced no commits");
-        await worktrees.push(repo, issue);
+        await worktrees.push(config, issue);
         const state = await rt.snapshot(IssueState, rt.conversationId, context);
         const head = state?.branch ?? "";
         let pr = await github.findOpenPr(repo, head);

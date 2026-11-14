@@ -1,4 +1,5 @@
-FROM node:22-bookworm-slim AS base
+# trixie for git 2.46+, the first to fsck objects fetched from a bundle.
+FROM node:22-trixie-slim AS base
 RUN corepack enable
 WORKDIR /app
 
@@ -24,11 +25,11 @@ RUN pnpm install --frozen-lockfile --prod --filter mike-factory
 
 FROM base AS runtime
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates \
- && rm -rf /var/lib/apt/lists/* \
+ && apt-get install -y --no-install-recommends git ca-certificates openssh-server openssh-client \
+ && rm -rf /var/lib/apt/lists/* /etc/ssh/ssh_host_* \
  && useradd --uid 10001 --create-home --shell /bin/bash agent \
- && mkdir /data \
- && chown agent:agent /data
+ && mkdir /data /mirrors /ssh \
+ && chown agent:agent /data /mirrors /ssh
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3000 \
@@ -42,6 +43,7 @@ COPY --from=web /app/web/dist ./web/dist
 COPY package.json ./
 COPY config ./config
 COPY .agents/skills ./.agents/skills
+COPY docker/sshd_config docker/runner.sh ./
 USER agent
 VOLUME ["/data"]
 EXPOSE 3000

@@ -52,12 +52,12 @@ export interface WorktreeInfo {
 /** Bare clones under `<dataDir>/repos`, worktrees under `<dataDir>/worktrees/<repo>/issue-<n>`. */
 export interface Worktrees {
   worktreePath(repo: string, issue: number): string;
-  /** Idempotent: create, or reuse the existing path or branch. */
-  prepare(repo: RepoConfig, issue: number): Promise<WorktreeInfo>;
+  /** Idempotent: create, or reuse the existing path or branch. A new branch starts from its remote copy only with `openPr`. */
+  prepare(repo: RepoConfig, issue: number, opts: { openPr: boolean }): Promise<WorktreeInfo>;
   /** `git status --porcelain` of the worktree: uncommitted, non-ignored changes, empty when clean. */
   uncommitted(repo: string, issue: number): Promise<string>;
   /** Pushes `agent/issue-<n>` (and only that ref) to origin. Idempotent. */
-  push(repo: string, issue: number): Promise<void>;
+  push(repo: RepoConfig, issue: number): Promise<void>;
   /** Number of commits on the issue branch that are not on `origin/<defaultBranch>`. */
   commitsAhead(repo: RepoConfig, issue: number): Promise<number>;
   /** Subject of the latest commit on the issue branch. */

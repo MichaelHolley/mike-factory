@@ -43,6 +43,44 @@ Only `SKILL.md` is served to the agent, so pick self-contained skills that run u
 Run the Docker image behind a reverse proxy; the app listens on port 3000 and has no auth of its own.
 
 - Put everything except `/webhooks/github` behind proxy auth; GitHub calls the webhook, verified by signature.
+- Set `PROXY_SECRET` (e.g. `openssl rand -hex 32`) and have the proxy set it as the `X-Proxy-Secret` header on every request; the app rejects other requests, so the runner can't call it directly.
 - Don't buffer or compress `text/event-stream` responses; the status page streams live updates.
 - Set `PUBLIC_URL` to the public URL so status comments link to the run page.
 - `config/repos.yaml` is baked into the image; rebuild it, or mount the file and point `REPOS_CONFIG` at it.
+
+Run it as two services: the server, which holds the secrets, and a runner, where the agent's tools and its git commands run over SSH. Give secrets to the server only. With Traefik on an external `proxy` network:
+
+```yaml
+services:
+  server:
+    image: <user>/mike-factory:latest
+    env_file: stack.env
+    environment: { RUNNER_HOST: runner, MIRRORS_DIR: /mirrors }
+    volumes: [state:/data, mirrors:/mirrors, ssh:/ssh]
+    depends_on: [runner]
+    networks: [proxy, default]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.services.mike-factory.loadbalancer.server.port=3000
+      - traefik.http.routers.mike-factory-webhook.rule=Host(`factory.example.com`) && Path(`/webhooks/github`) && Method(`POST`)
+      - traefik.http.routers.mike-factory-webhook.priority=100
+      - traefik.http.routers.mike-factory.rule=Host(`factory.example.com`)
+      - traefik.http.routers.mike-factory.middlewares=mike-factory-auth,mike-factory-proxy-secret
+      - traefik.http.middlewares.mike-factory-auth.basicauth.users=<htpasswd line, with each $ doubled>
+      - traefik.http.middlewares.mike-factory-proxy-secret.headers.customrequestheaders.X-Proxy-Secret=${PROXY_SECRET}
+  runner:
+    image: <user>/mike-factory:latest
+    command: ["/app/runner.sh"]
+    cap_drop: [NET_RAW]
+    volumes: [work:/data, mirrors:/mirrors:ro, ssh:/ssh:ro]
+    networks: [default]
+volumes: { state: {}, mirrors: {}, work: {}, ssh: {} }
+networks: { proxy: { external: true } }
+```
+
+- Compose fills `${PROXY_SECRET}` in the labels from its own environment (a `.env` beside the compose file, or Portainer's stack variables), not from `env_file`.
+- The runner stays off the `proxy` network: it reaches the internet, but not the proxy or what it fronts.
+
+- The server trusts the runner's host key, kept on `work`, on first connect. If `work` is recreated, the server refuses to start until you delete `ssh/known_hosts` from `state`.
+- To switch a single-container deployment, finish or stop open runs first. Its volume becomes `state` and keeps `agent.sqlite`; its `repos/`, `worktrees/` and `pnpm-store/` are unused afterwards.

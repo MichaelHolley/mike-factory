@@ -12,6 +12,7 @@ import { DEFAULT_MAX_CONCURRENT } from "./agent/tasks/issuePipeline.ts";
 import { loadConfig, type AppConfig } from "./config.ts";
 import { createGitHubClient } from "./github/app.ts";
 import { createWorktrees } from "./git/worktrees.ts";
+import { openWorkspace } from "./runner.ts";
 import { createServer } from "./server.ts";
 import { takeSecrets } from "./secrets.ts";
 
@@ -44,6 +45,7 @@ async function main() {
   const config = await loadConfig(process.env.REPOS_CONFIG ?? "config/repos.yaml");
   const skills = await loadSkills(SKILLS_DIR);
   const dataDir = process.env.DATA_DIR ?? "/data";
+  const mirrorDir = process.env.MIRRORS_DIR ?? join(dataDir, "mirrors");
   const port = Number(process.env.PORT ?? 3000);
   const hostname = process.env.HOST ?? "127.0.0.1";
   const useFaux = process.env.MODEL === "faux";
@@ -56,12 +58,18 @@ async function main() {
   const secrets = takeSecrets();
 
   const github = createGitHubClient({ appId: secrets.appId, privateKey: secrets.privateKey, owner: config.owner });
-  const identity = await github.botIdentity();
-  // Env instead of `git config --global`, so local dev never rewrites the developer's git identity.
-  process.env.GIT_AUTHOR_NAME = process.env.GIT_COMMITTER_NAME = identity.name;
-  process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = identity.email;
+  const runnerHost = process.env.RUNNER_HOST || undefined;
+  const workspace = await openWorkspace({ runnerHost, dataDir, gitIdentity: await github.botIdentity() });
+  if (!runnerHost) log("RUNNER_HOST is unset: agent tools run unsandboxed in the server process");
+  if (!secrets.proxySecret) log("PROXY_SECRET is unset: anything that reaches the port can use the status API");
 
-  const worktrees = createWorktrees({ dataDir, owner: config.owner, token: (repo) => github.gitToken(repo) });
+  const worktrees = createWorktrees({
+    env: workspace.env(dataDir),
+    dataDir,
+    mirrorDir,
+    owner: config.owner,
+    token: (repo) => github.gitToken(repo),
+  });
 
   const { models, model } = buildModels(secrets.openrouterApiKey, useFaux);
   const effectiveConfig: AppConfig = model
@@ -74,7 +82,7 @@ async function main() {
     {
       storage,
       models,
-      deps: { config: effectiveConfig, github, worktrees, log, maxConcurrent, publicUrl, skills },
+      deps: { config: effectiveConfig, github, worktrees, env: workspace.env, log, maxConcurrent, publicUrl, skills },
       crashAt: process.env.CRASH_AT,
     },
     BACKGROUND_CONTEXT,
@@ -96,6 +104,7 @@ async function main() {
     service,
     webhook: { config: effectiveConfig, secret: secrets.webhookSecret },
     log,
+    proxySecret: secrets.proxySecret,
     shutdownSignal: shutdownController.signal,
   });
   const server = serve({ fetch: app.fetch, port, hostname }, (info) =>
@@ -117,6 +126,7 @@ async function main() {
     if ("closeAllConnections" in server) setTimeout(() => server.closeAllConnections(), 5_000).unref();
     await serverClosed;
     await harness.close(BACKGROUND_CONTEXT);
+    workspace.close();
     process.exit(0);
   };
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
