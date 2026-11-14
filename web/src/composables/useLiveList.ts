@@ -4,8 +4,8 @@ const RETRY_MS = 5000;
 
 type LiveEvent<T> = { from: number; items: T[] };
 
-/** Follows a server-sent list stream; each event replaces the list from index `from` on. */
-export function useLiveList<T>(url: () => string) {
+/** Follows a server-sent list stream while started; each event replaces the list from index `from` on. */
+export function createLiveList<T>(url: () => string) {
   const data = shallowRef<T[]>([]);
   const error = ref<string | null>(null);
   const loaded = ref(false);
@@ -45,15 +45,23 @@ export function useLiveList<T>(url: () => string) {
     else open();
   }
 
-  onMounted(() => {
+  function start() {
     document.addEventListener("visibilitychange", onVisibilityChange);
     if (!document.hidden) open();
-  });
+  }
 
-  onBeforeUnmount(() => {
+  function stop() {
     document.removeEventListener("visibilitychange", onVisibilityChange);
     close();
-  });
+  }
 
+  return { data, error, loaded, start, stop };
+}
+
+/** Follows a server-sent list stream while the calling component is mounted. */
+export function useLiveList<T>(url: () => string) {
+  const { data, error, loaded, start, stop } = createLiveList<T>(url);
+  onMounted(start);
+  onBeforeUnmount(stop);
   return { data, error, loaded };
 }
