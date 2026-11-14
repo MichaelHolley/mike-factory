@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Bot, ChevronRight, Download, Hourglass, MessageSquareDashed, User, Workflow } from "@lucide/vue";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@ui-sdk/vue/collapsible";
 import { type Component, computed } from "vue";
 import type { TranscriptItem } from "../../../src/runStatus.ts";
 import { useTranscript } from "../composables/useTranscript.ts";
@@ -106,16 +107,16 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
           v-else
           :class="[
             SAY,
-            '-ml-3.25 overflow-hidden rounded-md border border-transparent has-open:border-line has-open:bg-surface',
+            '-ml-3.25 overflow-hidden rounded-md border border-transparent has-data-open:border-line has-data-open:bg-surface',
           ]"
         >
           <ToolCall v-if="entry.calls.length === 1" :call="entry.calls[0]!" quiet />
-          <details v-else class="group/tools">
-            <summary
-              class="flex min-h-9 cursor-pointer list-none items-center gap-2.5 px-3 text-sm text-muted group-open/tools:text-ink hover:bg-ink/4 hover:text-ink focus-visible:-outline-offset-2 marker:hidden"
+          <Collapsible v-else class="group/tools">
+            <CollapsibleTrigger
+              class="flex min-h-9 w-full items-center gap-2.5 px-3 text-sm font-normal text-muted group-data-open/tools:text-ink hover:bg-ink/4 hover:text-ink focus-visible:-outline-offset-2"
             >
               <ChevronRight
-                class="size-3.5 flex-none transition-transform duration-150 ease-in-out group-open/tools:rotate-90 motion-reduce:transition-none"
+                class="size-3.5 flex-none transition-transform duration-150 ease-in-out group-data-open/tools:rotate-90 motion-reduce:transition-none"
                 aria-hidden="true"
               />
               <span class="flex-none font-medium">{{ entry.calls.length }} tools called</span>
@@ -128,13 +129,17 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
                   :class="tone(call)"
                 ></span>
               </span>
-            </summary>
-            <ul class="border-t border-line">
-              <li v-for="(call, i) in entry.calls" :key="i" class="border-line not-first:border-t">
-                <ToolCall :call="call" />
-              </li>
-            </ul>
-          </details>
+            </CollapsibleTrigger>
+            <CollapsiblePanel
+              class="h-(--collapsible-panel-height) overflow-hidden text-ink transition-[height] duration-200 ease-out data-ending-style:h-0 data-starting-style:h-0 motion-reduce:transition-none"
+            >
+              <ul class="border-t border-line">
+                <li v-for="(call, i) in entry.calls" :key="i" class="border-line not-first:border-t">
+                  <ToolCall :call="call" />
+                </li>
+              </ul>
+            </CollapsiblePanel>
+          </Collapsible>
         </div>
       </li>
     </ol>

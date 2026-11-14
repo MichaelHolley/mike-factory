@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { Command, CornerDownLeft, LoaderCircle, Play, Send } from "@lucide/vue";
+import { Button } from "@ui-sdk/vue/button";
+import { Field, FieldLabel } from "@ui-sdk/vue/field";
+import { Textarea } from "@ui-sdk/vue/textarea";
 import { computed, ref, watch } from "vue";
 import type { IssuePhase } from "../../../src/runStatus.ts";
 
@@ -42,20 +45,21 @@ async function send() {
 
 <template>
   <form class="mt-4 grid gap-2 rounded-md border border-line bg-surface px-5 py-4" @submit.prevent="send">
-    <label for="message" class="text-sm font-semibold text-muted">
-      {{ finished ? "Continue this run with a follow-up" : "Steer the agent while it works" }}
-    </label>
-    <textarea
-      id="message"
-      v-model="text"
-      class="box-border min-h-18 w-full resize-y rounded-sm border border-line bg-bg px-3 py-2.5 leading-normal text-ink disabled:opacity-60"
-      rows="3"
-      :maxlength="MAX_CHARS"
-      :disabled="sending"
-      placeholder="Message the agent…"
-      @keydown.enter.meta.prevent="send"
-      @keydown.enter.ctrl.prevent="send"
-    ></textarea>
+    <Field class="gap-2">
+      <FieldLabel class="text-sm font-semibold text-muted">
+        {{ finished ? "Continue this run with a follow-up" : "Steer the agent while it works" }}
+      </FieldLabel>
+      <Textarea
+        v-model:value="text"
+        auto-resize
+        submit-shortcut="mod+enter"
+        class="max-h-80 min-h-18 resize-none bg-bg px-3 py-2.5 text-base leading-normal disabled:opacity-60"
+        rows="3"
+        :maxlength="MAX_CHARS"
+        :disabled="sending"
+        placeholder="Message the agent…"
+      />
+    </Field>
     <div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
       <p v-if="error" class="mr-auto text-sm text-bad wrap-anywhere" role="alert">Couldn't send: {{ error }}</p>
       <span class="flex items-center gap-1 text-xs text-muted">
@@ -63,10 +67,11 @@ async function send() {
         <Command class="size-3" aria-hidden="true" /><span aria-hidden="true">/ Ctrl +</span
         ><CornerDownLeft class="size-3" aria-hidden="true" />
       </span>
-      <button
+      <Button
         type="submit"
-        class="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-sm bg-run px-4.5 font-semibold text-surface disabled:cursor-default disabled:opacity-50"
         :disabled="!canSend"
+        focusable-when-disabled
+        class="min-h-9 gap-2 border-0 bg-run px-4.5 text-base font-semibold text-surface"
       >
         <component
           :is="submitIcon"
@@ -75,7 +80,7 @@ async function send() {
           aria-hidden="true"
         />
         {{ sending ? "Sending…" : finished ? "Continue" : "Steer" }}
-      </button>
+      </Button>
     </div>
   </form>
 </template>
