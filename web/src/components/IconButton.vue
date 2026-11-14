@@ -1,18 +1,27 @@
 <script setup lang="ts">
+import { Button } from "@ui-sdk/vue/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@ui-sdk/vue/tooltip";
 import type { Component } from "vue";
 
+defineOptions({ inheritAttrs: false });
 defineProps<{ icon: Component; label: string; href?: string }>();
 </script>
 
 <template>
-  <component
-    :is="href ? 'a' : 'button'"
-    :href
-    :type="href ? undefined : 'button'"
-    :aria-label="label"
-    :title="label"
-    class="inline-grid size-7 flex-none cursor-pointer place-items-center rounded-sm text-muted no-underline hover:bg-ink/6 hover:text-ink"
-  >
-    <component :is="icon" class="size-4" aria-hidden="true" />
-  </component>
+  <Tooltip type="label" :close-on-press="false">
+    <TooltipTrigger v-bind="$attrs">
+      <template #render="{ props: trigger }">
+        <Button
+          v-bind="trigger"
+          class="inline-grid size-7 flex-none place-items-center border-0 bg-transparent p-0 text-muted no-underline hover:bg-ink/6 hover:text-ink"
+        >
+          <template v-if="href" #render="{ props: button, children }">
+            <a v-bind="button" :href><component :is="children" /></a>
+          </template>
+          <component :is="icon" class="size-4" aria-hidden="true" />
+        </Button>
+      </template>
+    </TooltipTrigger>
+    <TooltipContent>{{ label }}</TooltipContent>
+  </Tooltip>
 </template>
