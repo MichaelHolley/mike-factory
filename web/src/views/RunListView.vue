@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ChevronRight, Coffee, GitPullRequest } from "@lucide/vue";
 import { computed, ref } from "vue";
-import { RouterLink } from "vue-router";
 import type { RunStatus } from "../../../src/runStatus.ts";
 import EmptyState from "../components/EmptyState.vue";
 import ErrorBanner from "../components/ErrorBanner.vue";
 import IconButton from "../components/IconButton.vue";
 import PhaseBadge from "../components/PhaseBadge.vue";
+import RunLink from "../components/RunLink.vue";
 import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
 import { timeAgo } from "../format.ts";
@@ -15,6 +15,7 @@ import { isFinished } from "../phase.ts";
 const { runs, error, loaded } = useRuns();
 const now = useNow();
 const expandedRepos = ref(new Set<string>());
+const titles = new Map<string, HTMLElement>();
 
 function toggleRepo(repo: string) {
   if (expandedRepos.value.has(repo)) expandedRepos.value.delete(repo);
@@ -23,6 +24,9 @@ function toggleRepo(repo: string) {
 
 const time = (iso: string | null) => (iso ? Date.parse(iso) : null);
 const runPath = (run: RunStatus) => `/runs/${run.repo}/${run.issue}`;
+const key = (run: RunStatus) => `${run.repo}#${run.issue}`;
+const titleRef = (run: RunStatus) => (el: unknown) =>
+  el instanceof HTMLElement ? titles.set(key(run), el) : titles.delete(key(run));
 
 // Oldest start first so live rows keep their place as updates stream in; queued runs go last.
 const live = computed(() =>
@@ -62,11 +66,13 @@ const projects = computed(() => {
     <ul v-else class="overflow-hidden rounded-md border border-l-3 border-line border-l-run bg-surface">
       <li
         v-for="run in live"
-        :key="`${run.repo}#${run.issue}`"
+        :key="key(run)"
         class="relative grid grid-cols-[minmax(0,16rem)_minmax(0,1fr)_8rem_5rem] items-center gap-6 px-5 py-4 hover:bg-run/4 not-first:border-t not-first:border-line max-md:grid-cols-[minmax(0,1fr)_auto] max-md:gap-x-4 max-md:gap-y-2"
       >
-        <RouterLink
+        <RunLink
           :to="runPath(run)"
+          :title="run.title"
+          :title-el="() => titles.get(key(run))"
           class="group inline-flex min-w-0 items-baseline gap-2 text-ink no-underline after:absolute after:inset-0 max-md:col-span-full"
         >
           <span class="truncate font-semibold group-hover:underline group-hover:underline-offset-3">{{
@@ -75,8 +81,8 @@ const projects = computed(() => {
           <span class="font-medium text-muted tabular-nums group-hover:underline group-hover:underline-offset-3"
             >#{{ run.issue }}</span
           >
-        </RouterLink>
-        <span class="truncate max-md:col-span-full" :title="run.title ?? undefined">{{ run.title }}</span>
+        </RunLink>
+        <span :ref="titleRef(run)" class="truncate max-md:col-span-full">{{ run.title }}</span>
         <PhaseBadge :phase="run.phase" />
         <span class="text-right text-sm whitespace-nowrap text-muted tabular-nums">{{
           timeAgo(run.updatedAt, now)
@@ -132,20 +138,19 @@ const projects = computed(() => {
               class="relative hover:bg-run/4 not-nth-2:border-t not-nth-2:border-line max-md:grid max-md:grid-cols-4 max-md:gap-x-4 max-md:gap-y-3 max-md:px-5 max-md:py-4 *:px-5 *:py-3 max-md:*:p-0 max-md:[&>td[data-label]]:before:block max-md:[&>td[data-label]]:before:text-xs max-md:[&>td[data-label]]:before:text-muted max-md:[&>td[data-label]]:before:content-[attr(data-label)]"
             >
               <td class="max-md:col-span-full">
-                <RouterLink
+                <RunLink
                   :to="runPath(run)"
+                  :title="run.title"
+                  :title-el="() => titles.get(key(run))"
                   class="group text-ink no-underline after:absolute after:inset-0"
                   :aria-label="`${run.repo} #${run.issue}`"
                 >
                   <span class="font-semibold text-ink tabular-nums group-hover:underline group-hover:underline-offset-3"
                     >#{{ run.issue }}</span
                   >
-                </RouterLink>
+                </RunLink>
               </td>
-              <td
-                class="w-full max-w-0 truncate max-md:col-span-full max-md:max-w-none"
-                :title="run.title ?? undefined"
-              >
+              <td :ref="titleRef(run)" class="w-full max-w-0 truncate max-md:col-span-full max-md:max-w-none">
                 {{ run.title }}
               </td>
               <td class="max-md:col-span-full">

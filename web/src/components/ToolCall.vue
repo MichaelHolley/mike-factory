@@ -39,6 +39,7 @@ const blocks = computed(() => [
       <span v-else-if="!call.result" class="ml-auto flex-none text-xs font-semibold text-run">no result yet</span>
     </CollapsibleTrigger>
     <CollapsiblePanel
+      hidden-until-found
       class="h-(--collapsible-panel-height) overflow-hidden text-ink transition-[height] duration-200 ease-out data-ending-style:h-0 data-starting-style:h-0 motion-reduce:transition-none"
     >
       <div class="pt-1 pr-3 pb-3 pl-15">
