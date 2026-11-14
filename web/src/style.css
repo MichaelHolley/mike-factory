@@ -1,4 +1,6 @@
+@layer ui-sdk;
 @import "tailwindcss";
+@import "@ui-sdk/core/web.css" layer(components);
 
 @theme {
   --color-bg: #edf0f3;
@@ -64,9 +66,12 @@
   h2 {
     @apply leading-tight font-semibold;
   }
+}
 
+/* Above web.css's own element rules in components.ui-sdk, below utilities. */
+@layer components {
   a {
-    @apply text-run underline decoration-1 underline-offset-3 hover:decoration-2;
+    @apply text-run underline decoration-current decoration-1 underline-offset-3 hover:decoration-2;
   }
 
   :focus-visible {
@@ -77,4 +82,26 @@
   pre {
     @apply font-mono text-sm;
   }
+
+  code {
+    @apply rounded-none bg-transparent p-0;
+  }
+}
+
+:root {
+  --ui-background: var(--color-surface);
+  --ui-foreground: var(--color-ink);
+  --ui-muted: color-mix(in oklab, var(--color-ink) 6%, transparent);
+  --ui-muted-foreground: var(--color-muted);
+  --ui-border: var(--color-line);
+  --ui-input: var(--color-line);
+  --ui-primary: var(--color-run);
+  --ui-primary-foreground: var(--color-surface);
+  --ui-destructive: var(--color-bad);
+  --ui-ring: var(--color-run);
+  --ui-ring-border: var(--color-run);
+  --ui-radius: 0.25rem;
+  --ui-font-size: 0.875rem;
+  --ui-font-sans: var(--font-sans);
+  --ui-font-mono: var(--font-mono);
 }
