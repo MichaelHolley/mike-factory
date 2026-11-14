@@ -22,6 +22,7 @@ Self-hosted agent that turns a `/mike` comment on a GitHub issue into a pull req
 - Agent tools and every command on the agent's repos run in the runner through the execution environment. Server-side code never runs commands inside directories the runner can write.
 - Server-side git commands that take input from the runner (bundles) fetch one fully qualified ref with `--no-tags` and fsck, and the image's git must be 2.46 or newer.
 - Only pipeline code pushes, opens PRs or comments on GitHub. The agent only edits and commits locally.
+- Build interactive controls from `@ui-sdk/vue` components, themed through the `--ui-*` tokens in `web/src/style.css`.
 - Style the web UI with Tailwind utilities and the theme tokens in `web/src/style.css`, not custom CSS. Avoid arbitrary values like `w-[6px]` or `max-[48rem]:`; use the nearest scale class or breakpoint, even if it isn't pixel-identical.
 - Use distinctive `@lucide/vue` icons to make things recognizable at a glance, and use the same icon for a concept everywhere. For example, a run's PR always uses `GitPullRequest`, and a phase always uses its icon from `stepLook` in `web/src/phase.ts`.
 
