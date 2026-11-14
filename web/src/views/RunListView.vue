@@ -7,6 +7,7 @@ import EmptyState from "../components/EmptyState.vue";
 import ErrorBanner from "../components/ErrorBanner.vue";
 import IconButton from "../components/IconButton.vue";
 import PhaseBadge from "../components/PhaseBadge.vue";
+import RunRow from "../components/RunRow.vue";
 import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
 import { timeAgo } from "../format.ts";
@@ -31,6 +32,14 @@ const live = computed(() =>
     .sort((a, b) => (time(a.startedAt) ?? Infinity) - (time(b.startedAt) ?? Infinity)),
 );
 
+const RECENT_MS = 24 * 60 * 60 * 1000;
+const recent = computed(() =>
+  runs.value
+    .filter((run) => isFinished(run.phase) && now.value - (time(run.updatedAt) ?? 0) < RECENT_MS)
+    .sort((a, b) => (time(b.updatedAt) ?? 0) - (time(a.updatedAt) ?? 0))
+    .slice(0, 3),
+);
+
 const projects = computed(() => {
   const byRepo = new Map<string, RunStatus[]>();
   for (const run of runs.value.filter((run) => isFinished(run.phase))) {
@@ -52,37 +61,30 @@ const projects = computed(() => {
   <h1 class="mb-6 text-4xl">Runs</h1>
   <ErrorBanner v-if="error" class="mb-6" retrying>Couldn't load runs: {{ error }}. Reconnecting…</ErrorBanner>
 
-  <section v-if="loaded" aria-labelledby="live-heading">
-    <h2 id="live-heading" class="mb-3 flex items-baseline gap-2 text-lg">
-      Working now <span v-if="live.length" class="font-medium text-muted tabular-nums">{{ live.length }}</span>
-    </h2>
-    <EmptyState v-if="!live.length" :icon="Coffee" class="rounded-md border border-line bg-surface">
+  <section v-if="loaded" aria-labelledby="activity-heading">
+    <h2 id="activity-heading" class="mb-3 text-lg">Activity</h2>
+    <EmptyState v-if="!live.length && !recent.length" :icon="Coffee" class="rounded-md border border-line bg-surface">
       Nothing running. Comment <code>/mike</code> on an issue in a configured repo to start a run.
     </EmptyState>
-    <ul v-else class="overflow-hidden rounded-md border border-l-3 border-line border-l-run bg-surface">
-      <li
-        v-for="run in live"
-        :key="`${run.repo}#${run.issue}`"
-        class="relative grid grid-cols-[minmax(0,16rem)_minmax(0,1fr)_8rem_5rem] items-center gap-6 px-5 py-4 hover:bg-run/4 not-first:border-t not-first:border-line max-md:grid-cols-[minmax(0,1fr)_auto] max-md:gap-x-4 max-md:gap-y-2"
-      >
-        <RouterLink
-          :to="runPath(run)"
-          class="group inline-flex min-w-0 items-baseline gap-2 text-ink no-underline after:absolute after:inset-0 max-md:col-span-full"
-        >
-          <span class="truncate font-semibold group-hover:underline group-hover:underline-offset-3">{{
-            run.repo
-          }}</span>
-          <span class="font-medium text-muted tabular-nums group-hover:underline group-hover:underline-offset-3"
-            >#{{ run.issue }}</span
-          >
-        </RouterLink>
-        <span class="truncate max-md:col-span-full" :title="run.title ?? undefined">{{ run.title }}</span>
-        <PhaseBadge :phase="run.phase" />
-        <span class="text-right text-sm whitespace-nowrap text-muted tabular-nums">{{
-          timeAgo(run.updatedAt, now)
-        }}</span>
-      </li>
-    </ul>
+    <div v-else class="overflow-hidden rounded-md border border-line bg-surface">
+      <h3 id="live-heading" class="flex items-baseline gap-2 bg-ink/3 py-2 pr-5 pl-6 text-sm font-semibold">
+        Working now <span v-if="live.length" class="font-medium text-muted tabular-nums">{{ live.length }}</span>
+      </h3>
+      <ul v-if="live.length" aria-labelledby="live-heading" class="border-t border-line">
+        <RunRow v-for="run in live" :key="`${run.repo}#${run.issue}`" :run :now />
+      </ul>
+      <p v-else class="flex items-center gap-2 border-t border-line py-4 pr-5 pl-6 text-sm text-muted">
+        <Coffee class="size-4" aria-hidden="true" /> Nothing running.
+      </p>
+      <template v-if="recent.length">
+        <h3 id="recent-heading" class="border-t border-line bg-ink/3 py-2 pr-5 pl-6 text-sm font-semibold">
+          Finished in the last 24 hours
+        </h3>
+        <ul aria-labelledby="recent-heading" class="border-t border-line">
+          <RunRow v-for="run in recent" :key="`${run.repo}#${run.issue}`" :run :now />
+        </ul>
+      </template>
+    </div>
   </section>
 
   <section v-if="projects.length" class="mt-10" aria-labelledby="finished-heading">
