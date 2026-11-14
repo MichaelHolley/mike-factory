@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Command, CornerDownLeft, LoaderCircle, Play, Send } from "@lucide/vue";
 import { Button } from "@ui-sdk/vue/button";
-import { Field, FieldLabel } from "@ui-sdk/vue/field";
+import { Field, FieldDescription, FieldLabel } from "@ui-sdk/vue/field";
 import { Textarea } from "@ui-sdk/vue/textarea";
 import { computed, ref, watch } from "vue";
 import type { IssuePhase } from "../../../src/runStatus.ts";
@@ -44,7 +44,7 @@ async function send() {
 </script>
 
 <template>
-  <form class="mt-4 grid gap-2 rounded-md border border-line bg-surface px-5 py-4" @submit.prevent="send">
+  <form class="mt-4 rounded-md border border-line bg-surface px-5 py-4" @submit.prevent="send">
     <Field class="gap-2">
       <FieldLabel class="text-sm font-semibold text-muted">
         {{ finished ? "Continue this run with a follow-up" : "Steer the agent while it works" }}
@@ -59,28 +59,28 @@ async function send() {
         :disabled="sending"
         placeholder="Message the agent…"
       />
+      <div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+        <p v-if="error" class="mr-auto text-sm text-bad wrap-anywhere" role="alert">Couldn't send: {{ error }}</p>
+        <FieldDescription class="flex items-center gap-1 text-xs text-muted">
+          <span class="sr-only">Send with Command or Control plus Enter</span>
+          <Command class="size-3" aria-hidden="true" /><span aria-hidden="true">/ Ctrl +</span
+          ><CornerDownLeft class="size-3" aria-hidden="true" />
+        </FieldDescription>
+        <Button
+          type="submit"
+          :disabled="!canSend"
+          focusable-when-disabled
+          class="min-h-9 gap-2 border-0 bg-run px-4.5 text-base font-semibold text-surface"
+        >
+          <component
+            :is="submitIcon"
+            class="size-4"
+            :class="sending && 'animate-spin motion-reduce:animate-none'"
+            aria-hidden="true"
+          />
+          {{ sending ? "Sending…" : finished ? "Continue" : "Steer" }}
+        </Button>
+      </div>
     </Field>
-    <div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
-      <p v-if="error" class="mr-auto text-sm text-bad wrap-anywhere" role="alert">Couldn't send: {{ error }}</p>
-      <span class="flex items-center gap-1 text-xs text-muted">
-        <span class="sr-only">Command or Control plus Enter</span>
-        <Command class="size-3" aria-hidden="true" /><span aria-hidden="true">/ Ctrl +</span
-        ><CornerDownLeft class="size-3" aria-hidden="true" />
-      </span>
-      <Button
-        type="submit"
-        :disabled="!canSend"
-        focusable-when-disabled
-        class="min-h-9 gap-2 border-0 bg-run px-4.5 text-base font-semibold text-surface"
-      >
-        <component
-          :is="submitIcon"
-          class="size-4"
-          :class="sending && 'animate-spin motion-reduce:animate-none'"
-          aria-hidden="true"
-        />
-        {{ sending ? "Sending…" : finished ? "Continue" : "Steer" }}
-      </Button>
-    </div>
   </form>
 </template>

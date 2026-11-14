@@ -131,6 +131,7 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
               </span>
             </CollapsibleTrigger>
             <CollapsiblePanel
+              hidden-until-found
               class="h-(--collapsible-panel-height) overflow-hidden text-ink transition-[height] duration-200 ease-out data-ending-style:h-0 data-starting-style:h-0 motion-reduce:transition-none"
             >
               <ul class="border-t border-line">
