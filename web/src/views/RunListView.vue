@@ -94,7 +94,7 @@ const projects = computed(() => {
             <th class="text-left">Issue</th>
             <th class="text-left">Title</th>
             <th class="text-left">Outcome</th>
-            <th class="text-left">Pull request</th>
+            <th class="text-left">PR</th>
             <th class="text-right tabular-nums">Updated</th>
           </tr>
         </thead>
