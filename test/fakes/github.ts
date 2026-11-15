@@ -112,7 +112,9 @@ export class FakeGitHub implements GitHubClient {
     this.issue(repo, issue);
     const tag = COMMENT_MARKER(marker);
     const fullBody = `${tag}\n${body}`;
-    const existing = this.commentsOn(repo, issue).find((comment) => comment.body.includes(tag));
+    const existing = this.commentsOn(repo, issue).find(
+      (comment) => comment.author === BOT_LOGIN && comment.body.includes(tag),
+    );
     if (existing) existing.body = fullBody;
     else
       this.commentList.push({
