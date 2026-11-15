@@ -86,6 +86,29 @@ const sampleConversation = (): TranscriptItem[] => [
     text: 'Got it. I\'ll default to `prefers-color-scheme` and keep the toggle as an override.\n\n```ts\nconst dark = matchMedia("(prefers-color-scheme: dark)").matches;\ndocument.documentElement.dataset.theme = stored ?? (dark ? "dark" : "light");\n```\n\nSee [MDN](https://developer.mozilla.org/docs/Web/CSS/@media/prefers-color-scheme) for details.',
   },
   { kind: "tool", name: "edit", summary: "web/src/App.vue", args: '{ "path": "web/src/App.vue" }' },
+  {
+    kind: "human",
+    text: "Keep the toggle out of the mobile header.",
+    review: {
+      reviewer: "example",
+      state: "changes_requested",
+      url: "https://github.com/example/mike-factory/pull/32#pullrequestreview-1",
+      comments: [
+        {
+          path: "web/src/App.vue",
+          line: 14,
+          body: "Read the stored theme once, not on every render.",
+          url: "https://github.com/example/mike-factory/pull/32#discussion_r1",
+        },
+        {
+          path: "web/src/style.css",
+          line: 3,
+          body: "Why a new token here?",
+          url: "https://github.com/example/mike-factory/pull/32#discussion_r2",
+        },
+      ],
+    },
+  },
 ];
 
 const FINISHED: RunStatus["phase"][] = ["done", "failed", "aborted"];
