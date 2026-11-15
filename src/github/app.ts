@@ -1,5 +1,12 @@
 import { App } from "@octokit/app";
-import { type GitHubClient, type GitIdentity, type IssueComment, type IssueData } from "../contracts.ts";
+import {
+  type GitHubClient,
+  type GitIdentity,
+  type IssueComment,
+  type IssueData,
+  type ReviewFeedback,
+  type ReviewThread,
+} from "../contracts.ts";
 
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60_000;
 const PER_PAGE = 100;
@@ -48,6 +55,28 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
           page,
         })
         .then((res) => res.data),
+    );
+  };
+
+  const rawReviewComments = async (repo: string, pr: number) => {
+    const octokit = await octokitFor(repo);
+    return listAll((page) =>
+      octokit
+        .request("GET /repos/{owner}/{repo}/pulls/{pull_number}/comments", {
+          owner,
+          repo,
+          pull_number: pr,
+          per_page: PER_PAGE,
+          page,
+        })
+        .then((res) =>
+          res.data.map((comment) => ({
+            ...comment,
+            id: Number(comment.id),
+            reviewId: comment.pull_request_review_id == null ? null : Number(comment.pull_request_review_id),
+            rootId: Number(comment.in_reply_to_id ?? comment.id),
+          })),
+        ),
     );
   };
 
@@ -125,6 +154,138 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
         repo,
         pull_number: number,
         ...pr,
+      });
+    },
+
+    async getPr(repo, number) {
+      const octokit = await octokitFor(repo);
+      const { data } = await octokit.request("GET /repos/{owner}/{repo}/pulls/{pull_number}", {
+        owner,
+        repo,
+        pull_number: number,
+      });
+      return {
+        number: data.number,
+        url: data.html_url,
+        state: data.state === "open" ? "open" : "closed",
+        headRef: data.head.ref,
+        fromFork: data.head.repo?.full_name !== data.base.repo.full_name,
+      };
+    },
+
+    async getReviewFeedback(repo, pr, reviewId): Promise<ReviewFeedback> {
+      const octokit = await octokitFor(repo);
+      const [{ data: review }, all] = await Promise.all([
+        octokit.request("GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}", {
+          owner,
+          repo,
+          pull_number: pr,
+          review_id: reviewId,
+        }),
+        rawReviewComments(repo, pr),
+      ]);
+      return {
+        reviewer: review.user?.login ?? "",
+        state: review.state.toLowerCase(),
+        body: review.body ?? "",
+        url: review.html_url,
+        comments: all
+          .filter((comment) => comment.reviewId === reviewId)
+          .map((comment) => ({
+            id: comment.id,
+            threadRootId: comment.rootId,
+            path: comment.path,
+            line: comment.line ?? comment.original_line ?? null,
+            diffHunk: comment.diff_hunk,
+            body: comment.body,
+            url: comment.html_url,
+            thread: all
+              .filter((other) => other.rootId === comment.rootId && other.id < comment.id)
+              .map((other) => ({ author: other.user?.login ?? "", body: other.body })),
+          })),
+      };
+    },
+
+    async listReviewThreads(repo, pr) {
+      const octokit = await octokitFor(repo);
+      type Page = {
+        repository: {
+          pullRequest: {
+            reviewThreads: {
+              pageInfo: { hasNextPage: boolean; endCursor: string | null };
+              nodes: {
+                isResolved: boolean;
+                path: string;
+                line: number | null;
+                comments: { nodes: { databaseId: number; body: string; author: { login: string } | null }[] };
+              }[];
+            };
+          };
+        };
+      };
+      const threads: ReviewThread[] = [];
+      let cursor: string | null = null;
+      do {
+        const page: Page = await octokit.graphql<Page>(
+          `query($owner: String!, $repo: String!, $pr: Int!, $cursor: String) {
+            repository(owner: $owner, name: $repo) {
+              pullRequest(number: $pr) {
+                reviewThreads(first: 100, after: $cursor) {
+                  pageInfo { hasNextPage endCursor }
+                  nodes { isResolved path line comments(first: 100) { nodes { databaseId body author { login } } } }
+                }
+              }
+            }
+          }`,
+          { owner, repo, pr, cursor },
+        );
+        const { nodes, pageInfo } = page.repository.pullRequest.reviewThreads;
+        for (const thread of nodes.filter((node) => !node.isResolved)) {
+          threads.push({
+            path: thread.path,
+            line: thread.line,
+            comments: thread.comments.nodes.map((comment) => ({
+              id: comment.databaseId,
+              author: comment.author?.login ?? "",
+              body: comment.body,
+            })),
+          });
+        }
+        cursor = pageInfo.hasNextPage ? pageInfo.endCursor : null;
+      } while (cursor);
+      return threads;
+    },
+
+    async react(repo, nodeId) {
+      const octokit = await octokitFor(repo);
+      await octokit.graphql(
+        `mutation($id: ID!) { addReaction(input: { subjectId: $id, content: EYES }) { clientMutationId } }`,
+        { id: nodeId },
+      );
+    },
+
+    async replyToReviewComment(repo, pr, commentId, marker, body) {
+      const octokit = await octokitFor(repo);
+      const tag = markerComment(marker);
+      const all = await rawReviewComments(repo, pr);
+      if (all.some((comment) => comment.body.includes(tag))) return;
+      const target = all.find((comment) => comment.id === commentId);
+      await octokit.request("POST /repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies", {
+        owner,
+        repo,
+        pull_number: pr,
+        comment_id: target?.rootId ?? commentId,
+        body: `${tag}\n${body}`,
+      });
+    },
+
+    async requestReview(repo, pr, login) {
+      const octokit = await octokitFor(repo);
+      await octokit.request("POST /repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers", {
+        owner,
+        repo,
+        pull_number: pr,
+        reviewers: [login],
       });
     },
 

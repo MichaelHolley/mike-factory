@@ -159,6 +159,7 @@ function createMockService(): IssueService {
   return {
     start: async () => {},
     stop: async () => {},
+    feedback: async () => {},
     cleanup: async () => {},
     sweep: async () => {},
     status: async () => runs,

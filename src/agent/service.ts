@@ -2,6 +2,7 @@ import type { Context } from "@earendil-works/chord";
 import {
   AgentDoc,
   InboxDoc,
+  type Conversation,
   type ConversationId,
   type Cursor,
   type Harness,
@@ -9,7 +10,7 @@ import {
   type TaskId,
 } from "@earendil-works/pi-durable";
 import { findRepo, type RepoConfig } from "../config.ts";
-import { branchName, issueKey, type IssueService } from "../contracts.ts";
+import { agentPrIssue, branchName, issueKey, type IssueService, type ReviewFeedback } from "../contracts.ts";
 import type { RunStatus } from "../runStatus.ts";
 import { asConversationId, HUMAN_ENTRY, IssueIndex, IssueNotes, IssueState } from "./docs.ts";
 import type { AgentDeps } from "./harness.ts";
@@ -72,12 +73,17 @@ export function createIssueService(opts: {
   };
 
   /** Starts a pipeline on the issue's conversation, creating the conversation on the first run. */
-  const launch = async (repoConfig: RepoConfig, conversationId: ConversationId | undefined, input: PipelineInput) => {
+  const launch = async (
+    repoConfig: RepoConfig,
+    conversationId: ConversationId | undefined,
+    input: PipelineInput,
+    statusOn: number | null = null,
+  ) => {
     const { repo, issue, requestId } = input;
     const key = issueKey(config.owner, repo, issue);
     const [{ title }] = await Promise.all([
       github.getIssue(repo, issue),
-      upsertStatus(deps, repo, issue, WORKING_STATUS),
+      upsertStatus(deps, { repo, issue, statusOn }, WORKING_STATUS),
     ]);
     const worktreePath = worktrees.worktreePath(repo, issue);
     const conversation = conversationId
@@ -119,12 +125,32 @@ export function createIssueService(opts: {
         prBody: null,
         pipelineTaskId: taskId,
         requestId,
+        statusOn,
         startedAt: now,
         updatedAt: now,
       });
     }, context);
     log("pipeline started", { key, requestId });
   };
+
+  /**
+   * Adds a note unless one with its `id` exists, and reports whether the issue's pipeline is live. One commit, so the
+   * pipeline either sees the note before it ends or is already terminal here. `reviewer` is the login to re-request.
+   */
+  const addNote = async (
+    conversation: Conversation,
+    note: { id: string; text: string; review?: ReviewFeedback },
+    pr?: { number: number; reviewer: string },
+  ) =>
+    conversation.commit(async (tx) => {
+      const notes = await tx.doc(IssueNotes, conversation.id);
+      const existing = notes.items.find((item) => item.id === note.id);
+      if (!existing) notes.items.push({ ...note, at: new Date().toISOString(), deliveredAt: null });
+      const state = await tx.doc(IssueState, conversation.id);
+      if (pr && !existing) Object.assign(state, { prNumber: pr.number, reviewer: pr.reviewer });
+      const task = state.pipelineTaskId == null ? undefined : await tx.task(state.pipelineTaskId as TaskId);
+      return { live: task !== undefined && task.state.status !== "terminal", pending: !existing?.deliveredAt };
+    }, context);
 
   return {
     start: ({ repo, issue, requestId, instructions }) =>
@@ -147,15 +173,7 @@ export function createIssueService(opts: {
         const conversation = conversationId && (await harness.conversation(conversationId, context));
         if (!repoConfig || !conversation) return "not_found";
 
-        // One commit, so the pipeline either sees the note before it ends or is already terminal here.
-        const { live, pending } = await conversation.commit(async (tx) => {
-          const notes = await tx.doc(IssueNotes, conversation.id);
-          const existing = notes.items.find((note) => note.id === id);
-          if (!existing) notes.items.push({ id, text, at: new Date().toISOString(), deliveredAt: null });
-          const taskId = (await tx.doc(IssueState, conversation.id)).pipelineTaskId;
-          const task = taskId == null ? undefined : await tx.task(taskId as TaskId);
-          return { live: task !== undefined && task.state.status !== "terminal", pending: !existing?.deliveredAt };
-        }, context);
+        const { live, pending } = await addNote(conversation, { id, text });
         if (live) return "steered";
         // A retry of a message that was already delivered has nothing left to start.
         if (!pending) return "started";
@@ -164,9 +182,46 @@ export function createIssueService(opts: {
         return "started";
       }),
 
-    stop: ({ repo, issue }) =>
+    feedback: (action) =>
       mutex.run(async () => {
-        const { key, state } = await lookup(repo, issue);
+        const { repo, pr: number, id } = action;
+        const repoConfig = findRepo(config, repo);
+        if (!repoConfig) return log("feedback ignored: repository is not configured", { repo, pr: number });
+        const pr = await github.getPr(repo, number);
+        const target = agentPrIssue({ ref: pr.headRef, fromFork: pr.fromFork });
+        if (pr.state !== "open" || "reason" in target)
+          return log("feedback ignored: not an open agent pull request", { repo, pr: number, id });
+        const { key, conversationId } = await lookup(repo, target.issue);
+        const conversation = conversationId && (await harness.conversation(conversationId, context));
+        if (!conversation) return log("feedback ignored: issue has no conversation", { key, pr: number, id });
+
+        await github.react(repo, action.nodeId);
+        const review =
+          action.source.type === "review"
+            ? await github.getReviewFeedback(repo, number, action.source.reviewId)
+            : undefined;
+        const { live, pending } = await addNote(
+          conversation,
+          { id, text: action.instructions, ...(review && { review }) },
+          { number, reviewer: action.reviewer },
+        );
+        if (live) return log("feedback steered into the live run", { key, id });
+        if (!pending) return log("feedback ignored: already delivered", { key, id });
+        const input = { repo, issue: target.issue, requestId: id, instructions: "", trigger: "pr" } as const;
+        await launch(repoConfig, conversation.id, input, number);
+      }),
+
+    stop: (action) =>
+      mutex.run(async () => {
+        let issue: number;
+        if (action.kind === "stop") issue = action.issue;
+        else {
+          const pr = await github.getPr(action.repo, action.pr);
+          const target = agentPrIssue({ ref: pr.headRef, fromFork: pr.fromFork });
+          if ("reason" in target) return log("stop ignored: not an agent pull request", { ...action, ...target });
+          issue = target.issue;
+        }
+        const { key, state } = await lookup(action.repo, issue);
         if (state?.pipelineTaskId == null) return log("stop ignored: no pipeline for issue", { key });
         const outcome = await harness.abortTask(state.pipelineTaskId as TaskId, context);
         log("pipeline abort requested", { key, outcome });

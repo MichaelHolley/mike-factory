@@ -111,4 +111,42 @@ describe("toTranscript", () => {
       { kind: "human", text: "Also docs", pending: true },
     ]);
   });
+
+  it("shows a review note with its review card", () => {
+    const review = {
+      reviewer: "owner",
+      state: "changes_requested",
+      body: "Please rename",
+      url: "https://github.com/o/r/pull/3#pullrequestreview-7",
+      comments: [
+        {
+          id: 81,
+          threadRootId: 81,
+          path: "src/a.ts",
+          line: 4,
+          diffHunk: "@@ -1 +1 @@",
+          body: "Use a map",
+          url: "https://github.com/o/r/pull/3#discussion_r81",
+          thread: [],
+        },
+      ],
+    };
+    const prompt = { role: "user", content: "<review>...</review>", timestamp: 1 } as Message;
+    const view = viewOf([
+      { kind: HUMAN_ENTRY, data: { id: "review-7", text: "Please rename", review }, model: [prompt] },
+    ]);
+
+    expect(toTranscript(view)).toEqual([
+      {
+        kind: "human",
+        text: "Please rename",
+        review: {
+          reviewer: "owner",
+          state: "changes_requested",
+          url: review.url,
+          comments: [{ path: "src/a.ts", line: 4, body: "Use a map", url: review.comments[0]!.url }],
+        },
+      },
+    ]);
+  });
 });

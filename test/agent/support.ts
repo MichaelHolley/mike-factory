@@ -76,6 +76,12 @@ const FAKE_CLIENT_METHODS: Record<keyof GitHubClient, true> = {
   findOpenPr: true,
   createPr: true,
   updatePr: true,
+  getPr: true,
+  getReviewFeedback: true,
+  listReviewThreads: true,
+  react: true,
+  replyToReviewComment: true,
+  requestReview: true,
   gitToken: true,
   botIdentity: true,
 };
@@ -191,6 +197,47 @@ export const startAction = (issue: number, requestId: string, instructions = "",
   ({ kind: "start", repo, issue, requestId, instructions }) as const;
 export const stopAction = (issue: number, requestId: string) =>
   ({ kind: "stop", repo: REPO, issue, requestId }) as const;
+
+export const reviewFeedback = (pr: number, reviewId: number, instructions = "") =>
+  ({
+    kind: "feedback",
+    repo: REPO,
+    pr,
+    id: `review-${reviewId}`,
+    reviewer: "owner",
+    nodeId: `PRR_${reviewId}`,
+    source: { type: "review", reviewId },
+    instructions,
+  }) as const;
+
+export const commentFeedback = (pr: number, commentId: number, instructions: string) =>
+  ({
+    kind: "feedback",
+    repo: REPO,
+    pr,
+    id: `pr-comment-${commentId}`,
+    reviewer: "owner",
+    nodeId: `IC_${commentId}`,
+    source: { type: "comment" },
+    instructions,
+  }) as const;
+
+/** Replies to the first review comment named in the latest review prompt, once; undefined otherwise. */
+export const replyToReview = (messages: Message[], body: string): AssistantMessage | undefined => {
+  const prompt = messages.findLast((message) => textOf(message).includes("<review>"));
+  const commentId = /Comment (\d+) on/.exec(textOf(prompt))?.[1];
+  const replied = messages
+    .slice(prompt ? messages.indexOf(prompt) : 0)
+    .some(
+      (message) =>
+        message.role === "assistant" &&
+        message.content.some((part) => part.type === "toolCall" && part.name === "reply_to_review_comment"),
+    );
+  if (!commentId || replied) return undefined;
+  return fauxAssistantMessage(fauxToolCall("reply_to_review_comment", { commentId: Number(commentId), body }), {
+    stopReason: "toolUse",
+  });
+};
 
 export async function conversationIdOf(harness: Harness, issue: number, repo = REPO) {
   const index = await harness.snapshot(IssueIndex, issueKey(OWNER, repo, issue), ctx);

@@ -137,7 +137,8 @@ export function createServer({
 
       if (action.kind === "ignore") log("webhook ignored", { deliveryId, reason: action.reason });
       else if (action.kind === "start") await service.start(action);
-      else if (action.kind === "stop") await service.stop(action);
+      else if (action.kind === "stop" || action.kind === "pr-stop") await service.stop(action);
+      else if (action.kind === "feedback") await service.feedback(action);
       else await service.cleanup(action);
       return c.body(null, 202);
     });

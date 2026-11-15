@@ -92,17 +92,37 @@ export function budgetBreach(
   return undefined;
 }
 
-/** Reads a conversation's spend as the budget sees it. `messages` are the model context. */
+type Spend = { turns: number; costUsd: number };
+
+/** Reads a conversation's total spend. `messages` are the model context. */
 export async function spentOf(
   read: DocumentReader,
   conversationId: ConversationId,
   messages: readonly Message[],
   context: Context,
-) {
+): Promise<Spend> {
   return {
     turns: assistantTurns(messages),
     costUsd: totalCostUsd(await read.snapshot(UsageDoc, conversationId, context)),
   };
+}
+
+/** Spend since `from`, the conversation's spend when the run started; budgets apply per run. */
+export const spentSince = (spent: Spend, from: Spend | null | undefined): Spend =>
+  from ? { turns: Math.max(0, spent.turns - from.turns), costUsd: Math.max(0, spent.costUsd - from.costUsd) } : spent;
+
+/** Why the current run must stop spending, or undefined while it is within its repo's budgets. */
+export async function runBudgetBreach(
+  read: DocumentReader,
+  conversationId: ConversationId,
+  messages: readonly Message[],
+  context: Context,
+  config: AppConfig,
+): Promise<string | undefined> {
+  const state = await read.snapshot(IssueState, conversationId, context);
+  const repo = state && findRepo(config, state.repo);
+  if (!repo) return undefined;
+  return budgetBreach(repo, spentSince(await spentOf(read, conversationId, messages, context), state.budgetFrom));
 }
 
 export const lastAssistantText = (messages: readonly Message[]): string => {
@@ -143,11 +163,8 @@ export function createGuards(opts: { config: AppConfig; abortTask: (id: TaskId) 
       }),
       hook(GenerationTask, {
         beforeRequest: async (request, api, context) => {
-          const state = await api.snapshot(IssueState, api.conversationId, context);
-          const repo = state && findRepo(opts.config, state.repo);
-          if (!repo) return undefined;
-          const spent = await spentOf(api, api.conversationId, request.messages, context);
-          if (budgetBreach(repo, spent)) opts.abortTask(api.taskId);
+          if (await runBudgetBreach(api, api.conversationId, request.messages, context, opts.config))
+            opts.abortTask(api.taskId);
           return undefined;
         },
       }),

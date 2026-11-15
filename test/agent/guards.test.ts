@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { bashViolation, budgetBreach, pathOutsideWorktree, totalCostUsd } from "../../src/agent/extensions/guards.ts";
+import {
+  bashViolation,
+  budgetBreach,
+  pathOutsideWorktree,
+  spentSince,
+  totalCostUsd,
+} from "../../src/agent/extensions/guards.ts";
 
 const worktree = "/data/worktrees/demo/issue-1";
 
@@ -71,5 +77,12 @@ describe("budget", () => {
     expect(budgetBreach(limits, { turns: 2, costUsd: 0.99 })).toBeUndefined();
     expect(budgetBreach(limits, { turns: 3, costUsd: 0 })).toContain("turn budget exhausted");
     expect(budgetBreach(limits, { turns: 0, costUsd: 1.2 })).toContain("cost budget exhausted");
+  });
+
+  it("counts only the current run, so spend from earlier runs does not block a new one", () => {
+    const spent = { turns: 5, costUsd: 1.5 };
+    expect(budgetBreach(limits, spent)).toBeDefined();
+    expect(budgetBreach(limits, spentSince(spent, { turns: 4, costUsd: 1.2 }))).toBeUndefined();
+    expect(spentSince({ turns: 1, costUsd: 0 }, { turns: 4, costUsd: 1 })).toEqual({ turns: 0, costUsd: 0 });
   });
 });

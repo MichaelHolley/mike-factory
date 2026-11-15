@@ -106,7 +106,6 @@ describe("verifyWebhook", () => {
   it.each([
     ["other event", payload(), { event: "issues" }, /event/],
     ["edited comment", payload({ action: "edited" }), {}, /action/],
-    ["pull request comment", payload({ issue: { number: 12, pull_request: {} } }), {}, /pull request/],
     ["non-command comment", payload({ comment: { id: 99, body: "looks good" } }), {}, /command/],
     ["comment from another sender or the bot", payload({ sender: { id: 7 } }), {}, /sender/],
     ["wrong owner", payload({ repository: { name: "byok-imagen", owner: { login: "someone" } } }), {}, /owner/],
@@ -115,5 +114,91 @@ describe("verifyWebhook", () => {
     const action = await run(body, opts);
     expect(action.kind).toBe("ignore");
     expect(action.kind === "ignore" && action.reason).toMatch(reason);
+  });
+
+  describe("pull request feedback", () => {
+    const pr = (headRef = "agent/issue-12", headRepo = "MichaelHolley/byok-imagen") => ({
+      number: 30,
+      state: "open",
+      head: { ref: headRef, repo: { full_name: headRepo } },
+    });
+    const repository = {
+      name: "byok-imagen",
+      full_name: "MichaelHolley/byok-imagen",
+      owner: { login: "MichaelHolley" },
+    };
+    const sender = { id: 42, login: "MichaelHolley" };
+    const review = (overrides: { state?: string; body?: string; headRepo?: string; senderId?: number } = {}) => ({
+      action: "submitted",
+      review: {
+        id: 7,
+        node_id: "PRR_7",
+        body: overrides.body ?? "Rename it",
+        state: overrides.state ?? "changes_requested",
+      },
+      pull_request: pr(undefined, overrides.headRepo),
+      sender: { ...sender, id: overrides.senderId ?? 42 },
+      repository,
+    });
+    const feedback = (overrides: object) => ({
+      kind: "feedback",
+      repo: "byok-imagen",
+      pr: 30,
+      reviewer: "MichaelHolley",
+      ...overrides,
+    });
+
+    it("turns a Request changes review into feedback", async () => {
+      expect(await run(review(), { event: "pull_request_review" })).toEqual(
+        feedback({
+          id: "review-7",
+          nodeId: "PRR_7",
+          source: { type: "review", reviewId: 7 },
+          instructions: "Rename it",
+        }),
+      );
+    });
+
+    it("keys an inline /mike comment by its review", async () => {
+      const body = {
+        action: "created",
+        comment: { id: 81, node_id: "PRRC_81", body: "/mike use a map", pull_request_review_id: 7 },
+        pull_request: pr(),
+        sender,
+        repository,
+      };
+      expect(await run(body, { event: "pull_request_review_comment" })).toEqual(
+        feedback({
+          id: "review-7",
+          nodeId: "PRRC_81",
+          source: { type: "review", reviewId: 7 },
+          instructions: "use a map",
+        }),
+      );
+    });
+
+    it("turns a /mike conversation comment on a PR into feedback, and /mike stop into a stop", async () => {
+      const comment = (body: string) =>
+        payload({ comment: { id: 99, node_id: "IC_99", body }, issue: { number: 30, pull_request: {} }, sender });
+      expect(await run(comment("/mike add docs"))).toEqual(
+        feedback({ id: "pr-comment-99", nodeId: "IC_99", source: { type: "comment" }, instructions: "add docs" }),
+      );
+      expect(await run(comment("/mike stop"))).toEqual({ kind: "pr-stop", repo: "byok-imagen", pr: 30 });
+      expect(await run(review({ state: "commented", body: "/mike stop" }), { event: "pull_request_review" })).toEqual({
+        kind: "pr-stop",
+        repo: "byok-imagen",
+        pr: 30,
+      });
+    });
+
+    it.each([
+      ["Comment review without /mike", review({ state: "commented" }), /no \/mike/],
+      ["Approve review without /mike", review({ state: "approved", body: "" }), /no \/mike/],
+      ["review from another sender", review({ senderId: 7 }), /sender/],
+      ["review on a fork's agent branch", review({ headRepo: "someone/byok-imagen" }), /fork/],
+    ])("ignores a %s", async (_name, body, reason) => {
+      const action = await run(body, { event: "pull_request_review" });
+      expect(action.kind === "ignore" && action.reason).toMatch(reason);
+    });
   });
 });

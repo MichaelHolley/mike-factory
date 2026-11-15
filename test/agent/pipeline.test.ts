@@ -7,9 +7,10 @@ import { ToolResultEntry, MemoryStorage, type Harness } from "@earendil-works/pi
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openAgentHarness } from "../../src/agent/harness.ts";
-import { STATUS_MARKER, WORKING_STATUS } from "../../src/agent/tasks/issuePipeline.ts";
+import { NO_CHANGES_STATUS, STATUS_MARKER, WORKING_STATUS } from "../../src/agent/tasks/issuePipeline.ts";
 import {
   autopilot,
+  commentFeedback,
   commitFile,
   conversationIdOf,
   draftPr,
@@ -20,6 +21,8 @@ import {
   OTHER_REPO,
   pipelineResult,
   REPO,
+  replyToReview,
+  reviewFeedback,
   startAction,
   stopAction,
   textOf,
@@ -479,6 +482,100 @@ describe("issue pipeline", () => {
       expect(readFileSync(checksLog, "utf8")).toBe("run\nrun\n");
       expect(git(world.remote, "show", "agent/issue-1:revised.txt")).toBe("ok");
       expect(world.github.prs).toHaveLength(1);
+    });
+  });
+
+  describe("PR feedback", () => {
+    const finishedRun = async (world: World) => {
+      const run = await launch(world);
+      await run.service.start(startAction(1, "comment-1"));
+      expect((await pipelineResult(run.harness, 1)).status).toBe("completed");
+      return { ...run, pr: world.github.prs[0]!.number };
+    };
+
+    it("revises a finished run from a review, reporting on the PR and leaving the issue comment alone", async () => {
+      const world = createWorld({ dir });
+      autopilot(world.faux, (messages) => {
+        if (textOf(messages.at(-1)).includes("<review>")) return commitFile("renamed.txt", "ok");
+        return messages.some((m) => textOf(m).includes("<review>"))
+          ? replyToReview(messages, "Renamed it.")
+          : undefined;
+      });
+      const { harness, service, pr } = await finishedRun(world);
+      const issueStatus = status(world);
+      const { reviewId, commentIds } = world.github.addReview(REPO, pr, {
+        reviewer: "owner",
+        state: "changes_requested",
+        body: "",
+        comments: [{ path: "hello.txt", line: 1, body: "Rename this" }],
+      });
+      const pushedBeforeReply: string[] = [];
+      const reply = world.github.replyToReviewComment.bind(world.github);
+      world.github.replyToReviewComment = async (...args) => {
+        pushedBeforeReply.push(git(world.remote, "show", "agent/issue-1:renamed.txt"));
+        return reply(...args);
+      };
+
+      await service.feedback(reviewFeedback(pr, reviewId));
+      expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+      expect(world.github.reactions).toEqual([{ repo: REPO, nodeId: `PRR_${reviewId}` }]);
+      expect(pushedBeforeReply).toEqual(["ok"]);
+      const replies = world.github.reviewCommentsOn(REPO, pr).filter((comment) => comment.inReplyTo === commentIds[0]);
+      expect(replies.map((comment) => comment.body)).toEqual([expect.stringMatching(/\nRenamed it\.$/)]);
+      expect(world.github.reviewRequests).toEqual([{ repo: REPO, pr, login: "owner" }]);
+      expect(status(world)).toBe(issueStatus);
+      expect(status(world, pr)).toMatch(/^<!-- agent-status -->\nDone\. Pushed the changes\.\n\nCost: /);
+      expect(world.github.callCount("createPr")).toBe(1);
+      expect(await service.transcript(REPO, 1)).toContainEqual(
+        expect.objectContaining({ kind: "human", review: expect.objectContaining({ reviewer: "owner" }) }),
+      );
+    });
+
+    it("steers feedback that arrives during a live run into it", async () => {
+      const sleepCall = fauxAssistantMessage(fauxToolCall("bash", { command: "sleep 3" }), { stopReason: "toolUse" });
+      const world = createWorld({ dir });
+      autopilot(world.faux, (messages) => {
+        const last = textOf(messages.at(-1));
+        if (last.includes("take your time")) return sleepCall;
+        if (last.includes("<owner-message>\nAdd docs.txt")) return commitFile("docs.txt", "docs");
+        return undefined;
+      });
+      const { harness, service, pr } = await finishedRun(world);
+      const calls = world.faux.state.callCount;
+      await service.start(startAction(1, "comment-2", "take your time"));
+      const taskId = (await issueStateOf(harness, 1))!.pipelineTaskId;
+      await waitFor(() => world.faux.state.callCount > calls);
+
+      await service.feedback(commentFeedback(pr, 5, "Add docs.txt"));
+      expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+      expect((await issueStateOf(harness, 1))!.pipelineTaskId).toBe(taskId);
+      expect(git(world.remote, "show", "agent/issue-1:docs.txt")).toBe("docs");
+      expect(world.github.reviewRequests).toEqual([{ repo: REPO, pr, login: "owner" }]);
+      expect(status(world, pr)).toBeUndefined();
+    });
+
+    it("finishes a round that only replies without running the checks", async () => {
+      const checksLog = join(dir, "checks.log");
+      const world = createWorld({ dir, repo: { checks: [`echo run >> ${checksLog}`] } });
+      autopilot(world.faux, (messages) =>
+        messages.some((m) => textOf(m).includes("<review>")) ? replyToReview(messages, "It is used twice.") : undefined,
+      );
+      const { harness, service, pr } = await finishedRun(world);
+      const { reviewId } = world.github.addReview(REPO, pr, {
+        reviewer: "owner",
+        state: "commented",
+        body: "/mike",
+        comments: [{ path: "hello.txt", line: 1, body: "Why is this needed?" }],
+      });
+
+      await service.feedback(reviewFeedback(pr, reviewId));
+      expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+      expect(readFileSync(checksLog, "utf8")).toBe("run\n");
+      expect(status(world, pr)).toContain(NO_CHANGES_STATUS);
+      expect(world.github.reviewCommentsOn(REPO, pr)).toHaveLength(2);
     });
   });
 

@@ -35,6 +35,7 @@ function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui"), proxySecret?: 
   const service: IssueService = {
     start: vi.fn(async () => {}),
     stop: vi.fn(async () => {}),
+    feedback: vi.fn(async () => {}),
     message: vi.fn(async () => "steered" as const),
     cleanup: vi.fn(async () => {}),
     sweep: vi.fn(async () => {}),

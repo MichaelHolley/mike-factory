@@ -1,7 +1,8 @@
 import type { JsonValue } from "@earendil-works/chord";
 import type { ImageContent, Message, TextContent } from "@earendil-works/pi-ai";
 import type { ContextView } from "@earendil-works/pi-durable";
-import type { TranscriptItem } from "../runStatus.ts";
+import type { ReviewFeedback } from "../contracts.ts";
+import type { ReviewCard, TranscriptItem } from "../runStatus.ts";
 import { HUMAN_ENTRY } from "./docs.ts";
 
 const MAX_ITEM_CHARS = 4_000;
@@ -22,13 +23,21 @@ const summarize = (args: Record<string, unknown>) => {
   return line.length > SUMMARY_CHARS ? `${line.slice(0, SUMMARY_CHARS)}...` : line;
 };
 
-export type HumanMessage = { id: string; text: string };
+export type HumanMessage = { id: string; text: string; review?: ReviewFeedback };
 
-/** The `{ id, text }` of an owner message entry's data, or undefined for anything else. */
+/** The `{ id, text, review? }` of an owner message entry's data, or undefined for anything else. */
 export const humanMessage = (data: JsonValue | undefined): HumanMessage | undefined => {
-  const { id, text } = (data ?? {}) as Partial<Record<string, unknown>>;
-  return typeof id === "string" && typeof text === "string" ? { id, text } : undefined;
+  const { id, text, review } = (data ?? {}) as Partial<Record<string, unknown>>;
+  if (typeof id !== "string" || typeof text !== "string") return undefined;
+  return review && typeof review === "object" ? { id, text, review: review as ReviewFeedback } : { id, text };
 };
+
+const reviewCard = ({ reviewer, state, url, comments }: ReviewFeedback): ReviewCard => ({
+  reviewer,
+  state,
+  url,
+  comments: comments.map(({ path, line, body, url }) => ({ path, line, body: clip(body), url })),
+});
 
 /**
  * The public projection of a conversation: no system prompt, thinking or images, each tool call paired with its result,
@@ -50,7 +59,14 @@ export function toTranscript(
   const human = (message: HumanMessage | undefined, pending: boolean): TranscriptItem[] => {
     if (!message || shown.has(message.id)) return [];
     shown.add(message.id);
-    return [{ kind: "human", text: clip(message.text), ...(pending && { pending: true as const }) }];
+    return [
+      {
+        kind: "human",
+        text: clip(message.text),
+        ...(pending && { pending: true as const }),
+        ...(message.review && { review: reviewCard(message.review) }),
+      },
+    ];
   };
   const placed = view.entries.flatMap((entry, index): TranscriptItem[] =>
     entry.kind === HUMAN_ENTRY

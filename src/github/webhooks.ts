@@ -1,6 +1,6 @@
 import { Webhooks } from "@octokit/webhooks";
 import type { AppConfig } from "../config.ts";
-import type { WebhookAction } from "../contracts.ts";
+import { agentPrIssue, type WebhookAction } from "../contracts.ts";
 
 export class InvalidSignatureError extends Error {
   constructor() {
@@ -9,18 +9,42 @@ export class InvalidSignatureError extends Error {
   }
 }
 
+type Repository = { name?: string; full_name?: string; owner?: { login?: string } };
+type Sender = { id?: number; login?: string };
+type PrPayload = {
+  number?: number;
+  state?: string;
+  head?: { ref?: string; repo?: { full_name?: string } | null };
+};
+
 interface IssueCommentPayload {
   action?: string;
-  comment?: { id?: number; body?: string };
+  comment?: { id?: number; node_id?: string; body?: string };
   issue?: { number?: number; pull_request?: unknown };
-  sender?: { id?: number };
-  repository?: { name?: string; owner?: { login?: string } };
+  sender?: Sender;
+  repository?: Repository;
 }
 
 interface PullRequestPayload {
   action?: string;
-  pull_request?: { head?: { ref?: string; repo?: { full_name?: string } | null } };
-  repository?: { name?: string; full_name?: string; owner?: { login?: string } };
+  pull_request?: PrPayload;
+  repository?: Repository;
+}
+
+interface ReviewPayload {
+  action?: string;
+  review?: { id?: number; node_id?: string; body?: string | null; state?: string };
+  pull_request?: PrPayload;
+  sender?: Sender;
+  repository?: Repository;
+}
+
+interface ReviewCommentPayload {
+  action?: string;
+  comment?: { id?: number; node_id?: string; body?: string; pull_request_review_id?: number | null };
+  pull_request?: PrPayload;
+  sender?: Sender;
+  repository?: Repository;
 }
 
 type Command = { kind: "start"; instructions: string } | { kind: "stop" };
@@ -46,7 +70,7 @@ export async function verifyWebhook(input: {
   const valid = signature ? await new Webhooks({ secret }).verify(rawBody, signature).catch(() => false) : false;
   if (!valid) throw new InvalidSignatureError();
 
-  if (event !== "issue_comment" && event !== "pull_request") return ignore(`event ${event} is not handled`);
+  if (!HANDLED_EVENTS.has(event)) return ignore(`event ${event} is not handled`);
 
   let parsed: unknown;
   try {
@@ -55,10 +79,11 @@ export async function verifyWebhook(input: {
     return ignore("payload is not valid JSON");
   }
   if (event === "pull_request") return pullRequestAction(parsed as PullRequestPayload, config);
+  if (event === "pull_request_review") return reviewAction(parsed as ReviewPayload, config);
+  if (event === "pull_request_review_comment") return reviewCommentAction(parsed as ReviewCommentPayload, config);
 
   const payload = parsed as IssueCommentPayload;
   if (payload.action !== "created") return ignore(`issue_comment action ${payload.action} is not handled`);
-  if (payload.issue?.pull_request) return ignore("comment is on a pull request");
 
   const command = parseCommand(payload.comment?.body ?? "");
   if (!command) return ignore("comment is not a /mike command");
@@ -69,31 +94,111 @@ export async function verifyWebhook(input: {
   if (typeof issue !== "number" || typeof commentId !== "number" || !repo)
     return ignore("payload has no issue number, comment id or repository");
 
-  if (Number(payload.sender?.id) !== config.allowedSenderId)
-    return ignore(`sender ${payload.sender?.id} is not allowed`);
-
-  const notAllowed = repoNotAllowed(payload, config);
+  const notAllowed = senderNotAllowed(payload, config) ?? repoNotAllowed(payload, config);
   if (notAllowed) return ignore(notAllowed);
 
+  if (payload.issue?.pull_request) {
+    // The payload carries no head branch; the service checks the PR before acting on it.
+    if (command.kind === "stop") return { kind: "pr-stop", repo, pr: issue };
+    return {
+      kind: "feedback",
+      repo,
+      pr: issue,
+      id: `pr-comment-${commentId}`,
+      reviewer: payload.sender?.login ?? "",
+      nodeId: payload.comment?.node_id ?? "",
+      source: { type: "comment" },
+      instructions: command.instructions,
+    };
+  }
   return { ...command, repo, issue, requestId: `comment-${commentId}` };
 }
 
+const HANDLED_EVENTS = new Set(["issue_comment", "pull_request", "pull_request_review", "pull_request_review_comment"]);
+
 function pullRequestAction(payload: PullRequestPayload, config: AppConfig): WebhookAction {
   if (payload.action !== "closed") return ignore(`pull_request action ${payload.action} is not handled`);
-  const head = payload.pull_request?.head;
-  const match = /^agent\/issue-(\d+)$/.exec(head?.ref ?? "");
-  if (!match) return ignore(`branch ${head?.ref} is not an agent branch`);
-  // A fork can name its branch agent/issue-<n> too.
-  if (head?.repo?.full_name !== payload.repository?.full_name) return ignore("pull request comes from a fork");
-  const notAllowed = repoNotAllowed(payload, config);
-  if (notAllowed) return ignore(notAllowed);
-  return { kind: "cleanup", repo: payload.repository!.name!, issue: Number(match[1]) };
+  const target = agentPr(payload, config);
+  if ("reason" in target) return ignore(target.reason);
+  return { kind: "cleanup", repo: target.repo, issue: target.issue };
 }
 
-function repoNotAllowed(
-  payload: { repository?: { name?: string; owner?: { login?: string } } },
+function reviewAction(payload: ReviewPayload, config: AppConfig): WebhookAction {
+  if (payload.action !== "submitted") return ignore(`pull_request_review action ${payload.action} is not handled`);
+  const review = payload.review;
+  const body = review?.body ?? "";
+  const command = parseCommand(body);
+  if (!command && review?.state !== "changes_requested")
+    return ignore(`review in state ${review?.state} has no /mike command`);
+  if (typeof review?.id !== "number") return ignore("payload has no review id");
+  return prFeedback(payload, config, command, {
+    reviewId: review.id,
+    nodeId: review.node_id ?? "",
+    instructions: command?.kind === "start" ? command.instructions : body.trim(),
+  });
+}
+
+function reviewCommentAction(payload: ReviewCommentPayload, config: AppConfig): WebhookAction {
+  if (payload.action !== "created")
+    return ignore(`pull_request_review_comment action ${payload.action} is not handled`);
+  const comment = payload.comment;
+  const command = parseCommand(comment?.body ?? "");
+  if (!command) return ignore("comment is not a /mike command");
+  if (typeof comment?.pull_request_review_id !== "number") return ignore("payload has no review id");
+  return prFeedback(payload, config, command, {
+    reviewId: comment.pull_request_review_id,
+    nodeId: comment.node_id ?? "",
+    instructions: command.kind === "start" ? command.instructions : "",
+  });
+}
+
+function prFeedback(
+  payload: ReviewPayload | ReviewCommentPayload,
   config: AppConfig,
-): string | undefined {
+  command: Command | undefined,
+  trigger: { reviewId: number; nodeId: string; instructions: string },
+): WebhookAction {
+  const notAllowed = senderNotAllowed(payload, config);
+  if (notAllowed) return ignore(notAllowed);
+  const target = agentPr(payload, config);
+  if ("reason" in target) return ignore(target.reason);
+  if (!target.pr) return ignore("payload has no pull request number");
+  if (command?.kind === "stop") return { kind: "pr-stop", repo: target.repo, pr: target.pr };
+  if (payload.pull_request?.state !== "open") return ignore("pull request is not open");
+  return {
+    kind: "feedback",
+    repo: target.repo,
+    pr: target.pr,
+    id: `review-${trigger.reviewId}`,
+    reviewer: payload.sender?.login ?? "",
+    nodeId: trigger.nodeId,
+    source: { type: "review", reviewId: trigger.reviewId },
+    instructions: trigger.instructions,
+  };
+}
+
+/** The configured repo, PR and issue of an agent PR from the same repo, or why the payload is not one. */
+function agentPr(
+  payload: { pull_request?: PrPayload; repository?: Repository },
+  config: AppConfig,
+): { repo: string; pr: number; issue: number } | { reason: string } {
+  const head = payload.pull_request?.head;
+  const target = agentPrIssue({
+    ref: head?.ref,
+    fromFork: head?.repo?.full_name !== payload.repository?.full_name,
+  });
+  if ("reason" in target) return target;
+  const notAllowed = repoNotAllowed(payload, config);
+  if (notAllowed) return { reason: notAllowed };
+  return { repo: payload.repository!.name!, pr: payload.pull_request?.number ?? 0, issue: target.issue };
+}
+
+function senderNotAllowed(payload: { sender?: Sender }, config: AppConfig): string | undefined {
+  if (Number(payload.sender?.id) !== config.allowedSenderId) return `sender ${payload.sender?.id} is not allowed`;
+  return undefined;
+}
+
+function repoNotAllowed(payload: { repository?: Repository }, config: AppConfig): string | undefined {
   const owner = payload.repository?.owner?.login;
   const repo = payload.repository?.name;
   if (owner?.toLowerCase() !== config.owner.toLowerCase()) return `repository owner ${owner} is not ${config.owner}`;
