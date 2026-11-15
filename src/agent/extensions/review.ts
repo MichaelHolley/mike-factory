@@ -1,7 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
 import type { GitHubClient } from "../../contracts.ts";
-import { IssueState, ReviewReplies } from "../docs.ts";
+import { IssueNotes, IssueState, ReviewReplies } from "../docs.ts";
 import { text } from "./text.ts";
 
 const MAX_REPLY_CHARS = 2_000;
@@ -53,6 +53,22 @@ export function createReviewTools(github: GitHubClient) {
           if (body.length > MAX_REPLY_CHARS) {
             return {
               output: text(`Rejected: the reply has ${body.length} characters; keep it under ${MAX_REPLY_CHARS}.`),
+              isError: true,
+            };
+          }
+          const state = await api.snapshot(IssueState, api.conversationId, context);
+          if (!state?.prNumber) return { output: text("Rejected: this issue has no pull request yet."), isError: true };
+          const notes = await api.snapshot(IssueNotes, api.conversationId, context);
+          const known =
+            notes?.items.some((note) => note.review?.comments.some(({ id }) => id === args.commentId)) ||
+            (await github.listReviewThreads(state.repo, state.prNumber)).some((thread) =>
+              thread.comments.some(({ id }) => id === args.commentId),
+            );
+          if (!known) {
+            return {
+              output: text(
+                `Rejected: ${args.commentId} is not a review comment on this pull request; use an id from the review or \`list_review_threads\`.`,
+              ),
               isError: true,
             };
           }

@@ -40,7 +40,9 @@ export type IssueStateValue = {
   prNumber?: number | null;
   /** Login whose review the run re-requests when it finishes; set by PR feedback. */
   reviewer?: string | null;
-  /** Branch head when the run started; an unchanged head means the run made no commits. */
+  /** Branch head `publish` last pushed. */
+  pushedHead?: string | null;
+  /** `pushedHead` when the run started, so a head equal to it means the run has nothing new to verify or push. */
   startHead?: string | null;
   /** Conversation spend when the run started, so budgets count per run. */
   budgetFrom?: { turns: number; costUsd: number } | null;
@@ -73,6 +75,7 @@ export const IssueState = defineDoc<IssueStateValue>({
     statusOn: null,
     prNumber: null,
     reviewer: null,
+    pushedHead: null,
     startHead: null,
     budgetFrom: null,
   }),
@@ -106,7 +109,7 @@ export const IssueNotes = defineDoc<{ items: Note[] }>({
   checkpointWhen: () => false,
 });
 
-/** The agent's draft replies to review comments, which `report` posts after pushing. */
+/** The agent's draft replies to review comments, which `report` posts after pushing; `postedAt` also settles a skipped one. */
 export type ReviewReply = { commentId: number; body: string; postedAt: string | null };
 
 export const ReviewReplies = defineDoc<{ items: ReviewReply[] }>({

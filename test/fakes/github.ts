@@ -297,9 +297,9 @@ export class FakeGitHub implements GitHubClient {
     this.called("replyToReviewComment");
     const tag = COMMENT_MARKER(marker);
     const all = this.reviewCommentsOn(repo, pr);
-    if (all.some((comment) => comment.body.includes(tag))) return;
+    if (all.some((comment) => comment.body.includes(tag))) return true;
     const target = all.find((comment) => comment.id === commentId);
-    if (!target) throw new Error(`404 Not Found: ${repo} review comment ${commentId}`);
+    if (!target) return false;
     this.reviewCommentList.push({
       ...target,
       id: this.nextId++,
@@ -307,6 +307,7 @@ export class FakeGitHub implements GitHubClient {
       body: `${tag}\n${body}`,
       inReplyTo: target.inReplyTo ?? target.id,
     });
+    return true;
   }
 
   async requestReview(repo: string, pr: number, login: string): Promise<void> {

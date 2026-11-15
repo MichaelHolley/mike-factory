@@ -85,8 +85,11 @@ export interface GitHubClient {
   listReviewThreads(repo: string, pr: number): Promise<ReviewThread[]>;
   /** Adds an 👀 reaction to an issue comment, review or review comment by its GraphQL node id. Idempotent. */
   react(repo: string, nodeId: string): Promise<void>;
-  /** Replies in the thread of `commentId` unless a reply carrying the hidden `marker` already exists. */
-  replyToReviewComment(repo: string, pr: number, commentId: number, marker: string, body: string): Promise<void>;
+  /**
+   * Replies in the thread of `commentId` unless a reply carrying the hidden `marker` already exists. False when the PR
+   * has no such comment.
+   */
+  replyToReviewComment(repo: string, pr: number, commentId: number, marker: string, body: string): Promise<boolean>;
   requestReview(repo: string, pr: number, login: string): Promise<void>;
   /** Short-lived token for git over HTTPS. Only push/fetch code may see it. */
   gitToken(repo: string): Promise<string>;

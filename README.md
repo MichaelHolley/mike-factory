@@ -12,7 +12,7 @@ A self-hosted coding agent that turns a GitHub issue into a pull request. Commen
 - `/mike stop` aborts the run.
 - On mike's PR, request changes or comment `/mike <text>` (including inline) to have it revise the PR. It replies in the threads and re-requests your review.
 
-Progress appears in a single status comment on the issue. A status page lists all runs live, shows each agent's conversation, and lets you steer a running agent or continue a finished one.
+Progress appears in a single status comment on the issue, or on the PR for runs started there. A status page lists all runs live, shows each agent's conversation, and lets you steer a running agent or continue a finished one.
 
 ## How it works
 
