@@ -80,7 +80,10 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
     async upsertComment(repo, issue, marker, body) {
       const octokit = await octokitFor(repo);
       const tag = markerComment(marker);
-      const existing = (await rawComments(repo, issue)).find((comment) => comment.body?.includes(tag));
+      const { name: botLogin } = await this.botIdentity();
+      const existing = (await rawComments(repo, issue)).find(
+        (comment) => comment.user?.login === botLogin && comment.body?.includes(tag),
+      );
       const fullBody = `${tag}\n${body}`;
       if (existing) {
         await octokit.request("PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}", {
