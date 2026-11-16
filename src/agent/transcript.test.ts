@@ -169,13 +169,24 @@ describe("toTranscript", () => {
     ]);
   });
 
-  it("leaves out failed and aborted answers, as the model's context does", () => {
+  it("leaves out failed answers, and keeps only the text of an aborted one, marked interrupted", () => {
     const entries = entriesOf([
-      { role: "assistant", content: [{ type: "text", text: "Half an ans" }], stopReason: "aborted", timestamp: 1 },
-      { role: "assistant", content: [], stopReason: "error", timestamp: 2 },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "Half an ans" },
+          { type: "toolCall", id: "1", name: "bash", arguments: { command: "pnpm te" } },
+        ],
+        stopReason: "aborted",
+        timestamp: 1,
+      },
+      { role: "assistant", content: [{ type: "text", text: "Fail" }], stopReason: "error", timestamp: 2 },
       { role: "assistant", content: [{ type: "text", text: "The answer." }], stopReason: "stop", timestamp: 3 },
     ] as unknown as Message[]);
 
-    expect(toTranscript(entries)).toEqual([{ kind: "assistant", text: "The answer." }]);
+    expect(toTranscript(entries)).toEqual([
+      { kind: "assistant", text: "Half an ans", interrupted: true },
+      { kind: "assistant", text: "The answer." },
+    ]);
   });
 });

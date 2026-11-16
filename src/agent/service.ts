@@ -198,13 +198,14 @@ export function createIssueService(opts: {
 
     return {
       async items() {
+        // Notes first, so a note delivered between the two reads shows once rather than not at all.
+        const notes = await harness.snapshot(IssueNotes, conversation.id, context);
         let view = history.merge(watch.value);
         for (let missing; (missing = view.items.find((item) => item.kind !== "entry"));) {
           await (missing.kind === "earlier" ? history.loadEarlier(context) : history.fillGap(missing, context));
           view = history.merge(watch.value);
         }
         const inbox = view.docs[InboxDoc.definition.kind] as InboxState | undefined;
-        const notes = await harness.snapshot(IssueNotes, conversation.id, context);
         const queued = [
           ...(inbox?.items ?? []).flatMap((item) =>
             item.mode !== "write" && item.entry?.kind === HUMAN_ENTRY ? [humanMessage(item.entry.data)] : [],

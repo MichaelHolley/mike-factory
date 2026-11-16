@@ -80,6 +80,7 @@ const sampleConversation = (): TranscriptItem[] => [
       isError: true,
     },
   },
+  { kind: "assistant", text: "The typecheck fails because `dark` is read as a", interrupted: true },
   { kind: "human", text: "Please use the system preference by default." },
   {
     kind: "assistant",

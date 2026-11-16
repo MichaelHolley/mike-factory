@@ -39,8 +39,9 @@ const reviewCard = ({ reviewer, state, url, comments }: ReviewFeedback): ReviewC
   comments: comments.map(({ path, line, body, url }) => ({ path, line, body: clip(body), url })),
 });
 
-// Failed and cut-off answers, which the model's context leaves out too.
-const UNSHOWN_STOP_REASONS = new Set(["aborted", "error", "deferred"]);
+// Failed answers, which the model's context leaves out too. It leaves out aborted ones as well, but their text is
+// what the owner watched stream in before it was cut off.
+const UNSHOWN_STOP_REASONS = new Set(["error", "deferred"]);
 
 const shownMessages = (entry: EntryRecord) =>
   (entry.model ?? []).filter(
@@ -49,8 +50,8 @@ const shownMessages = (entry: EntryRecord) =>
 
 /**
  * The public projection of a conversation's entries: no system prompt, thinking or images, each tool call paired with
- * its result, and long text is clipped. Owner messages show as `human` items, followed by `queued` ones the agent
- * hasn't seen yet.
+ * its result, and long text is clipped. An aborted answer keeps only its text, marked `interrupted`. Owner messages
+ * show as `human` items, followed by `queued` ones the agent hasn't seen yet.
  */
 export function toTranscript(entries: readonly EntryRecord[], queued: readonly HumanMessage[] = []): TranscriptItem[] {
   const contributions = entries.map(shownMessages);
@@ -90,10 +91,15 @@ function itemsOf(message: Message, results: Map<string, { text: string; isError:
       return [];
     case "user":
       return [{ kind: "user", text: clip(textOf(message.content)) }];
-    case "assistant":
+    case "assistant": {
+      const interrupted = message.stopReason === "aborted";
       return message.content.flatMap((part): TranscriptItem[] => {
-        if (part.type === "text") return part.text.trim() ? [{ kind: "assistant", text: clip(part.text) }] : [];
-        if (part.type === "toolCall") {
+        if (part.type === "text") {
+          return part.text.trim()
+            ? [{ kind: "assistant", text: clip(part.text), ...(interrupted && { interrupted: true as const }) }]
+            : [];
+        }
+        if (part.type === "toolCall" && !interrupted) {
           const result = results.get(part.id);
           return [
             {
@@ -107,6 +113,7 @@ function itemsOf(message: Message, results: Map<string, { text: string; isError:
         }
         return [];
       });
+    }
     case "toolResult":
       return [];
   }

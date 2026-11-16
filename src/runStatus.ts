@@ -20,7 +20,9 @@ export type ReviewCard = {
 };
 
 export type TranscriptItem =
-  | { kind: "user" | "assistant"; text: string }
+  | { kind: "user"; text: string }
+  /** `interrupted`: cut off before it was finished. */
+  | { kind: "assistant"; text: string; interrupted?: true }
   | { kind: "human"; text: string; pending?: true; review?: ReviewCard }
   | { kind: "tool"; name: string; summary: string; args: string; result?: { text: string; isError: boolean } };
 

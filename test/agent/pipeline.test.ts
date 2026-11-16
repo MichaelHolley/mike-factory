@@ -6,7 +6,9 @@ import { join } from "node:path";
 import { ToolResultEntry, MemoryStorage, type Harness } from "@earendil-works/pi-durable";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { HUMAN_ENTRY } from "../../src/agent/docs.ts";
 import { openAgentHarness } from "../../src/agent/harness.ts";
+import type { TranscriptItem } from "../../src/runStatus.ts";
 import { NO_CHANGES_STATUS, STATUS_MARKER, WORKING_STATUS } from "../../src/agent/tasks/issuePipeline.ts";
 import {
   autopilot,
@@ -67,7 +69,6 @@ describe("issue pipeline", () => {
     await pipelineResult(harness, 1);
 
     const conversation = (await harness.conversation((await conversationIdOf(harness, 1))!, ctx))!;
-    await conversation.configure({ compaction: { keepRecentTokens: 1 } }, ctx);
     expect((await conversation.agent(ctx)).thinkingLevel).toBe("low");
   });
 
@@ -95,7 +96,6 @@ describe("issue pipeline", () => {
     await service.start(startAction(1, "comment-1"));
     await pipelineResult(harness, 1);
     const conversation = (await harness.conversation((await conversationIdOf(harness, 1))!, ctx))!;
-    await conversation.configure({ compaction: { keepRecentTokens: 1 } }, ctx);
     expect((await conversation.agent(ctx)).model).toEqual({ provider: "faux", modelId: "faux-1" });
 
     world.config.repos[0]!.model = { provider: "faux", modelId: "faux-2" };
@@ -271,6 +271,30 @@ describe("issue pipeline", () => {
     );
     expect((await conversation.context(ctx)).head?.kind).toBe("pi.compaction");
     expect(await service.transcript(REPO, 1)).toEqual([...before, expect.objectContaining({ kind: "user" })]);
+  });
+
+  it("pages in the whole history, before a watch opens and while it is open", async () => {
+    const world = createWorld({ dir });
+    autopilot(world.faux);
+    const { harness, service } = await launch(world);
+    await service.start(startAction(1, "comment-1"));
+    await pipelineResult(harness, 1);
+    const conversation = (await harness.conversation((await conversationIdOf(harness, 1))!, ctx))!;
+    const addNotes = (from: number) =>
+      conversation.commit(async (tx) => {
+        for (let i = from; i < from + 250; i++) {
+          await tx.appendEntry(conversation.id, { kind: HUMAN_ENTRY, data: { id: `n${i}`, text: `Note ${i}` } });
+        }
+      }, ctx);
+    const notes = (items: TranscriptItem[]) => items.flatMap((item) => (item.kind === "human" ? [item.text] : []));
+
+    await addNotes(0);
+    const watch = (await service.watchTranscript(REPO, 1, () => {}))!;
+    await addNotes(250);
+    const all = Array.from({ length: 500 }, (_, i) => `Note ${i}`);
+    await vi.waitFor(async () => expect(notes(await watch.items())).toEqual(all));
+    watch.stop();
+    expect(notes((await service.transcript(REPO, 1))!)).toEqual(all);
   });
 
   it("notifies status and transcript subscribers of their own changes until they unsubscribe", async () => {
