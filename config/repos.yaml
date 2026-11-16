@@ -10,7 +10,7 @@ repos:
   - name: byok-imagen
     defaultBranch: main
     setup: pnpm install --frozen-lockfile
-    checks: [pnpm lint, pnpm check]
+    checks: [pnpm lint, pnpm check, pnpm test]
   - name: Tshopper
     defaultBranch: main
     setup: pnpm install --frozen-lockfile

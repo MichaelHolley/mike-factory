@@ -74,7 +74,7 @@ export interface GitIdentity {
 export interface GitHubClient {
   getIssue(repo: string, issue: number): Promise<IssueData>;
   listIssueComments(repo: string, issue: number): Promise<IssueComment[]>;
-  /** Creates the comment, or edits the existing one that carries the same hidden `marker`. */
+  /** Creates the comment, or edits the bot's existing comment that carries the same hidden `marker`. */
   upsertComment(repo: string, issue: number, marker: string, body: string): Promise<void>;
   findOpenPr(repo: string, head: string): Promise<PullRequestRef | undefined>;
   createPr(repo: string, pr: { head: string; base: string; title: string; body: string }): Promise<PullRequestRef>;
