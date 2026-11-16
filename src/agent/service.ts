@@ -1,7 +1,8 @@
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import {
   AgentDoc,
   InboxDoc,
+  type CommitChange,
   type Conversation,
   type ConversationId,
   type Cursor,
@@ -28,6 +29,16 @@ const INSTRUCTIONS = [
 ].join("\n");
 
 const TRANSCRIPT_DOCS = new Set([IssueNotes.definition.kind, InboxDoc.definition.kind]);
+
+function observeChanges(harness: Harness, matches: (change: CommitChange) => boolean, listener: () => void) {
+  const observation = harness.observeCommits({
+    advance: ({ changes }) => {
+      if (changes.some(matches)) listener();
+    },
+    end: () => {},
+  });
+  return () => observation.detach();
+}
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -308,26 +319,25 @@ export function createIssueService(opts: {
     },
 
     subscribeStatus: (listener) =>
-      harness.subscribeCommits(({ changes }) => {
-        if (changes.some((change) => change.type === "document" && change.record.kind === IssueState.definition.kind))
-          listener();
-      }),
+      observeChanges(
+        harness,
+        (change) => change.type === "document" && change.record.kind === IssueState.definition.kind,
+        listener,
+      ),
 
     async subscribeTranscript(repo, issue, listener) {
       const { conversationId } = await lookup(repo, issue);
       if (conversationId === undefined) return undefined;
-      return harness.subscribeCommits(({ changes }) => {
-        if (
-          changes.some((change) =>
-            change.type === "entry"
-              ? change.value.conversationId === conversationId
-              : change.type === "document" &&
-                change.conversationId === conversationId &&
-                TRANSCRIPT_DOCS.has(change.record.kind),
-          )
-        )
-          listener();
-      });
+      return observeChanges(
+        harness,
+        (change) =>
+          change.type === "entry"
+            ? change.value.conversationId === conversationId
+            : change.type === "document" &&
+              change.conversationId === conversationId &&
+              TRANSCRIPT_DOCS.has(change.record.kind),
+        listener,
+      );
     },
   };
 }

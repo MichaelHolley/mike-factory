@@ -107,7 +107,7 @@ async function main() {
   let shuttingDown = false;
   void harness.closed.then((end) => {
     if (shuttingDown) return;
-    log("harness closed unexpectedly", { end: end.reason === "failed" ? String(end.error) : end.reason });
+    log("harness closed unexpectedly", { end: end.kind === "failed" ? String(end.error) : end.kind });
     process.exit(1);
   });
 

@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Type } from "@earendil-works/pi-ai";
+import { obj, str } from "@earendil-works/pi-schema";
 import { defineExtension, defineTool, section } from "@earendil-works/pi-durable";
 import { parse } from "yaml";
 import { text } from "./text.ts";
@@ -67,7 +67,7 @@ export function createSkills(skills: readonly Skill[]) {
       defineTool({
         name: "load_skill",
         description: "Load the full instructions of a skill listed in the system prompt.",
-        parameters: Type.Object({ name: Type.String({ description: "Skill name, e.g. `frontend-design`." }) }),
+        parameters: obj({ name: str({ description: "Skill name, e.g. `frontend-design`." }) }),
         replay: "safe",
         execute: async (args) => {
           const skill = byName.get(args.name);
