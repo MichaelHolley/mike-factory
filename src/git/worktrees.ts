@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { type ExecutionEnv, getOrThrow } from "@earendil-works/pi-durable/env";
 import type { RepoConfig } from "../config.ts";
-import { branchName, type Worktrees } from "../contracts.ts";
+import { issueOfBranch, legacyBranchName, type Worktrees } from "../contracts.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -120,10 +120,9 @@ export function createWorktrees(opts: {
   return {
     worktreePath,
 
-    prepare: (repo: RepoConfig, issue, { openPr }) =>
+    prepare: (repo: RepoConfig, issue, { branch, openPr }) =>
       withLock(repo.name, async () => {
         const path = worktreePath(repo.name, issue);
-        const branch = branchName(issue);
         const bare = barePath(repo.name);
         await fetchMirror(repo.name);
         await ensureRepo(repo.name);
@@ -145,13 +144,11 @@ export function createWorktrees(opts: {
 
     uncommitted: (repo, issue) => git(worktreePath(repo, issue), ["status", "--porcelain", "--untracked-files=all"]),
 
-    latestCommitSubject: (repo, issue) =>
-      git(worktreePath(repo, issue), ["log", "-1", "--format=%s", branchName(issue)]),
+    latestCommitSubject: (repo, issue, branch) => git(worktreePath(repo, issue), ["log", "-1", "--format=%s", branch]),
 
     // Under the repo lock because a mirror fetch with `--prune` would drop the branch before it is pushed.
-    push: (repo, issue) =>
+    push: (repo, branch) =>
       withLock(repo.name, async () => {
-        const branch = branchName(issue);
         const ref = `refs/heads/${branch}`;
         const bundle = getOrThrow(await workspace.createTempFile({ prefix: "publish-", suffix: ".bundle" }, ctx));
         const local = await mkdtemp(join(tmpdir(), "publish-"));
@@ -180,13 +177,13 @@ export function createWorktrees(opts: {
         }
       }),
 
-    headSha: (repo, issue) => git(worktreePath(repo, issue), ["rev-parse", `refs/heads/${branchName(issue)}`]),
+    headSha: (repo, issue, branch) => git(worktreePath(repo, issue), ["rev-parse", `refs/heads/${branch}`]),
 
-    async commitsAhead(repo, issue) {
+    async commitsAhead(repo, issue, branch) {
       const count = await git(worktreePath(repo.name, issue), [
         "rev-list",
         "--count",
-        `origin/${repo.defaultBranch}..${branchName(issue)}`,
+        `origin/${repo.defaultBranch}..${branch}`,
       ]);
       return Number(count);
     },
@@ -198,8 +195,14 @@ export function createWorktrees(opts: {
         const path = worktreePath(repo, issue);
         if (await exists(path)) await git(bare, ["worktree", "remove", "--force", path]);
         await git(bare, ["worktree", "prune"]);
-        if (await refExists(repo, `refs/heads/${branchName(issue)}`))
-          await git(bare, ["branch", "-D", branchName(issue)]);
+        const branches = await git(bare, [
+          "for-each-ref",
+          "--format=%(refname:short)",
+          `refs/heads/mike/${issue}-*`,
+          `refs/heads/${legacyBranchName(issue)}`,
+        ]);
+        for (const branch of branches.split("\n").filter((name) => issueOfBranch(name) === issue))
+          await git(bare, ["branch", "-D", branch]);
       }),
 
     async issues(repo) {
@@ -210,10 +213,16 @@ export function createWorktrees(opts: {
         if (match) numbers.add(Number(match[1]));
       }
       if (await exists(join(barePath(repo), "HEAD"))) {
-        const branches = await git(barePath(repo), ["branch", "--list", "agent/issue-*", "--format=%(refname:short)"]);
+        const branches = await git(barePath(repo), [
+          "branch",
+          "--list",
+          "mike/*",
+          "agent/issue-*",
+          "--format=%(refname:short)",
+        ]);
         for (const branch of branches.split("\n")) {
-          const match = /^agent\/issue-(\d+)$/.exec(branch);
-          if (match) numbers.add(Number(match[1]));
+          const issue = issueOfBranch(branch);
+          if (issue !== undefined) numbers.add(issue);
         }
       }
       return [...numbers].sort((a, b) => a - b);

@@ -1,4 +1,5 @@
 import {
+  issueOfBranch,
   type GitHubClient,
   type GitIdentity,
   type IssueComment,
@@ -120,8 +121,8 @@ export class FakeGitHub implements GitHubClient {
   /** Closes the issue and its open agent PR, as merging a PR with `Closes #n` does. */
   closeIssue(repo: string, issue: number): void {
     this.issue(repo, issue).state = "closed";
-    const pr = this.openPr(repo, `agent/issue-${issue}`);
-    if (pr) pr.state = "closed";
+    for (const pr of this.prList)
+      if (pr.repo === repo && pr.state === "open" && issueOfBranch(pr.head) === issue) pr.state = "closed";
   }
 
   commentsOn(repo: string, issue: number): FakeComment[] {

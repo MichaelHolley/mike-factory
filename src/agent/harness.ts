@@ -4,6 +4,7 @@ import { Harness, type Storage } from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import type { AppConfig } from "../config.ts";
 import type { GitHubClient, IssueService, Worktrees } from "../contracts.ts";
+import type { BranchNamer } from "./branchNamer.ts";
 import type { Skill } from "./extensions/skills.ts";
 import { createAgentRegistry } from "./registry.ts";
 import { createIssueService } from "./service.ts";
@@ -18,6 +19,8 @@ export interface AgentDeps {
   maxConcurrent?: number;
   publicUrl?: string;
   skills?: readonly Skill[];
+  /** Names a new conversation's branch; defaults to a slug of the issue title. */
+  nameBranch?: BranchNamer;
 }
 
 /** Opens the harness over `storage`, installs the agent, and resumes unfinished work before returning. */

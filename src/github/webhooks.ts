@@ -120,7 +120,7 @@ function pullRequestAction(payload: PullRequestPayload, config: AppConfig): Webh
   if (payload.action !== "closed") return ignore(`pull_request action ${payload.action} is not handled`);
   const target = agentPr(payload, config);
   if ("reason" in target) return ignore(target.reason);
-  return { kind: "cleanup", repo: target.repo, issue: target.issue };
+  return { kind: "cleanup", repo: target.repo, issue: target.issue, branch: payload.pull_request?.head?.ref ?? "" };
 }
 
 function reviewAction(payload: ReviewPayload, config: AppConfig): WebhookAction {

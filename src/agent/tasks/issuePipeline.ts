@@ -19,6 +19,7 @@ import {
   type ReviewFeedback,
   type Worktrees,
 } from "../../contracts.ts";
+import { type BranchNamer, titleBranchNamer } from "../branchNamer.ts";
 import { HUMAN_ENTRY, IssueNotes, IssueState, ReviewReplies, type IssueStateValue, type Note } from "../docs.ts";
 import { lastAssistantText, runBudgetBreach, totalCostUsd } from "../extensions/guards.ts";
 import { closingRef, CONVENTIONAL_TITLE, prBodyLimit } from "../extensions/pull-request.ts";
@@ -57,6 +58,7 @@ export interface PipelineDeps {
   publicUrl?: string;
   /** Phase at whose start the process exits once per pipeline task, to test restart safety. */
   crashAt?: string;
+  nameBranch?: BranchNamer;
 }
 
 type Rt = TaskRuntime<PipelineInput, PipelineState, PipelineResult, object>;
@@ -222,6 +224,7 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 export function createIssuePipeline(deps: PipelineDeps) {
   const { github, worktrees } = deps;
   const log = deps.log ?? (() => {});
+  const nameBranch = deps.nameBranch ?? titleBranchNamer;
   const slots = createSlots(deps.maxConcurrent ?? DEFAULT_MAX_CONCURRENT);
 
   const repoOf = (name: string): RepoConfig => {
@@ -296,6 +299,17 @@ export function createIssuePipeline(deps: PipelineDeps) {
     return undefined;
   };
 
+  /** Committed before the worktree exists, so a rerun after a crash reuses the name instead of asking again. */
+  const newBranch = async (rt: Rt, context: Context, repo: string, issue: number) => {
+    const branch = branchName(issue, await nameBranch(await github.getIssue(repo, issue)));
+    await rt.commit(async (tx) => {
+      (await tx.doc(IssueState, rt.conversationId)).branch = branch;
+      return undefined;
+    }, context);
+    log("branch named", { repo, issue, branch });
+    return branch;
+  };
+
   const hasPendingNotes = async (rt: Rt, context: Context) =>
     pendingNotes(await rt.snapshot(IssueNotes, rt.conversationId, context)).length > 0;
 
@@ -357,7 +371,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
     issue: number,
     state: IssueStateValue | undefined,
   ) => {
-    const subject = state?.prTitle ?? (await worktrees.latestCommitSubject(repo, issue));
+    const subject = state?.prTitle ?? (await worktrees.latestCommitSubject(repo, issue, state?.branch ?? ""));
     const title = CONVENTIONAL_TITLE.test(subject) ? subject : `chore: ${(await github.getIssue(repo, issue)).title}`;
     const body = state?.prBody ?? lastAssistantText((await rt.context(rt.conversationId, context)).messages);
     const limit = prBodyLimit(issue);
@@ -426,8 +440,9 @@ export function createIssuePipeline(deps: PipelineDeps) {
         const { repo, issue } = task.input;
         const config = repoOf(repo);
         const state = await rt.snapshot(IssueState, rt.conversationId, context);
-        const openPr = (await github.findOpenPr(repo, branchName(issue))) !== undefined;
-        const worktree = await worktrees.prepare(config, issue, { openPr });
+        const branch = state?.branch || (await newBranch(rt, context, repo, issue));
+        const openPr = (await github.findOpenPr(repo, branch)) !== undefined;
+        const worktree = await worktrees.prepare(config, issue, { branch, openPr });
         if (config.setup && (worktree.created || !state?.setupDone)) {
           const result = await run(rt, context, config.setup, worktree.path);
           if (!result.ok) throw new PipelineFailure(`setup failed: ${config.setup}`, result.output);
@@ -466,11 +481,11 @@ export function createIssuePipeline(deps: PipelineDeps) {
         const { repo, issue } = task.input;
         const { attempt } = task.state.checkpoint;
         const config = repoOf(repo);
-        const { startHead } = (await rt.snapshot(IssueState, rt.conversationId, context)) ?? {};
+        const { startHead, branch = "" } = (await rt.snapshot(IssueState, rt.conversationId, context)) ?? {};
         const unchanged =
           startHead != null &&
           !(await worktrees.uncommitted(repo, issue)) &&
-          (await worktrees.headSha(repo, issue)) === startHead;
+          (await worktrees.headSha(repo, issue, branch)) === startHead;
         // A round without commits, such as one that only answers review comments, has nothing new to check.
         const failure = unchanged ? undefined : await firstFailure(rt, context, config, issue);
         if (!failure) return go(rt, context, { phase: (await hasPendingNotes(rt, context)) ? "revise" : "publish" });
@@ -511,11 +526,11 @@ export function createIssuePipeline(deps: PipelineDeps) {
       publish: step("publish", async (task, rt, context) => {
         const { repo, issue } = task.input;
         const config = repoOf(repo);
-        if ((await worktrees.commitsAhead(config, issue)) === 0)
-          throw new PipelineFailure("no changes: the agent produced no commits");
-        await worktrees.push(config, issue);
         const state = await rt.snapshot(IssueState, rt.conversationId, context);
         const head = state?.branch ?? "";
+        if ((await worktrees.commitsAhead(config, issue, head)) === 0)
+          throw new PipelineFailure("no changes: the agent produced no commits");
+        await worktrees.push(config, head);
         let pr = await github.findOpenPr(repo, head);
         if (!pr) {
           const content = await prContent(rt, context, repo, issue, state);
@@ -527,7 +542,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
           rt,
           context,
           { phase: "report", prUrl: pr.url },
-          { prUrl: pr.url, prNumber: pr.number, pushedHead: await worktrees.headSha(repo, issue) },
+          { prUrl: pr.url, prNumber: pr.number, pushedHead: await worktrees.headSha(repo, issue, head) },
         );
       }),
 
@@ -545,7 +560,8 @@ export function createIssuePipeline(deps: PipelineDeps) {
               .catch((error) => log("could not re-request the review", { error: messageOf(error) }));
         }
         const costUsd = await spentCostUsd(rt, context);
-        const unchanged = state?.startHead != null && (await worktrees.headSha(repo, issue)) === state.startHead;
+        const unchanged =
+          state?.startHead != null && (await worktrees.headSha(repo, issue, state.branch)) === state.startHead;
         const headline = state?.statusOn
           ? unchanged
             ? NO_CHANGES_STATUS

@@ -114,16 +114,16 @@ describe("issue pipeline", () => {
     expect(outcome.status).toBe("completed");
     expect(world.github.prs).toHaveLength(1);
     const pr = world.github.prs[0]!;
-    expect(pr).toMatchObject({ head: "agent/issue-1", base: "main", title: "feat: add hello.txt", state: "open" });
+    expect(pr).toMatchObject({ head: "mike/1-add-hello", base: "main", title: "feat: add hello.txt", state: "open" });
     expect(pr.body).toBe("Done: wrote hello.txt.\n\nCloses #1");
-    expect(git(world.remote, "show", "agent/issue-1:hello.txt")).toBe("hello");
+    expect(git(world.remote, "show", "mike/1-add-hello:hello.txt")).toBe("hello");
     expect(status(world)).toContain("Pull request: ");
     const comments = world.github.commentsOn(REPO, 1);
     expect(comments).toHaveLength(1);
     expect(comments[0]!.body).toContain(pr.url);
     expect(comments[0]!.body).toMatch(/Cost: \$\d+\.\d{4}/);
     const state = await issueStateOf(harness, 1);
-    expect(state).toMatchObject({ phase: "done", prUrl: pr.url, branch: "agent/issue-1" });
+    expect(state).toMatchObject({ phase: "done", prUrl: pr.url, branch: "mike/1-add-hello" });
   });
 
   it("opens the PR with the drafted title and body", async () => {
@@ -206,7 +206,7 @@ describe("issue pipeline", () => {
     await service.start(startAction(1, "comment-1"));
     expect((await pipelineResult(harness, 1)).status).toBe("completed");
 
-    expect(git(world.remote, "show", "agent/issue-1:fixed.txt")).toBe("ok");
+    expect(git(world.remote, "show", "mike/1-add-hello:fixed.txt")).toBe("ok");
     expect(world.github.prs[0]).toMatchObject({
       title: "fix: repair verification setup",
       body: `${description}\n\nCloses #1`,
@@ -239,7 +239,7 @@ describe("issue pipeline", () => {
       issue: 1,
       issueUrl: `https://github.com/${world.config.owner}/${REPO}/issues/1`,
       title: "Add hello",
-      branch: "agent/issue-1",
+      branch: "mike/1-add-hello",
       phase: "done",
       attempts: 0,
       costUsd: done!.costUsd,
@@ -293,11 +293,13 @@ describe("issue pipeline", () => {
     expect(status(world)).toContain("Pull request: ");
   });
 
-  it("continues on the open PR when /mike is sent again", async () => {
+  it("names the branch once and continues on the open PR when /mike is sent again", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux, (messages) =>
       textOf(messages.at(-1)).includes("also add more") ? commitFile("more.txt", "more") : undefined,
     );
+    const named: number[] = [];
+    world.deps.nameBranch = async (issue) => (named.push(issue.number), "hello-file");
     const { harness, service } = await launch(world);
     await service.start(startAction(1, "comment-1"));
     await pipelineResult(harness, 1);
@@ -305,7 +307,9 @@ describe("issue pipeline", () => {
     await service.start(startAction(1, "comment-2", "also add more"));
     expect((await pipelineResult(harness, 1)).status).toBe("completed");
 
-    expect(git(world.remote, "show", "agent/issue-1:more.txt")).toBe("more");
+    expect(named).toEqual([1]);
+    expect(world.github.prs[0]!.head).toBe("mike/1-hello-file");
+    expect(git(world.remote, "show", "mike/1-hello-file:more.txt")).toBe("more");
     expect(world.github.prs).toHaveLength(1);
     expect(world.github.callCount("createPr")).toBe(1);
   });
@@ -336,7 +340,7 @@ describe("issue pipeline", () => {
       expect((await pipelineResult(harness, 1)).status).toBe("completed");
 
       expect(world.github.prs).toHaveLength(1);
-      expect(git(world.remote, "show", "agent/issue-1:hello.txt")).toBe("hello");
+      expect(git(world.remote, "show", "mike/1-add-hello:hello.txt")).toBe("hello");
       const transcript = (await service.transcript(REPO, 1))!;
       const sleep = transcript.findIndex((item) => item.kind === "tool" && item.summary === "sleep 3");
       expect(transcript[sleep + 1]).toEqual({ kind: "human", text: "Please commit hello.txt" });
@@ -368,7 +372,7 @@ describe("issue pipeline", () => {
 
       expect(await service.message(message("Thanks."))).toBe("started");
       expect((await pipelineResult(harness, 1)).status).toBe("completed");
-      expect(git(world.remote, "show", "agent/issue-1:hello.txt")).toBe("hello");
+      expect(git(world.remote, "show", "mike/1-add-hello:hello.txt")).toBe("hello");
       const humans = (await service.transcript(REPO, 1))!.filter((item) => item.kind === "human");
       expect(humans).toEqual([
         { kind: "human", text: "Please commit hello.txt" },
@@ -397,7 +401,7 @@ describe("issue pipeline", () => {
       expect(await service.message(message("Add more.txt", id))).toBe("started");
 
       expect((await issueStateOf(harness, 1))!.pipelineTaskId).not.toBe(first!.pipelineTaskId);
-      expect(git(world.remote, "show", "agent/issue-1:more.txt")).toBe("more");
+      expect(git(world.remote, "show", "mike/1-add-hello:more.txt")).toBe("more");
       expect(world.github.callCount("createPr")).toBe(1);
       expect(world.github.callCount("updatePr")).toBe(1);
       expect(world.github.prs[0]).toMatchObject({ title: "feat: add hello and more", body: "Adds more.\n\nCloses #1" });
@@ -440,7 +444,7 @@ describe("issue pipeline", () => {
         (item) => item.kind === "user" && item.text.startsWith("Verification failed"),
       );
       expect(fixes).toHaveLength(2);
-      expect(git(world.remote, "ls-tree", "--name-only", "agent/issue-1")).not.toContain("broken.txt");
+      expect(git(world.remote, "ls-tree", "--name-only", "mike/1-add-hello")).not.toContain("broken.txt");
     });
 
     it("marks the status as working again when a message arrives after the PR link is posted", async () => {
@@ -463,7 +467,7 @@ describe("issue pipeline", () => {
       expect((await pipelineResult(harness, 1)).status).toBe("completed");
 
       expect(statuses).toEqual([WORKING_STATUS, "pr", WORKING_STATUS, "pr"]);
-      expect(git(world.remote, "show", "agent/issue-1:late.txt")).toBe("late");
+      expect(git(world.remote, "show", "mike/1-add-hello:late.txt")).toBe("late");
     });
 
     it("revises and verifies again when a message arrives while checks run", async () => {
@@ -480,7 +484,7 @@ describe("issue pipeline", () => {
       expect((await pipelineResult(harness, 1)).status).toBe("completed");
 
       expect(readFileSync(checksLog, "utf8")).toBe("run\nrun\n");
-      expect(git(world.remote, "show", "agent/issue-1:revised.txt")).toBe("ok");
+      expect(git(world.remote, "show", "mike/1-add-hello:revised.txt")).toBe("ok");
       expect(world.github.prs).toHaveLength(1);
     });
   });
@@ -492,6 +496,25 @@ describe("issue pipeline", () => {
       expect((await pipelineResult(run.harness, 1)).status).toBe("completed");
       return { ...run, pr: world.github.prs[0]!.number };
     };
+
+    it("ignores feedback on a PR whose branch only looks like the issue's agent branch", async () => {
+      const world = createWorld({ dir });
+      autopilot(world.faux);
+      const { harness, service } = await finishedRun(world);
+      const modelCalls = world.faux.state.callCount;
+      const other = await world.github.createPr(REPO, {
+        head: "mike/1-human-work",
+        base: "main",
+        title: "feat: human work",
+        body: "",
+      });
+
+      await service.feedback(commentFeedback(other.number, 99, "please change it"));
+
+      expect(world.logs.some(({ msg }) => msg === "feedback ignored: not the issue's agent branch")).toBe(true);
+      expect((await issueStateOf(harness, 1))!.phase).toBe("done");
+      expect(world.faux.state.callCount).toBe(modelCalls);
+    });
 
     it("revises a finished run from a review, reporting on the PR and leaving the issue comment alone", async () => {
       const world = createWorld({ dir });
@@ -512,7 +535,7 @@ describe("issue pipeline", () => {
       const pushedBeforeReply: string[] = [];
       const reply = world.github.replyToReviewComment.bind(world.github);
       world.github.replyToReviewComment = async (...args) => {
-        pushedBeforeReply.push(git(world.remote, "show", "agent/issue-1:renamed.txt"));
+        pushedBeforeReply.push(git(world.remote, "show", "mike/1-add-hello:renamed.txt"));
         return reply(...args);
       };
 
@@ -551,7 +574,7 @@ describe("issue pipeline", () => {
       expect((await pipelineResult(harness, 1)).status).toBe("completed");
 
       expect((await issueStateOf(harness, 1))!.pipelineTaskId).toBe(taskId);
-      expect(git(world.remote, "show", "agent/issue-1:docs.txt")).toBe("docs");
+      expect(git(world.remote, "show", "mike/1-add-hello:docs.txt")).toBe("docs");
       expect(world.github.reviewRequests).toEqual([{ repo: REPO, pr, login: "owner" }]);
       expect(status(world, pr)).toBeUndefined();
     });
@@ -598,7 +621,7 @@ describe("issue pipeline", () => {
       await service.feedback(reviewFeedback(pr, reviewId));
 
       expect((await pipelineResult(harness, 1)).status).toBe("failed");
-      expect(git(world.remote, "ls-tree", "--name-only", "agent/issue-1")).not.toContain("broken.txt");
+      expect(git(world.remote, "ls-tree", "--name-only", "mike/1-add-hello")).not.toContain("broken.txt");
     });
 
     it("keeps the reviewer through a failed round and re-requests once a later round finishes", async () => {
@@ -805,7 +828,7 @@ describe("issue pipeline", () => {
       (item) => item.kind === "user" && item.text.startsWith("Verification failed"),
     );
     expect(fix).toMatchObject({ text: expect.stringContaining("?? verify.sh") });
-    expect(git(world.remote, "diff", "--name-only", "main", "agent/issue-1")).toBe("hello.txt");
+    expect(git(world.remote, "diff", "--name-only", "main", "mike/1-add-hello")).toBe("hello.txt");
     expect(await issueStateOf(harness, 1)).toMatchObject({ phase: "done", attempts: 1 });
   });
 
@@ -1026,9 +1049,8 @@ describe("issue pipeline", () => {
     expect(maxSlotsHeld(world)).toBe(3);
     expect(world.github.prs).toHaveLength(4);
     for (const { repo, issue } of runs) {
-      expect(git(world.remotes[repo]!, "diff", "--name-only", "main", `agent/issue-${issue}`)).toBe(
-        `${repo}-${issue}.txt`,
-      );
+      const { branch } = (await issueStateOf(harness, issue, repo))!;
+      expect(git(world.remotes[repo]!, "diff", "--name-only", "main", branch)).toBe(`${repo}-${issue}.txt`);
     }
     const states = await service.status();
     expect(states.map(({ repo, issue, phase }) => `${repo}#${issue}:${phase}`).sort()).toEqual([
@@ -1046,7 +1068,10 @@ describe("issue pipeline", () => {
     await service.start(startAction(1, "comment-1"));
     await pipelineResult(harness, 1);
 
-    await service.cleanup({ kind: "cleanup", repo: REPO, issue: 1 });
+    await service.cleanup({ kind: "cleanup", repo: REPO, issue: 1, branch: "mike/1-other-work" });
+    expect(existsSync(world.deps.worktrees.worktreePath(REPO, 1))).toBe(true);
+
+    await service.cleanup({ kind: "cleanup", repo: REPO, issue: 1, branch: "mike/1-add-hello" });
 
     expect(existsSync(world.deps.worktrees.worktreePath(REPO, 1))).toBe(false);
     expect(await world.deps.worktrees.issues(REPO)).toEqual([]);

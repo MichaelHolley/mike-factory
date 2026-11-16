@@ -6,6 +6,7 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { createModels } from "@earendil-works/pi-ai/models";
 import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter";
 import { fauxProvider } from "@earendil-works/pi-ai/providers/faux";
+import { createBranchNamer, titleBranchNamer } from "./agent/branchNamer.ts";
 import { openAgentHarness } from "./agent/harness.ts";
 import { loadSkills, SKILLS_DIR } from "./agent/extensions/skills.ts";
 import { DEFAULT_MAX_CONCURRENT } from "./agent/tasks/issuePipeline.ts";
@@ -17,6 +18,7 @@ import { createServer } from "./server.ts";
 import { takeSecrets } from "./secrets.ts";
 
 const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_BRANCH_MODEL = "openai/gpt-6-luna";
 
 const log = (msg: string, data: object = {}) =>
   console.log(JSON.stringify({ time: new Date().toISOString(), msg, ...data }));
@@ -54,6 +56,7 @@ async function main() {
     throw new Error("MAX_CONCURRENT must be a positive integer");
 
   const publicUrl = process.env.PUBLIC_URL?.replace(/\/+$/, "") || undefined;
+  const branchModelId = process.env.BRANCH_MODEL || DEFAULT_BRANCH_MODEL;
 
   const secrets = takeSecrets();
 
@@ -72,6 +75,9 @@ async function main() {
   });
 
   const { models, model } = buildModels(secrets.openrouterApiKey, useFaux);
+  const branchModel = useFaux ? undefined : models.getModel("openrouter", branchModelId);
+  if (!useFaux && !branchModel) throw new Error(`BRANCH_MODEL ${branchModelId} is not a known OpenRouter model`);
+  const nameBranch = branchModel ? createBranchNamer({ models, model: branchModel, log }) : titleBranchNamer;
   const effectiveConfig: AppConfig = model
     ? { ...config, repos: config.repos.map((repo) => ({ ...repo, model })) }
     : config;
@@ -82,7 +88,17 @@ async function main() {
     {
       storage,
       models,
-      deps: { config: effectiveConfig, github, worktrees, env: workspace.env, log, maxConcurrent, publicUrl, skills },
+      deps: {
+        config: effectiveConfig,
+        github,
+        worktrees,
+        env: workspace.env,
+        log,
+        maxConcurrent,
+        publicUrl,
+        skills,
+        nameBranch,
+      },
       crashAt: process.env.CRASH_AT,
     },
     BACKGROUND_CONTEXT,
@@ -111,6 +127,7 @@ async function main() {
     log("listening", {
       port: info.port,
       model: useFaux ? "faux" : "openrouter",
+      branchModel: branchModel?.id ?? "issue title",
       skills: skills.map((skill) => skill.name),
     }),
   );
