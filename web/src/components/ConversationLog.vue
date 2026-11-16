@@ -47,7 +47,7 @@ const tally = (calls: Call[]) =>
 const ROLES: Record<Message["kind"], { label: string; icon: Component }> = {
   user: { label: "Pipeline", icon: Workflow },
   assistant: { label: "Agent", icon: Bot },
-  human: { label: "You", icon: User },
+  human: { label: "User", icon: User },
 };
 
 const speaker = (entry: Entry) => (entry.kind === "tools" ? "assistant" : entry.message.kind);
