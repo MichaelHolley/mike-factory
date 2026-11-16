@@ -52,20 +52,19 @@ export function createServer({
 
   /**
    * Streams `{ from, items }` events: the full list first, then only the tail from the first item that changed.
-   * Responds 404 when `subscribe` returns undefined.
+   * Responds 404 when `watch` returns undefined, and stops the watch when the stream ends.
    */
   const liveList = async <T>(
     c: Context,
-    load: () => Promise<T[]>,
-    subscribe: (onChange: () => void) => Promise<(() => void) | undefined>,
+    watch: (onChange: () => void) => Promise<{ items(): Promise<T[]>; stop(): void } | undefined>,
   ) => {
     let wake = () => {};
     let changed = false;
-    const unsubscribe = await subscribe(() => {
+    const live = await watch(() => {
       changed = true;
       wake();
     });
-    if (!unsubscribe) return c.text("not found", 404);
+    if (!live) return c.text("not found", 404);
 
     c.header("X-Accel-Buffering", "no");
     const response = streamSSE(
@@ -86,7 +85,7 @@ export function createServer({
           while (!ended()) {
             changed = false;
             const loadedAt = Date.now();
-            const items = (await load()).map((item) => JSON.stringify(item));
+            const items = (await live.items()).map((item) => JSON.stringify(item));
             let from = 0;
             while (sent && from < items.length && items[from] === sent[from]) from++;
             if (!sent || from < Math.max(items.length, sent.length)) {
@@ -102,7 +101,7 @@ export function createServer({
           }
         } finally {
           clearInterval(ping);
-          unsubscribe();
+          live.stop();
           c.req.raw.signal.removeEventListener("abort", end);
           shutdownSignal?.removeEventListener("abort", end);
         }
@@ -164,22 +163,14 @@ export function createServer({
   app.get("/status", async (c) => c.json(await service.status()));
 
   app.get("/status/stream", (c) =>
-    liveList(
-      c,
-      () => service.status(),
-      async (onChange) => service.subscribeStatus(onChange),
-    ),
+    liveList(c, async (onChange) => ({ items: () => service.status(), stop: service.subscribeStatus(onChange) })),
   );
 
   app.get("/status/:repo/:issue/conversation/stream", async (c) => {
     const repo = c.req.param("repo");
     const issue = Number(c.req.param("issue"));
     if (!Number.isInteger(issue)) return c.text("not found", 404);
-    return liveList(
-      c,
-      async () => (await service.transcript(repo, issue)) ?? [],
-      (onChange) => service.subscribeTranscript(repo, issue, onChange),
-    );
+    return liveList(c, (onChange) => service.watchTranscript(repo, issue, onChange));
   });
 
   app.get("/status/:repo/:issue/conversation", async (c) => {

@@ -1,6 +1,6 @@
 import type { JsonValue } from "@earendil-works/chord/json";
 import type { ImageContent, Message, TextContent } from "@earendil-works/pi-ai";
-import type { ContextView } from "@earendil-works/pi-durable";
+import type { EntryRecord } from "@earendil-works/pi-durable";
 import type { ReviewFeedback } from "../contracts.ts";
 import type { ReviewCard, TranscriptItem } from "../runStatus.ts";
 import { HUMAN_ENTRY } from "./docs.ts";
@@ -39,21 +39,29 @@ const reviewCard = ({ reviewer, state, url, comments }: ReviewFeedback): ReviewC
   comments: comments.map(({ path, line, body, url }) => ({ path, line, body: clip(body), url })),
 });
 
+// Failed and cut-off answers, which the model's context leaves out too.
+const UNSHOWN_STOP_REASONS = new Set(["aborted", "error", "deferred"]);
+
+const shownMessages = (entry: EntryRecord) =>
+  (entry.model ?? []).filter(
+    (message) => message.role !== "assistant" || !UNSHOWN_STOP_REASONS.has(message.stopReason),
+  );
+
 /**
- * The public projection of a conversation: no system prompt, thinking or images, each tool call paired with its result,
- * and long text is clipped. Owner messages show as `human` items, followed by `queued` ones the agent hasn't seen yet.
+ * The public projection of a conversation's entries: no system prompt, thinking or images, each tool call paired with
+ * its result, and long text is clipped. Owner messages show as `human` items, followed by `queued` ones the agent
+ * hasn't seen yet.
  */
-export function toTranscript(
-  view: Pick<ContextView, "entries" | "contributions">,
-  queued: readonly HumanMessage[] = [],
-): TranscriptItem[] {
-  const messages = view.contributions.flat();
+export function toTranscript(entries: readonly EntryRecord[], queued: readonly HumanMessage[] = []): TranscriptItem[] {
+  const contributions = entries.map(shownMessages);
   const results = new Map(
-    messages.flatMap((message) =>
-      message.role === "toolResult"
-        ? [[message.toolCallId, { text: clip(textOf(message.content)), isError: message.isError }] as const]
-        : [],
-    ),
+    contributions
+      .flat()
+      .flatMap((message) =>
+        message.role === "toolResult"
+          ? [[message.toolCallId, { text: clip(textOf(message.content)), isError: message.isError }] as const]
+          : [],
+      ),
   );
   const shown = new Set<string>();
   const human = (message: HumanMessage | undefined, pending: boolean): TranscriptItem[] => {
@@ -68,10 +76,10 @@ export function toTranscript(
       },
     ];
   };
-  const placed = view.entries.flatMap((entry, index): TranscriptItem[] =>
+  const placed = entries.flatMap((entry, index): TranscriptItem[] =>
     entry.kind === HUMAN_ENTRY
       ? human(humanMessage(entry.data), false)
-      : (view.contributions[index] ?? []).flatMap((message) => itemsOf(message, results)),
+      : contributions[index]!.flatMap((message) => itemsOf(message, results)),
   );
   return [...placed, ...queued.flatMap((message) => human(message, true))];
 }

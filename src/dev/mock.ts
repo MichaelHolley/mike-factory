@@ -191,13 +191,14 @@ function createMockService(): IssueService {
       statusListeners.add(listener);
       return () => void statusListeners.delete(listener);
     },
-    async subscribeTranscript(repo, issue, listener) {
+    async watchTranscript(repo, issue, listener) {
       const k = key(repo, issue);
-      if (!conversations.has(k)) return undefined;
+      const conversation = conversations.get(k);
+      if (!conversation) return undefined;
       const listeners = transcriptListeners.get(k) ?? new Set();
       transcriptListeners.set(k, listeners);
       listeners.add(listener);
-      return () => void listeners.delete(listener);
+      return { items: async () => conversation, stop: () => void listeners.delete(listener) };
     },
     async message({ repo, issue, text }) {
       const k = key(repo, issue);

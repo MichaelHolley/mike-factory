@@ -42,7 +42,7 @@ function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui"), proxySecret?: 
     status: vi.fn(async () => []),
     transcript: vi.fn(async () => undefined),
     subscribeStatus: vi.fn(subscribe),
-    subscribeTranscript: vi.fn(async () => undefined),
+    watchTranscript: vi.fn(async () => undefined),
   };
   const log = vi.fn();
   const shutdown = new AbortController();
@@ -198,12 +198,14 @@ describe("webhook server", () => {
     expect((await app.request("/status/byok-imagen/12/conversation/stream")).status).toBe(404);
     expect((await app.request("/status/byok-imagen/abc/conversation/stream")).status).toBe(404);
 
-    vi.mocked(service.subscribeTranscript).mockImplementation(async (_repo, _issue, listener) => subscribe(listener));
-    vi.mocked(service.transcript).mockResolvedValue([{ kind: "assistant", text: "Done." }]);
+    vi.mocked(service.watchTranscript).mockImplementation(async (_repo, _issue, listener) => ({
+      items: async () => [{ kind: "assistant", text: "Done." }],
+      stop: subscribe(listener),
+    }));
     const response = await app.request("/status/byok-imagen/12/conversation/stream");
     expect(response.status).toBe(200);
     expect(await sseEvents(response).next()).toEqual({ from: 0, items: [{ kind: "assistant", text: "Done." }] });
-    expect(service.subscribeTranscript).toHaveBeenCalledWith("byok-imagen", 12, expect.any(Function));
+    expect(service.watchTranscript).toHaveBeenCalledWith("byok-imagen", 12, expect.any(Function));
     shutdown.abort();
   });
 
