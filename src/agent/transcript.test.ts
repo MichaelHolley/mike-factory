@@ -93,7 +93,7 @@ describe("toTranscript", () => {
     expect(item).toMatchObject({ text: expect.stringContaining("6000 more characters") });
   });
 
-  it("shows owner messages once as human messages and appends queued ones the agent hasn't seen", () => {
+  it("includes each owner message once and marks undelivered messages as pending", () => {
     const prompt = { role: "user", content: "<owner-message>Use tabs</owner-message>", timestamp: 1 } as Message;
     const view = viewOf([
       { kind: HUMAN_ENTRY, data: { id: "a", text: "Use tabs" }, model: [prompt] },
