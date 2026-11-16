@@ -3,12 +3,14 @@ import {
   AgentDoc,
   ConversationTranscript,
   InboxDoc,
+  LiveDoc,
   type CommitChange,
   type Conversation,
   type ConversationId,
   type Cursor,
   type Harness,
   type InboxState,
+  type LiveState,
   type Storage,
   type TaskId,
 } from "@earendil-works/pi-durable";
@@ -214,7 +216,7 @@ export function createIssueService(opts: {
         ].filter((message) => message !== undefined);
         return toTranscript(
           view.items.flatMap((item) => (item.kind === "entry" ? [item.entry] : [])),
-          queued,
+          { queued, live: view.docs[LiveDoc.definition.kind] as LiveState | undefined },
         );
       },
       stop() {

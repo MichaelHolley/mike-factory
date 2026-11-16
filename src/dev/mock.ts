@@ -112,6 +112,32 @@ const sampleConversation = (): TranscriptItem[] => [
   },
 ];
 
+const LIVE_ANSWER = "Running the tests to check the toggle in both themes, then I'll commit.";
+const LIVE_OUTPUT = [
+  "> vitest run",
+  "",
+  " ✓ src/theme.test.ts (3 tests) 12ms",
+  " ✓ src/components/Header.test.ts (5 tests) 31ms",
+  " ✓ src/components/StatusList.test.ts (8 tests) 48ms",
+  "",
+  " Test Files  3 passed (3)",
+  "      Tests  16 passed (16)",
+];
+const LIVE_PAUSE_TICKS = 8;
+
+/** A run in progress at `tick`: the answer streams word by word, then a tool runs, then the agent idles a while. */
+function liveTail(tick: number): TranscriptItem[] {
+  const words = LIVE_ANSWER.split(" ");
+  const answer = { kind: "assistant", text: LIVE_ANSWER } as const;
+  const tool = { kind: "tool", name: "bash", summary: "pnpm test", args: '{ "command": "pnpm test" }' } as const;
+  const busy = { kind: "busy" } as const;
+  const t = tick % (words.length + LIVE_OUTPUT.length + LIVE_PAUSE_TICKS);
+  if (t < words.length) return [{ ...answer, text: words.slice(0, t + 1).join(" "), streaming: true }, busy];
+  const lines = t - words.length + 1;
+  if (lines <= LIVE_OUTPUT.length) return [answer, { ...tool, output: LIVE_OUTPUT.slice(0, lines).join("\n") }, busy];
+  return [answer, { ...tool, result: { text: LIVE_OUTPUT.join("\n"), isError: false } }];
+}
+
 const FINISHED: RunStatus["phase"][] = ["done", "failed", "aborted"];
 
 /** In-memory runs and conversations; messages get a canned reply instead of reaching an agent. */
@@ -174,6 +200,18 @@ function createMockService(): IssueService {
   const demo = run("phase-demo", 1, "Walk through every phase", "queued", { startedAt: ago(0), updatedAt: ago(0) });
   runs.unshift(demo);
   conversations.set(key(demo.repo, demo.issue), sampleConversation());
+  const streaming = conversations.get(key("mike-factory", 31))!;
+  const stopped = conversations.get(key("web-shop", 7))!;
+  stopped.push({ kind: "failure", reason: "aborted", detail: "Stopped from the issue with /mike stop." });
+  let tick = 0;
+  const items = (k: string) => {
+    const conversation = conversations.get(k);
+    return conversation === streaming ? [...conversation, ...liveTail(tick)] : conversation;
+  };
+  setInterval(() => {
+    tick++;
+    notify(transcriptListeners.get(key("mike-factory", 31)));
+  }, 400);
   setInterval(() => {
     demo.phase = cycle[(cycle.indexOf(demo.phase) + 1) % cycle.length]!;
     demo.updatedAt = new Date().toISOString();
@@ -187,19 +225,18 @@ function createMockService(): IssueService {
     cleanup: async () => {},
     sweep: async () => {},
     status: async () => runs,
-    transcript: async (repo, issue) => conversations.get(key(repo, issue)),
+    transcript: async (repo, issue) => items(key(repo, issue)),
     subscribeStatus(listener) {
       statusListeners.add(listener);
       return () => void statusListeners.delete(listener);
     },
     async watchTranscript(repo, issue, listener) {
       const k = key(repo, issue);
-      const conversation = conversations.get(k);
-      if (!conversation) return undefined;
+      if (!conversations.has(k)) return undefined;
       const listeners = transcriptListeners.get(k) ?? new Set();
       transcriptListeners.set(k, listeners);
       listeners.add(listener);
-      return { items: async () => conversation, stop: () => void listeners.delete(listener) };
+      return { items: async () => items(k) ?? [], stop: () => void listeners.delete(listener) };
     },
     async message({ repo, issue, text }) {
       const k = key(repo, issue);

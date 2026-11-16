@@ -1,5 +1,5 @@
 import type { Message } from "@earendil-works/pi-ai";
-import type { EntryRecord } from "@earendil-works/pi-durable";
+import type { EntryRecord, LiveState } from "@earendil-works/pi-durable";
 import { describe, expect, it } from "vitest";
 import { HUMAN_ENTRY } from "./docs.ts";
 import { toTranscript } from "./transcript.ts";
@@ -99,10 +99,12 @@ describe("toTranscript", () => {
     ]);
 
     expect(
-      toTranscript(entries, [
-        { id: "a", text: "Use tabs" },
-        { id: "b", text: "Also docs" },
-      ]),
+      toTranscript(entries, {
+        queued: [
+          { id: "a", text: "Use tabs" },
+          { id: "b", text: "Also docs" },
+        ],
+      }),
     ).toEqual([
       { kind: "human", text: "Use tabs" },
       { kind: "assistant", text: "Switched." },
@@ -188,5 +190,66 @@ describe("toTranscript", () => {
       { kind: "assistant", text: "Half an ans", interrupted: true },
       { kind: "assistant", text: "The answer." },
     ]);
+  });
+
+  describe("with pi.live", () => {
+    const call = { type: "toolCall", id: "c1", name: "bash", arguments: { command: "pnpm test" } };
+    const asked = { role: "assistant", content: [call], stopReason: "toolUse", timestamp: 1 };
+    const tool = { kind: "tool", name: "bash", summary: "pnpm test", args: JSON.stringify(call.arguments, null, 2) };
+    const run = { taskId: 1, inputs: [], turns: 1 };
+    const live = (state: object) => ({ live: state as LiveState });
+
+    it("shows the answer being streamed, without thinking, while the agent is busy", () => {
+      const message = {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "private thoughts" },
+          { type: "text", text: "Writing the fi" },
+        ],
+      };
+      expect(toTranscript([], live({ run, generation: { attempt: 1, message } }))).toEqual([
+        { kind: "assistant", text: "Writing the fi", streaming: true },
+        { kind: "busy" },
+      ]);
+    });
+
+    it("shows a streamed answer once when its entry lands", () => {
+      const answer = { role: "assistant", content: [{ type: "text", text: "Done." }], stopReason: "stop" };
+      expect(toTranscript(entriesOf([answer] as unknown as Message[]), live({}))).toEqual([
+        { kind: "assistant", text: "Done." },
+      ]);
+    });
+
+    it("shows a running tool's output until its result replaces it", () => {
+      const output = `${"x".repeat(5_000)}\n ✓ 16 tests`;
+      const slots = [{ callId: "c1", name: "bash", status: "running", output }];
+      const [item] = toTranscript(entriesOf([asked] as unknown as Message[]), live({ run, tools: slots }));
+      expect(item).toMatchObject({ ...tool, output: expect.stringMatching(/^\.\.\. \(\d+ earlier characters\)\n/) });
+      expect(item!.kind === "tool" && item!.output).toMatch(/x\n ✓ 16 tests$/);
+
+      const result = {
+        role: "toolResult",
+        toolCallId: "c1",
+        toolName: "bash",
+        content: [{ type: "text", text: "16 passed" }],
+        isError: false,
+      };
+      const done = [{ ...slots[0], status: "done", output: undefined, entry: 3 }];
+      expect(toTranscript(entriesOf([asked, result] as unknown as Message[]), live({ run, tools: done }))).toEqual([
+        { ...tool, result: { text: "16 passed", isError: false } },
+        { kind: "busy" },
+      ]);
+    });
+
+    it("shows a retry's error while busy, and why the last run ended without an answer", () => {
+      const retry = { at: 0, error: "429 Too Many Requests" };
+      expect(toTranscript([], live({ run, generation: { attempt: 2, retry } }))).toEqual([
+        { kind: "busy", retry: "429 Too Many Requests" },
+      ]);
+      const runFailure = { taskId: 1, inputs: [], reason: "turn_limit", detail: "40 turns" };
+      expect(toTranscript([], live({ runFailure }))).toEqual([
+        { kind: "failure", reason: "turn_limit", detail: "40 turns" },
+      ]);
+    });
   });
 });
