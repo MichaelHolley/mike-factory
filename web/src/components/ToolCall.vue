@@ -15,7 +15,9 @@ const status = computed(() => {
 
 const blocks = computed(() => [
   { label: "Input", icon: ArrowDownToLine, text: props.call.args },
-  ...(props.call.result ? [{ label: "Output", icon: ArrowUpFromLine, text: props.call.result.text }] : []),
+  ...(props.call.result || props.call.output
+    ? [{ label: "Output", icon: ArrowUpFromLine, text: props.call.result?.text ?? props.call.output ?? "" }]
+    : []),
 ]);
 </script>
 
@@ -36,7 +38,9 @@ const blocks = computed(() => [
       >
       <code v-if="call.summary" class="min-w-0 truncate text-muted">{{ call.summary }}</code>
       <span v-if="call.result?.isError" class="ml-auto flex-none text-xs font-semibold text-bad">failed</span>
-      <span v-else-if="!call.result" class="ml-auto flex-none text-xs font-semibold text-run">no result yet</span>
+      <span v-else-if="!call.result" class="ml-auto flex-none text-xs font-semibold text-run">{{
+        call.output === undefined ? "no result yet" : "running"
+      }}</span>
     </CollapsibleTrigger>
     <CollapsiblePanel
       hidden-until-found

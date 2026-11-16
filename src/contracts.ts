@@ -201,7 +201,10 @@ export interface IssueService {
   /** Removes worktrees and branches of closed issues, then prunes every repo. */
   sweep(): Promise<void>;
   status(): Promise<RunStatus[]>;
-  /** The issue's whole conversation as a public projection, or undefined when the issue has none. */
+  /**
+   * The issue's stored conversation as a public projection, without what is still in flight, or undefined when the
+   * issue has none.
+   */
   transcript(repo: string, issue: number): Promise<TranscriptItem[] | undefined>;
   /** Calls `listener` after any run's status may have changed. Returns an unsubscribe. */
   subscribeStatus(listener: () => void): () => void;

@@ -1,5 +1,16 @@
 <script setup lang="ts">
-import { Ban, Bot, ChevronRight, Download, Hourglass, MessageSquareDashed, User, Workflow } from "@lucide/vue";
+import {
+  Ban,
+  Bot,
+  ChevronRight,
+  CircleAlert,
+  Download,
+  Hourglass,
+  LoaderCircle,
+  MessageSquareDashed,
+  User,
+  Workflow,
+} from "@lucide/vue";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@ui-sdk/vue/collapsible";
 import { type Component, computed } from "vue";
 import type { TranscriptItem } from "../../../src/runStatus.ts";
@@ -12,7 +23,8 @@ import PipelineMessage from "./PipelineMessage.vue";
 import ReviewCard from "./ReviewCard.vue";
 import ToolCall from "./ToolCall.vue";
 
-type Message = Exclude<TranscriptItem, { kind: "tool" }>;
+type Status = Extract<TranscriptItem, { kind: "busy" | "failure" }>;
+type Message = Exclude<TranscriptItem, { kind: "tool" } | Status>;
 type Call = Extract<TranscriptItem, { kind: "tool" }>;
 type Entry = { kind: "message"; message: Message } | { kind: "tools"; calls: Call[] };
 
@@ -24,15 +36,34 @@ const { items, error, loaded, downloadUrl } = useTranscript(
   () => props.issue,
 );
 
+const isStatus = (item: TranscriptItem): item is Status => item.kind === "busy" || item.kind === "failure";
+
 const entries = computed(() =>
   items.value.reduce<Entry[]>((entries, item) => {
     const last = entries.at(-1);
+    if (isStatus(item)) return entries;
     if (item.kind !== "tool") entries.push({ kind: "message", message: item });
     else if (last?.kind === "tools") last.calls.push(item);
     else entries.push({ kind: "tools", calls: [item] });
     return entries;
   }, []),
 );
+
+const busy = computed(() => items.value.find((item) => item.kind === "busy"));
+const failure = computed(() => items.value.find((item) => item.kind === "failure"));
+
+const FAILURES: Record<Extract<Status, { kind: "failure" }>["reason"], string> = {
+  model_error: "the model's response failed",
+  no_model: "no model is available",
+  aborted: "it was aborted",
+  reset: "its context was reset",
+  faulted: "it crashed",
+  orphaned: "it could not be resumed",
+  interrupted: "the server stopped while the model was answering",
+  restart_limit: "it was cut off too often",
+  nothing_to_answer: "there was nothing to answer",
+  turn_limit: "it reached its turn limit",
+};
 
 const tally = (calls: Call[]) =>
   [
@@ -77,7 +108,9 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
       />
     </header>
     <ErrorBanner v-if="error && !items.length" class="my-4">Couldn't load the conversation: {{ error }}.</ErrorBanner>
-    <EmptyState v-else-if="loaded && !items.length" :icon="MessageSquareDashed">No messages yet.</EmptyState>
+    <EmptyState v-else-if="loaded && !entries.length && !busy && !failure" :icon="MessageSquareDashed"
+      >No messages yet.</EmptyState
+    >
     <ol v-else>
       <li
         v-for="(entry, index) in entries"
@@ -101,7 +134,12 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
               :review="entry.message.review"
               :class="entry.message.text && 'mb-2'"
             />
-            <MarkdownText v-if="entry.message.text" :text="entry.message.text" class="leading-relaxed wrap-anywhere" />
+            <MarkdownText
+              v-if="entry.message.text"
+              :text="entry.message.text"
+              :aria-busy="entry.message.kind === 'assistant' && entry.message.streaming"
+              class="leading-relaxed wrap-anywhere"
+            />
             <span
               v-if="entry.message.kind === 'human' && entry.message.pending"
               class="mt-1 flex items-center gap-1 text-xs text-muted italic"
@@ -155,5 +193,19 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
         </div>
       </li>
     </ol>
+    <div v-if="busy || failure" class="mt-4 grid grid-cols-[6.5rem_minmax(0,1fr)] max-sm:grid-cols-1" role="status">
+      <p v-if="busy" :class="[SAY, 'flex items-center gap-2 text-sm text-muted']">
+        <LoaderCircle class="size-3.5 flex-none animate-spin text-run motion-reduce:animate-none" aria-hidden="true" />
+        <span v-if="busy.retry" class="min-w-0 wrap-anywhere">Retrying after an error: {{ busy.retry }}</span>
+        <span v-else>Working…</span>
+      </p>
+      <div v-if="failure" :class="[SAY, 'text-sm', busy && 'mt-2']">
+        <p class="flex items-center gap-2">
+          <CircleAlert class="size-3.5 flex-none text-bad" aria-hidden="true" />The agent's last run ended without an
+          answer: {{ FAILURES[failure.reason] }}.
+        </p>
+        <p v-if="failure.detail" class="mt-1 pl-5.5 text-muted wrap-anywhere">{{ failure.detail }}</p>
+      </div>
+    </div>
   </section>
 </template>

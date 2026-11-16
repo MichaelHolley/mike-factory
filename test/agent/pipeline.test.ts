@@ -273,6 +273,24 @@ describe("issue pipeline", () => {
     expect(await service.transcript(REPO, 1)).toEqual([...before, expect.objectContaining({ kind: "user" })]);
   });
 
+  it("leaves what is still in flight out of the downloaded transcript", async () => {
+    const world = createWorld({ dir });
+    autopilot(world.faux, () =>
+      fauxAssistantMessage(fauxToolCall("bash", { command: "sleep 60" }), { stopReason: "toolUse" }),
+    );
+    const { harness, service } = await launch(world);
+    await service.start(startAction(1, "comment-1"));
+    await waitFor(() => world.faux.state.callCount >= 1);
+
+    const watch = (await service.watchTranscript(REPO, 1, () => {}))!;
+    await vi.waitFor(async () => expect(await watch.items()).toContainEqual({ kind: "busy" }));
+    watch.stop();
+    expect(await service.transcript(REPO, 1)).not.toContainEqual({ kind: "busy" });
+
+    await service.stop(stopAction(1, "comment-2"));
+    await pipelineResult(harness, 1);
+  });
+
   it("pages in the whole history, before a watch opens and while it is open", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux);
