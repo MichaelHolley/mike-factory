@@ -33,6 +33,7 @@ Self-hosted agent that turns a `/mike` comment on a GitHub issue into a pull req
 - A guard change needs a case in `test/agent/guards.test.ts`.
 - Test real behavior, not mocks: a test that only checks what a mock returns, or a test for a test fake, adds nothing.
 - Test each behavior once, at the cheapest level that proves it; don't repeat unit-tested cases through the HTTP or pipeline layers.
+- Tests run git with the machine's global config, so a global `tag.gpgsign true` fails `src/git/worktrees.test.ts` with `fatal: no tag message?`; run them with `GIT_CONFIG_GLOBAL=/dev/null`.
 
 ## Documentation
 
