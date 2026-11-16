@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bot, ChevronRight, Download, Hourglass, MessageSquareDashed, User, Workflow } from "@lucide/vue";
+import { Ban, Bot, ChevronRight, Download, Hourglass, MessageSquareDashed, User, Workflow } from "@lucide/vue";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@ui-sdk/vue/collapsible";
 import { type Component, computed } from "vue";
 import type { TranscriptItem } from "../../../src/runStatus.ts";
@@ -106,6 +106,11 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
               v-if="entry.message.kind === 'human' && entry.message.pending"
               class="mt-1 flex items-center gap-1 text-xs text-muted italic"
               ><Hourglass class="size-3" aria-hidden="true" />Queued</span
+            >
+            <span
+              v-if="entry.message.kind === 'assistant' && entry.message.interrupted"
+              class="mt-1 flex items-center gap-1 text-xs text-muted italic"
+              ><Ban class="size-3" aria-hidden="true" />Interrupted</span
             >
           </div>
         </template>

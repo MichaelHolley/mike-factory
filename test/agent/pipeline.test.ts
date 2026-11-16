@@ -6,7 +6,9 @@ import { join } from "node:path";
 import { ToolResultEntry, MemoryStorage, type Harness } from "@earendil-works/pi-durable";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { HUMAN_ENTRY } from "../../src/agent/docs.ts";
 import { openAgentHarness } from "../../src/agent/harness.ts";
+import type { TranscriptItem } from "../../src/runStatus.ts";
 import { NO_CHANGES_STATUS, STATUS_MARKER, WORKING_STATUS } from "../../src/agent/tasks/issuePipeline.ts";
 import {
   autopilot,
@@ -252,16 +254,59 @@ describe("issue pipeline", () => {
     });
   });
 
+  it("keeps the conversation before a compaction in the transcript", async () => {
+    const world = createWorld({ dir });
+    autopilot(world.faux, (messages) =>
+      textOf(messages.at(-1)).includes("checkpoint summary") ? fauxAssistantMessage("Wrote hello.txt.") : undefined,
+    );
+    const { harness, service } = await launch(world);
+    await service.start(startAction(1, "comment-1"));
+    await pipelineResult(harness, 1);
+    const before = (await service.transcript(REPO, 1))!;
+
+    const conversation = (await harness.conversation((await conversationIdOf(harness, 1))!, ctx))!;
+    await conversation.configure({ compaction: { keepRecentTokens: 1 } }, ctx);
+    expect((await harness.waitForTask(await conversation.compact(undefined, ctx), ctx)).state.outcome.status).toBe(
+      "completed",
+    );
+    expect((await conversation.context(ctx)).head?.kind).toBe("pi.compaction");
+    expect(await service.transcript(REPO, 1)).toEqual([...before, expect.objectContaining({ kind: "user" })]);
+  });
+
+  it("pages in the whole history, before a watch opens and while it is open", async () => {
+    const world = createWorld({ dir });
+    autopilot(world.faux);
+    const { harness, service } = await launch(world);
+    await service.start(startAction(1, "comment-1"));
+    await pipelineResult(harness, 1);
+    const conversation = (await harness.conversation((await conversationIdOf(harness, 1))!, ctx))!;
+    const addNotes = (from: number) =>
+      conversation.commit(async (tx) => {
+        for (let i = from; i < from + 250; i++) {
+          await tx.appendEntry(conversation.id, { kind: HUMAN_ENTRY, data: { id: `n${i}`, text: `Note ${i}` } });
+        }
+      }, ctx);
+    const notes = (items: TranscriptItem[]) => items.flatMap((item) => (item.kind === "human" ? [item.text] : []));
+
+    await addNotes(0);
+    const watch = (await service.watchTranscript(REPO, 1, () => {}))!;
+    await addNotes(250);
+    const all = Array.from({ length: 500 }, (_, i) => `Note ${i}`);
+    await vi.waitFor(async () => expect(notes(await watch.items())).toEqual(all));
+    watch.stop();
+    expect(notes((await service.transcript(REPO, 1))!)).toEqual(all);
+  });
+
   it("notifies status and transcript subscribers of their own changes until they unsubscribe", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux);
     const { harness, service } = await launch(world, [1, 2]);
     const calls = { status: 0, first: 0, second: 0 };
-    expect(await service.subscribeTranscript(REPO, 1, () => {})).toBeUndefined();
+    expect(await service.watchTranscript(REPO, 1, () => {})).toBeUndefined();
 
     const unsubscribeStatus = service.subscribeStatus(() => calls.status++);
     await service.start(startAction(1, "comment-1"));
-    await service.subscribeTranscript(REPO, 1, () => calls.first++);
+    const first = await service.watchTranscript(REPO, 1, () => calls.first++);
     await pipelineResult(harness, 1);
     expect(calls.status).toBeGreaterThan(0);
     expect(calls.first).toBeGreaterThan(0);
@@ -269,11 +314,18 @@ describe("issue pipeline", () => {
     unsubscribeStatus();
     const before = { ...calls };
     await service.start(startAction(2, "comment-2"));
-    await service.subscribeTranscript(REPO, 2, () => calls.second++);
+    const second = await service.watchTranscript(REPO, 2, () => calls.second++);
     await pipelineResult(harness, 2);
     expect(calls.status).toBe(before.status);
     expect(calls.first).toBe(before.first);
     expect(calls.second).toBeGreaterThan(0);
+
+    second!.stop();
+    const stopped = calls.second;
+    await service.message({ repo: REPO, issue: 2, id: "note-after-stop", text: "More" });
+    await pipelineResult(harness, 2);
+    expect(calls.second).toBe(stopped);
+    first!.stop();
   });
 
   it("starts nothing new for a redelivered webhook", async () => {

@@ -173,6 +173,13 @@ export type WebhookAction =
   | { kind: "pr-stop"; repo: string; pr: number }
   | { kind: "ignore"; reason: string };
 
+/** A live view of one issue's conversation, held until `stop()`. */
+export type TranscriptWatch = {
+  /** The whole conversation as a public projection, history before any compaction included. */
+  items(): Promise<TranscriptItem[]>;
+  stop(): void;
+};
+
 /** What the HTTP server calls. Implemented by the Pi Durable layer. */
 export interface IssueService {
   start(action: Extract<WebhookAction, { kind: "start" }>): Promise<void>;
@@ -194,10 +201,10 @@ export interface IssueService {
   /** Removes worktrees and branches of closed issues, then prunes every repo. */
   sweep(): Promise<void>;
   status(): Promise<RunStatus[]>;
-  /** The issue's conversation as a public projection, or undefined when the issue has none. */
+  /** The issue's whole conversation as a public projection, or undefined when the issue has none. */
   transcript(repo: string, issue: number): Promise<TranscriptItem[] | undefined>;
   /** Calls `listener` after any run's status may have changed. Returns an unsubscribe. */
   subscribeStatus(listener: () => void): () => void;
-  /** Calls `listener` after the issue's conversation may have changed; undefined when the issue has none. */
-  subscribeTranscript(repo: string, issue: number, listener: () => void): Promise<(() => void) | undefined>;
+  /** Watches the issue's conversation, calling `listener` after it may have changed; undefined when the issue has none. */
+  watchTranscript(repo: string, issue: number, listener: () => void): Promise<TranscriptWatch | undefined>;
 }

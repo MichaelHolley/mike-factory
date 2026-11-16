@@ -1,17 +1,19 @@
 import type { Context } from "@earendil-works/chord/context";
 import {
   AgentDoc,
+  ConversationTranscript,
   InboxDoc,
   type CommitChange,
   type Conversation,
   type ConversationId,
   type Cursor,
   type Harness,
+  type InboxState,
   type Storage,
   type TaskId,
 } from "@earendil-works/pi-durable";
 import { findRepo, type RepoConfig } from "../config.ts";
-import { agentPrIssue, issueKey, type IssueService, type ReviewFeedback } from "../contracts.ts";
+import { agentPrIssue, issueKey, type IssueService, type ReviewFeedback, type TranscriptWatch } from "../contracts.ts";
 import type { RunStatus } from "../runStatus.ts";
 import { asConversationId, HUMAN_ENTRY, IssueIndex, IssueNotes, IssueState } from "./docs.ts";
 import type { AgentDeps } from "./harness.ts";
@@ -28,7 +30,7 @@ const INSTRUCTIONS = [
   "After you finish, the pipeline runs the repository's configured checks on your committed work and, if one fails, sends you its output so you can fix it.",
 ].join("\n");
 
-const TRANSCRIPT_DOCS = new Set([IssueNotes.definition.kind, InboxDoc.definition.kind]);
+const HISTORY_PAGE = 200;
 
 function observeChanges(harness: Harness, matches: (change: CommitChange) => boolean, listener: () => void) {
   const observation = harness.observeCommits({
@@ -161,6 +163,66 @@ export function createIssueService(opts: {
       const task = state.pipelineTaskId == null ? undefined : await tx.task(state.pipelineTaskId as TaskId);
       return { live: task !== undefined && task.state.status !== "terminal", pending: !existing?.deliveredAt };
     }, context);
+
+  /**
+   * Follows the conversation through a watch, whose window `items()` completes with the whole history. Notes are
+   * followed through their commits, since a watch's documents are only the built-in ones.
+   */
+  const watchTranscript = async (
+    repo: string,
+    issue: number,
+    listener: () => void,
+  ): Promise<TranscriptWatch | undefined> => {
+    const { conversationId } = await lookup(repo, issue);
+    const conversation = conversationId === undefined ? undefined : await harness.conversation(conversationId, context);
+    if (!conversation) return undefined;
+    const history = new ConversationTranscript(
+      (query, limit, context) => conversation.entries(query, limit, undefined, context),
+      { pageSize: HISTORY_PAGE },
+    );
+    const watch = await conversation.watch(context);
+    history.merge(watch.value);
+    watch.start(async (call) => {
+      if (call.kind !== "value") return;
+      history.merge(call.value);
+      listener();
+    });
+    const unobserve = observeChanges(
+      harness,
+      (change) =>
+        change.type === "document" &&
+        change.conversationId === conversation.id &&
+        change.record.kind === IssueNotes.definition.kind,
+      listener,
+    );
+
+    return {
+      async items() {
+        // Notes first, so a note delivered between the two reads shows once rather than not at all.
+        const notes = await harness.snapshot(IssueNotes, conversation.id, context);
+        let view = history.merge(watch.value);
+        for (let missing; (missing = view.items.find((item) => item.kind !== "entry"));) {
+          await (missing.kind === "earlier" ? history.loadEarlier(context) : history.fillGap(missing, context));
+          view = history.merge(watch.value);
+        }
+        const inbox = view.docs[InboxDoc.definition.kind] as InboxState | undefined;
+        const queued = [
+          ...(inbox?.items ?? []).flatMap((item) =>
+            item.mode !== "write" && item.entry?.kind === HUMAN_ENTRY ? [humanMessage(item.entry.data)] : [],
+          ),
+          ...(notes?.items ?? []).filter((note) => !note.deliveredAt),
+        ].filter((message) => message !== undefined);
+        return toTranscript(
+          view.items.flatMap((item) => (item.kind === "entry" ? [item.entry] : [])),
+          queued,
+        );
+      },
+      stop() {
+        unobserve();
+        void watch.stop();
+      },
+    };
+  };
 
   return {
     start: ({ repo, issue, requestId, instructions }) =>
@@ -300,22 +362,12 @@ export function createIssueService(opts: {
     },
 
     async transcript(repo, issue) {
-      const { conversationId } = await lookup(repo, issue);
-      const conversation =
-        conversationId === undefined ? undefined : await harness.conversation(conversationId, context);
-      if (!conversation) return undefined;
-      const [view, inbox, notes] = await Promise.all([
-        conversation.context(context),
-        harness.snapshot(InboxDoc, conversation.id, context),
-        harness.snapshot(IssueNotes, conversation.id, context),
-      ]);
-      const queued = [
-        ...(inbox?.items ?? []).flatMap((item) =>
-          item.mode !== "write" && item.entry?.kind === HUMAN_ENTRY ? [humanMessage(item.entry.data)] : [],
-        ),
-        ...(notes?.items ?? []).filter((note) => !note.deliveredAt),
-      ].filter((message) => message !== undefined);
-      return toTranscript(view, queued);
+      const watch = await watchTranscript(repo, issue, () => {});
+      try {
+        return await watch?.items();
+      } finally {
+        watch?.stop();
+      }
     },
 
     subscribeStatus: (listener) =>
@@ -325,19 +377,6 @@ export function createIssueService(opts: {
         listener,
       ),
 
-    async subscribeTranscript(repo, issue, listener) {
-      const { conversationId } = await lookup(repo, issue);
-      if (conversationId === undefined) return undefined;
-      return observeChanges(
-        harness,
-        (change) =>
-          change.type === "entry"
-            ? change.value.conversationId === conversationId
-            : change.type === "document" &&
-              change.conversationId === conversationId &&
-              TRANSCRIPT_DOCS.has(change.record.kind),
-        listener,
-      );
-    },
+    watchTranscript,
   };
 }
