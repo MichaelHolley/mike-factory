@@ -85,11 +85,12 @@ describe("verifyWebhook", () => {
     };
   };
 
-  it("cleans up when an agent PR closes", async () => {
-    expect(await run(closedPr(), { event: "pull_request" })).toEqual({
+  it.each(["mike/12-add-dark-mode", "agent/issue-12"])("cleans up when an agent PR on %s closes", async (ref) => {
+    expect(await run(closedPr({ ref }), { event: "pull_request" })).toEqual({
       kind: "cleanup",
       repo: "byok-imagen",
       issue: 12,
+      branch: ref,
     });
   });
 

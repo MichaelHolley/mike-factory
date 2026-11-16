@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { issueOfBranch } from "../../src/contracts.ts";
 import type { FakeGitHubState } from "../fakes/github.ts";
 import { git, OTHER_REPO, REPO } from "./support.ts";
 
@@ -46,22 +47,22 @@ describe("restart safety", () => {
 
       const github = JSON.parse(readFileSync(join(dir, "github.json"), "utf8")) as FakeGitHubState;
       expect(github.prs.map((pr) => `${pr.repo}:${pr.head}:${pr.state}`).sort()).toEqual([
-        `${REPO}:agent/issue-1:open`,
-        `${REPO}:agent/issue-2:open`,
-        `${REPO}:agent/issue-3:open`,
-        `${OTHER_REPO}:agent/issue-1:open`,
+        `${REPO}:mike/1-add-hello:open`,
+        `${REPO}:mike/2-add-hello:open`,
+        `${REPO}:mike/3-add-hello:open`,
+        `${OTHER_REPO}:mike/1-add-hello:open`,
       ]);
       expect(github.calls.createPr).toBe(4);
       for (const pr of github.prs) {
-        expect(pr.body).toContain(`Closes #${pr.head.split("-").at(-1)}`);
+        expect(pr.body).toContain(`Closes #${issueOfBranch(pr.head)}`);
         const statusComments = github.comments.filter(
-          (comment) => comment.repo === pr.repo && comment.issue === Number(pr.head.split("-").at(-1)),
+          (comment) => comment.repo === pr.repo && comment.issue === Number(issueOfBranch(pr.head)),
         );
         expect(statusComments).toHaveLength(1);
         expect(statusComments[0]!.body).toContain(pr.url);
       }
-      expect(git(join(dir, "remote.git"), "show", "agent/issue-1:hello.txt")).toBe("hello");
-      expect(git(join(dir, `${OTHER_REPO}.git`), "show", "agent/issue-1:hello.txt")).toBe("hello");
+      expect(git(join(dir, "remote.git"), "show", "mike/1-add-hello:hello.txt")).toBe("hello");
+      expect(git(join(dir, `${OTHER_REPO}.git`), "show", "mike/1-add-hello:hello.txt")).toBe("hello");
       expect(existsSync(join(dir, "data", "worktrees", REPO, "issue-1"))).toBe(true);
     },
   );

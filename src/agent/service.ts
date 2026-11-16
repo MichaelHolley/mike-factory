@@ -10,7 +10,7 @@ import {
   type TaskId,
 } from "@earendil-works/pi-durable";
 import { findRepo, type RepoConfig } from "../config.ts";
-import { agentPrIssue, branchName, issueKey, type IssueService, type ReviewFeedback } from "../contracts.ts";
+import { agentPrIssue, issueKey, type IssueService, type ReviewFeedback } from "../contracts.ts";
 import type { RunStatus } from "../runStatus.ts";
 import { asConversationId, HUMAN_ENTRY, IssueIndex, IssueNotes, IssueState } from "./docs.ts";
 import type { AgentDeps } from "./harness.ts";
@@ -115,7 +115,6 @@ export function createIssueService(opts: {
         repo,
         issue,
         title,
-        branch: branchName(issue),
         worktreePath,
         phase: "queued",
         attempts: 0,
@@ -191,9 +190,11 @@ export function createIssueService(opts: {
         const target = agentPrIssue({ ref: pr.headRef, fromFork: pr.fromFork });
         if (pr.state !== "open" || "reason" in target)
           return log("feedback ignored: not an open agent pull request", { repo, pr: number, id });
-        const { key, conversationId } = await lookup(repo, target.issue);
+        const { key, conversationId, state } = await lookup(repo, target.issue);
         const conversation = conversationId && (await harness.conversation(conversationId, context));
         if (!conversation) return log("feedback ignored: issue has no conversation", { key, pr: number, id });
+        if (state?.branch !== pr.headRef)
+          return log("feedback ignored: not the issue's agent branch", { key, pr: number, branch: pr.headRef });
 
         await github.react(repo, action.nodeId);
         const review =
@@ -214,27 +215,37 @@ export function createIssueService(opts: {
     stop: (action) =>
       mutex.run(async () => {
         let issue: number;
+        let branch: string | undefined;
         if (action.kind === "stop") issue = action.issue;
         else {
           const pr = await github.getPr(action.repo, action.pr);
           const target = agentPrIssue({ ref: pr.headRef, fromFork: pr.fromFork });
           if ("reason" in target) return log("stop ignored: not an agent pull request", { ...action, ...target });
           issue = target.issue;
+          branch = pr.headRef;
         }
         const { key, state } = await lookup(action.repo, issue);
+        if (branch !== undefined && state?.branch !== branch)
+          return log("stop ignored: not the issue's agent branch", { key, branch });
         if (state?.pipelineTaskId == null) return log("stop ignored: no pipeline for issue", { key });
         const outcome = await harness.abortTask(state.pipelineTaskId as TaskId, context);
         log("pipeline abort requested", { key, outcome });
       }),
 
-    cleanup: ({ repo, issue }) => mutex.run(() => cleanup(repo, issue)),
+    cleanup: ({ repo, issue, branch }) =>
+      mutex.run(async () => {
+        const { key, state } = await lookup(repo, issue);
+        if (state?.branch !== branch) return log("cleanup ignored: not the issue's agent branch", { key, branch });
+        await cleanup(repo, issue);
+      }),
 
     async sweep() {
       for (const { name: repo } of config.repos) {
         for (const issue of await worktrees.issues(repo)) {
           try {
             if ((await github.getIssue(repo, issue)).state !== "closed") continue;
-            if (await github.findOpenPr(repo, branchName(issue))) continue;
+            const { state } = await lookup(repo, issue);
+            if (state?.branch && (await github.findOpenPr(repo, state.branch))) continue;
             await mutex.run(() => cleanup(repo, issue));
           } catch (error) {
             log("sweep failed for issue", { key: issueKey(config.owner, repo, issue), error: messageOf(error) });

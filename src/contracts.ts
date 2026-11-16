@@ -1,15 +1,39 @@
 import type { RunStatus, TranscriptItem } from "./runStatus.ts";
 import type { RepoConfig } from "./config.ts";
 
-export const branchName = (issue: number) => `agent/issue-${issue}`;
+export const branchName = (issue: number, slug: string) => `mike/${issue}-${slug}`;
+/** Branch of conversations started before branches were named by the model. */
+export const legacyBranchName = (issue: number) => `agent/issue-${issue}`;
 export const issueKey = (owner: string, repo: string, issue: number) => `${owner}/${repo}#${issue}`;
 
-/** The issue behind an agent PR's head branch, or why the PR is not one. A fork can name its branch agent/issue-<n> too. */
+const BRANCH_SLUG_MAX = 40;
+
+/** A branch name fragment from free text: lowercase words joined by hyphens, at most 40 characters. */
+export function branchSlug(text: string): string {
+  const slug = text
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (slug.length <= BRANCH_SLUG_MAX) return slug || "issue";
+  const cut = slug.slice(0, BRANCH_SLUG_MAX + 1);
+  const boundary = cut.lastIndexOf("-");
+  return (boundary > 0 ? cut.slice(0, boundary) : cut.slice(0, BRANCH_SLUG_MAX)).replace(/-+$/, "");
+}
+
+/** The issue a branch named by `branchName` or `legacyBranchName` belongs to. */
+export function issueOfBranch(ref: string): number | undefined {
+  const match = /^mike\/(\d+)-[a-z0-9-]+$/.exec(ref) ?? /^agent\/issue-(\d+)$/.exec(ref);
+  return match ? Number(match[1]) : undefined;
+}
+
+/** The issue behind an agent PR's head branch, or why the PR is not one. A fork can use an agent branch name too. */
 export function agentPrIssue(head: { ref?: string; fromFork: boolean }): { issue: number } | { reason: string } {
-  const match = /^agent\/issue-(\d+)$/.exec(head.ref ?? "");
-  if (!match) return { reason: `branch ${head.ref} is not an agent branch` };
+  const issue = issueOfBranch(head.ref ?? "");
+  if (issue === undefined) return { reason: `branch ${head.ref} is not an agent branch` };
   if (head.fromFork) return { reason: "pull request comes from a fork" };
-  return { issue: Number(match[1]) };
+  return { issue };
 }
 
 export interface IssueData {
@@ -107,20 +131,20 @@ export interface WorktreeInfo {
 export interface Worktrees {
   worktreePath(repo: string, issue: number): string;
   /** Idempotent: create, or reuse the existing path or branch. A new branch starts from its remote copy only with `openPr`. */
-  prepare(repo: RepoConfig, issue: number, opts: { openPr: boolean }): Promise<WorktreeInfo>;
+  prepare(repo: RepoConfig, issue: number, opts: { branch: string; openPr: boolean }): Promise<WorktreeInfo>;
   /** `git status --porcelain` of the worktree: uncommitted, non-ignored changes, empty when clean. */
   uncommitted(repo: string, issue: number): Promise<string>;
-  /** Pushes `agent/issue-<n>` (and only that ref) to origin. Idempotent. */
-  push(repo: RepoConfig, issue: number): Promise<void>;
+  /** Pushes `branch` (and only that ref) to origin. Idempotent. */
+  push(repo: RepoConfig, branch: string): Promise<void>;
   /** Commit the issue branch points at. */
-  headSha(repo: string, issue: number): Promise<string>;
+  headSha(repo: string, issue: number, branch: string): Promise<string>;
   /** Number of commits on the issue branch that are not on `origin/<defaultBranch>`. */
-  commitsAhead(repo: RepoConfig, issue: number): Promise<number>;
+  commitsAhead(repo: RepoConfig, issue: number, branch: string): Promise<number>;
   /** Subject of the latest commit on the issue branch. */
-  latestCommitSubject(repo: string, issue: number): Promise<string>;
-  /** Idempotent: removes worktree and local branch, then prunes. */
+  latestCommitSubject(repo: string, issue: number, branch: string): Promise<string>;
+  /** Idempotent: removes the worktree and every local branch of the issue, then prunes. */
   remove(repo: string, issue: number): Promise<void>;
-  /** Issues that still have a local worktree or `agent/issue-<n>` branch. */
+  /** Issues that still have a local worktree or agent branch. */
   issues(repo: string): Promise<number[]>;
   /** Runs `git worktree prune` on the bare clone, if there is one. */
   prune(repo: string): Promise<void>;
@@ -131,7 +155,7 @@ export type WebhookAction =
   | { kind: "start"; repo: string; issue: number; requestId: string; instructions: string }
   | { kind: "stop"; repo: string; issue: number; requestId: string }
   /** An agent PR was merged or closed. */
-  | { kind: "cleanup"; repo: string; issue: number }
+  | { kind: "cleanup"; repo: string; issue: number; branch: string }
   /**
    * Owner feedback on an agent PR. `id` is `review-<reviewId>` for a review and its inline comments, so one review is
    * one trigger, or `pr-comment-<id>` for a conversation comment. `nodeId` is the triggering object, for the reaction.

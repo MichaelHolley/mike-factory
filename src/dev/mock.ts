@@ -1,5 +1,5 @@
 import { serve } from "@hono/node-server";
-import { branchName, type IssueService } from "../contracts.ts";
+import { branchName, branchSlug, type IssueService } from "../contracts.ts";
 import type { RunStatus, TranscriptItem } from "../runStatus.ts";
 import { createServer } from "../server.ts";
 
@@ -17,7 +17,7 @@ function run(
     issue,
     issueUrl: `https://github.com/example/${repo}/issues/${issue}`,
     title,
-    branch: branchName(issue),
+    branch: branchName(issue, branchSlug(title)),
     phase,
     attempts: 1,
     costUsd: 0.42,
