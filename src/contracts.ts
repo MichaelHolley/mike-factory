@@ -86,7 +86,7 @@ export interface GitHubClient {
   /** Adds an 👀 reaction to an issue comment, review or review comment by its GraphQL node id. Idempotent. */
   react(repo: string, nodeId: string): Promise<void>;
   /**
-   * Replies in the thread of `commentId` unless a reply carrying the hidden `marker` already exists. False when the PR
+   * Replies in the thread of `commentId` unless the bot already posted a reply carrying the hidden `marker`. False when the PR
    * has no such comment.
    */
   replyToReviewComment(repo: string, pr: number, commentId: number, marker: string, body: string): Promise<boolean>;

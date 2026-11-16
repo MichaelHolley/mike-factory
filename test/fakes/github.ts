@@ -299,7 +299,7 @@ export class FakeGitHub implements GitHubClient {
     this.called("replyToReviewComment");
     const tag = COMMENT_MARKER(marker);
     const all = this.reviewCommentsOn(repo, pr);
-    if (all.some((comment) => comment.body.includes(tag))) return true;
+    if (all.some((comment) => comment.author === BOT_LOGIN && comment.body.includes(tag))) return true;
     const target = all.find((comment) => comment.id === commentId);
     if (!target) return false;
     this.reviewCommentList.push({

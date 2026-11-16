@@ -269,9 +269,10 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
 
     async replyToReviewComment(repo, pr, commentId, marker, body) {
       const octokit = await octokitFor(repo);
+      const { name: botLogin } = await this.botIdentity();
       const tag = markerComment(marker);
       const all = await rawReviewComments(repo, pr);
-      if (all.some((comment) => comment.body.includes(tag))) return true;
+      if (all.some((comment) => comment.user?.login === botLogin && comment.body.includes(tag))) return true;
       const target = all.find((comment) => comment.id === commentId);
       if (!target) return false;
       await octokit.request("POST /repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies", {
