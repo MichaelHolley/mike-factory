@@ -1,4 +1,4 @@
-import type { Context } from "@earendil-works/chord";
+import type { Context } from "@earendil-works/chord/context";
 import type { Models } from "@earendil-works/pi-ai";
 import { Harness, type Storage } from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
@@ -42,8 +42,11 @@ export async function openAgentHarness(
       models: opts.models,
       registry,
       env: ({ cwd }) => (cwd === undefined ? undefined : opts.deps.env(cwd)),
-      onReport: (error) =>
-        log("harness report", { error: error instanceof Error ? (error.stack ?? error.message) : String(error) }),
+      onReport: ({ error, ...info }) =>
+        log("harness report", {
+          ...info,
+          error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+        }),
     },
     context,
   );

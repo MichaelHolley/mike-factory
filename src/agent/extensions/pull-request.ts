@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { obj, str } from "@earendil-works/pi-schema";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
 import { IssueState } from "../docs.ts";
 import { text } from "./text.ts";
@@ -19,9 +19,9 @@ export function createPullRequestTools() {
         name: "draft_pull_request",
         description:
           "Set the title and body the pipeline uses when it opens this issue's pull request. Does not open it. Call again to replace them.",
-        parameters: Type.Object({
-          title: Type.String({ description: "Conventional commit subject, e.g. `feat(api): add pagination`." }),
-          body: Type.String({
+        parameters: obj({
+          title: str({ description: "Conventional commit subject, e.g. `feat(api): add pagination`." }),
+          body: str({
             description: "Markdown PR description; the pipeline appends the closing issue reference.",
           }),
         }),

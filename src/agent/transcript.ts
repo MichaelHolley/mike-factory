@@ -1,4 +1,4 @@
-import type { JsonValue } from "@earendil-works/chord";
+import type { JsonValue } from "@earendil-works/chord/json";
 import type { ImageContent, Message, TextContent } from "@earendil-works/pi-ai";
 import type { ContextView } from "@earendil-works/pi-durable";
 import type { ReviewFeedback } from "../contracts.ts";
