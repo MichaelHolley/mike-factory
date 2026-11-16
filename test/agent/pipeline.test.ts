@@ -380,6 +380,22 @@ describe("issue pipeline", () => {
       ]);
     });
 
+    it("fails the phase with the budget breach when a message's run ends without an answer", async () => {
+      const world = createWorld({ dir, repo: { maxTurns: 3 } });
+      autopilot(world.faux, (messages) =>
+        messages.some((m) => textOf(m).includes("<owner-message>\nKeep going"))
+          ? fauxAssistantMessage(fauxToolCall("bash", { command: "true" }), { stopReason: "toolUse" })
+          : undefined,
+      );
+      const { harness, service } = await launch(world);
+      await service.start(startAction(1, "comment-1"));
+      expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+      expect(await service.message(message("Keep going"))).toBe("started");
+      expect((await pipelineResult(harness, 1)).status).toBe("failed");
+      expect((await issueStateOf(harness, 1))!.lastError).toContain("turn budget exhausted");
+    });
+
     it("continues a finished run on the same branch and updates its PR", async () => {
       const world = createWorld({ dir });
       autopilot(world.faux, (messages) => {

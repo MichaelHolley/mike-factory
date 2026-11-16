@@ -3,7 +3,7 @@ import type { Context } from "@earendil-works/chord/context";
 import {
   defineTask,
   type ConversationHandle,
-  type Submission,
+  type SubmissionId,
   UsageDoc,
   type NextTaskState,
   type PhaseHandler,
@@ -313,9 +313,9 @@ export function createIssuePipeline(deps: PipelineDeps) {
   const hasPendingNotes = async (rt: Rt, context: Context) =>
     pendingNotes(await rt.snapshot(IssueNotes, rt.conversationId, context)).length > 0;
 
-  /** Submits each pending note, then marks it delivered; a rerun resubmits with the same `requestId`, which adds nothing. */
+  /** Submits each pending note in the commit that marks it delivered, so the agent never has a note shown as pending. */
   const deliverNotes = async (rt: Rt, conversation: ConversationHandle, context: Context) => {
-    const submissions: Submission[] = [];
+    const ids: SubmissionId[] = [];
     for (const note of pendingNotes(await rt.snapshot(IssueNotes, rt.conversationId, context))) {
       const draft = {
         type: "input",
@@ -327,15 +327,16 @@ export function createIssuePipeline(deps: PipelineDeps) {
           data: { id: note.id, text: note.text, ...(note.review && { review: note.review }) },
         },
       } as const;
-      submissions.push(await conversation.submit(draft, context));
       await rt.commit(async (tx) => {
         const item = (await tx.doc(IssueNotes, rt.conversationId)).items.find(({ id }) => id === note.id);
-        if (item) item.deliveredAt = new Date().toISOString();
+        if (!item) return undefined;
+        ids.push(await conversation.submit(tx, draft));
+        item.deliveredAt = new Date().toISOString();
         return undefined;
       }, context);
       log("note delivered", { taskId: rt.taskId, id: note.id });
     }
-    return submissions;
+    return ids;
   };
 
   /**
@@ -345,22 +346,25 @@ export function createIssuePipeline(deps: PipelineDeps) {
   const converse = async (rt: Rt, context: Context, repo: string, prompt?: { content: string; requestId: string }) => {
     const conversation = await rt.conversation(rt.conversationId, context);
     if (!conversation) throw new Error("issue conversation is missing");
-    const submissions = prompt ? [await conversation.submit({ type: "input", ...prompt }, context)] : [];
+    const ids = prompt ? [(await conversation.submit({ type: "input", ...prompt }, context)).id] : [];
     let idle: Promise<void> | undefined;
     for (;;) {
       const delivered = await deliverNotes(rt, conversation, context);
-      submissions.push(...delivered);
+      ids.push(...delivered);
       if (delivered.length > 0) idle = undefined;
       idle ??= conversation.waitForIdle(context);
       if ((await idleWithin(idle, NOTE_POLL_MS, rt.signal)) && !(await hasPendingNotes(rt, context))) break;
     }
-    for (const submission of submissions) {
-      const settled = await submission.wait(context);
-      if (settled.status === "done") continue;
-      const messages = (await rt.context(rt.conversationId, context)).messages;
-      const breach = await runBudgetBreach(rt, rt.conversationId, messages, context, deps.config);
-      throw new PipelineFailure(breach || `the model run ended without an answer (${settled.reason ?? "unknown"})`);
-    }
+    const reasons: string[] = [];
+    await rt.commit(async (tx) => {
+      for (const record of await Promise.all(ids.map((id) => tx.submission(id))))
+        if (record?.status !== "done") reasons.push(record?.reason ?? "unknown");
+      return undefined;
+    }, context);
+    if (reasons.length === 0) return;
+    const messages = (await rt.context(rt.conversationId, context)).messages;
+    const breach = await runBudgetBreach(rt, rt.conversationId, messages, context, deps.config);
+    throw new PipelineFailure(breach || `the model run ended without an answer (${reasons[0]})`);
   };
 
   /** Title and body for creating or updating the PR, from the agent's draft or, failing that, its commit and reply. */
@@ -595,8 +599,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
 
     abort: async (task, rt, context) => {
       await (await rt.conversation(rt.conversationId, context))?.abort(context);
-      // Match each note to its submission, which a stop may have cut off before or after its delivery was recorded:
-      // a withdrawn steer is pending again under a fresh request ID, one the agent saw counts as delivered.
+      // A steer withdrawn before the agent saw it is pending again, under a fresh request ID.
       await rt.commit(async (tx) => {
         const notes = await tx.doc(IssueNotes, rt.conversationId);
         const records = await Promise.all(
@@ -604,11 +607,9 @@ export function createIssuePipeline(deps: PipelineDeps) {
         );
         notes.items.forEach((note, index) => {
           const record = records[index];
-          if (record?.type !== "input") return;
-          if (record.status === "unanswered" && !record.entry) {
-            note.deliveredAt = null;
-            note.tries = (note.tries ?? 0) + 1;
-          } else note.deliveredAt ??= new Date().toISOString();
+          if (record?.type !== "input" || record.status !== "unanswered" || record.entry) return;
+          note.deliveredAt = null;
+          note.tries = (note.tries ?? 0) + 1;
         });
         return undefined;
       }, context);
