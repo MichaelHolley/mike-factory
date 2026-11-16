@@ -15,7 +15,7 @@ const status = computed(() => {
 
 const blocks = computed(() => [
   { label: "Input", icon: ArrowDownToLine, text: props.call.args },
-  ...(props.call.result || props.call.output !== undefined
+  ...(props.call.result || props.call.output
     ? [{ label: "Output", icon: ArrowUpFromLine, text: props.call.result?.text ?? props.call.output ?? "" }]
     : []),
 ]);

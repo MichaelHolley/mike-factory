@@ -220,6 +220,20 @@ describe("toTranscript", () => {
       ]);
     });
 
+    it("marks a tool as running before its first output, and leaves pending ones without output", () => {
+      const second = { ...call, id: "c2" };
+      const both = { ...asked, content: [call, second] };
+      const slots = [
+        { callId: "c1", name: "bash", status: "running" },
+        { callId: "c2", name: "bash", status: "pending" },
+      ];
+      expect(toTranscript(entriesOf([both] as unknown as Message[]), live({ run, tools: slots }))).toEqual([
+        { ...tool, output: "" },
+        tool,
+        { kind: "busy" },
+      ]);
+    });
+
     it("shows a running tool's output until its result replaces it", () => {
       const output = `${"x".repeat(5_000)}\n ✓ 16 tests`;
       const slots = [{ callId: "c1", name: "bash", status: "running", output }];

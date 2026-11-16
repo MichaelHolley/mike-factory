@@ -32,7 +32,7 @@ export type TranscriptItem =
       summary: string;
       args: string;
       result?: { text: string; isError: boolean };
-      /** What the call printed so far, while it runs. */
+      /** What the call printed so far, empty before its first output; set only while it runs. */
       output?: string;
     }
   /** The agent is working; `retry` is the error it waits out before trying again. */

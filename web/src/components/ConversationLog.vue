@@ -55,7 +55,7 @@ const failure = computed(() => items.value.find((item) => item.kind === "failure
 const FAILURES: Record<Extract<Status, { kind: "failure" }>["reason"], string> = {
   model_error: "the model's response failed",
   no_model: "no model is available",
-  aborted: "it was stopped",
+  aborted: "it was aborted",
   reset: "its context was reset",
   faulted: "it crashed",
   orphaned: "it could not be resumed",
@@ -108,7 +108,9 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
       />
     </header>
     <ErrorBanner v-if="error && !items.length" class="my-4">Couldn't load the conversation: {{ error }}.</ErrorBanner>
-    <EmptyState v-else-if="loaded && !entries.length && !busy" :icon="MessageSquareDashed">No messages yet.</EmptyState>
+    <EmptyState v-else-if="loaded && !entries.length && !busy && !failure" :icon="MessageSquareDashed"
+      >No messages yet.</EmptyState
+    >
     <ol v-else>
       <li
         v-for="(entry, index) in entries"

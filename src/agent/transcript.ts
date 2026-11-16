@@ -83,7 +83,7 @@ export function toTranscript(
     ),
     outputs: new Map(
       (live?.tools ?? []).flatMap((slot) =>
-        slot.status !== "done" && slot.output ? [[slot.callId, clipStart(slot.output)] as const] : [],
+        slot.status === "running" ? [[slot.callId, clipStart(slot.output ?? "")] as const] : [],
       ),
     ),
   };

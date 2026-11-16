@@ -15,7 +15,7 @@ import {
   type TaskId,
 } from "@earendil-works/pi-durable";
 import { findRepo, type RepoConfig } from "../config.ts";
-import { agentPrIssue, issueKey, type IssueService, type ReviewFeedback, type TranscriptWatch } from "../contracts.ts";
+import { agentPrIssue, issueKey, type IssueService, type ReviewFeedback } from "../contracts.ts";
 import type { RunStatus } from "../runStatus.ts";
 import { asConversationId, HUMAN_ENTRY, IssueIndex, IssueNotes, IssueState } from "./docs.ts";
 import type { AgentDeps } from "./harness.ts";
@@ -168,13 +168,10 @@ export function createIssueService(opts: {
 
   /**
    * Follows the conversation through a watch, whose window `items()` completes with the whole history. Notes are
-   * followed through their commits, since a watch's documents are only the built-in ones.
+   * followed through their commits, since a watch's documents are only the built-in ones. `items(false)` leaves out
+   * what is still in flight (`pi.live`).
    */
-  const watchTranscript = async (
-    repo: string,
-    issue: number,
-    listener: () => void,
-  ): Promise<TranscriptWatch | undefined> => {
+  const watchTranscript = async (repo: string, issue: number, listener: () => void) => {
     const { conversationId } = await lookup(repo, issue);
     const conversation = conversationId === undefined ? undefined : await harness.conversation(conversationId, context);
     if (!conversation) return undefined;
@@ -199,7 +196,7 @@ export function createIssueService(opts: {
     );
 
     return {
-      async items() {
+      async items(withLive = true) {
         // Notes first, so a note delivered between the two reads shows once rather than not at all.
         const notes = await harness.snapshot(IssueNotes, conversation.id, context);
         let view = history.merge(watch.value);
@@ -216,7 +213,7 @@ export function createIssueService(opts: {
         ].filter((message) => message !== undefined);
         return toTranscript(
           view.items.flatMap((item) => (item.kind === "entry" ? [item.entry] : [])),
-          { queued, live: view.docs[LiveDoc.definition.kind] as LiveState | undefined },
+          { queued, ...(withLive && { live: view.docs[LiveDoc.definition.kind] as LiveState | undefined }) },
         );
       },
       stop() {
@@ -366,7 +363,7 @@ export function createIssueService(opts: {
     async transcript(repo, issue) {
       const watch = await watchTranscript(repo, issue, () => {});
       try {
-        return await watch?.items();
+        return await watch?.items(false);
       } finally {
         watch?.stop();
       }
