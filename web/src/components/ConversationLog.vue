@@ -9,6 +9,7 @@ import ErrorBanner from "./ErrorBanner.vue";
 import IconButton from "./IconButton.vue";
 import MarkdownText from "./MarkdownText.vue";
 import PipelineMessage from "./PipelineMessage.vue";
+import ReviewCard from "./ReviewCard.vue";
 import ToolCall from "./ToolCall.vue";
 
 type Message = Exclude<TranscriptItem, { kind: "tool" }>;
@@ -95,7 +96,12 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
         <template v-if="entry.kind === 'message'">
           <PipelineMessage v-if="entry.message.kind === 'user'" :text="entry.message.text" :class="SAY" />
           <div v-else :class="[SAY, TEXT[entry.message.kind]]">
-            <MarkdownText :text="entry.message.text" class="leading-relaxed wrap-anywhere" />
+            <ReviewCard
+              v-if="entry.message.kind === 'human' && entry.message.review"
+              :review="entry.message.review"
+              :class="entry.message.text && 'mb-2'"
+            />
+            <MarkdownText v-if="entry.message.text" :text="entry.message.text" class="leading-relaxed wrap-anywhere" />
             <span
               v-if="entry.message.kind === 'human' && entry.message.pending"
               class="mt-1 flex items-center gap-1 text-xs text-muted italic"

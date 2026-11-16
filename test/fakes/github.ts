@@ -3,7 +3,10 @@ import {
   type GitIdentity,
   type IssueComment,
   type IssueData,
+  type PullRequestInfo,
   type PullRequestRef,
+  type ReviewFeedback,
+  type ReviewThread,
 } from "../../src/contracts.ts";
 
 export const FAKE_GIT_TOKEN = "fake-installation-token";
@@ -34,10 +37,35 @@ interface FakeIssue extends IssueData {
   repo: string;
 }
 
+export interface FakeReview {
+  id: number;
+  repo: string;
+  pr: number;
+  reviewer: string;
+  state: string;
+  body: string;
+}
+
+export interface FakeReviewComment {
+  id: number;
+  repo: string;
+  pr: number;
+  reviewId: number;
+  author: string;
+  path: string;
+  line: number;
+  body: string;
+  inReplyTo: number | null;
+}
+
 export interface FakeGitHubState {
   issues: FakeIssue[];
   comments: FakeComment[];
   prs: FakePr[];
+  reviews: FakeReview[];
+  reviewComments: FakeReviewComment[];
+  reactions: { repo: string; nodeId: string }[];
+  reviewRequests: { repo: string; pr: number; login: string }[];
   calls: Record<string, number>;
   nextId: number;
 }
@@ -46,6 +74,10 @@ export class FakeGitHub implements GitHubClient {
   private issues = new Map<string, FakeIssue>();
   private commentList: FakeComment[] = [];
   private prList: FakePr[] = [];
+  private reviewList: FakeReview[] = [];
+  private reviewCommentList: FakeReviewComment[] = [];
+  private reactionList: FakeGitHubState["reactions"] = [];
+  private reviewRequestList: FakeGitHubState["reviewRequests"] = [];
   private callCounts: Record<string, number> = {};
   private nextId = 1;
 
@@ -54,6 +86,10 @@ export class FakeGitHub implements GitHubClient {
     for (const issue of state.issues) fake.issues.set(fake.key(issue.repo, issue.number), issue);
     fake.commentList = state.comments;
     fake.prList = state.prs;
+    fake.reviewList = state.reviews;
+    fake.reviewCommentList = state.reviewComments;
+    fake.reactionList = state.reactions;
+    fake.reviewRequestList = state.reviewRequests;
     fake.callCounts = state.calls;
     fake.nextId = state.nextId;
     return fake;
@@ -64,6 +100,10 @@ export class FakeGitHub implements GitHubClient {
       issues: [...this.issues.values()],
       comments: this.commentList,
       prs: this.prList,
+      reviews: this.reviewList,
+      reviewComments: this.reviewCommentList,
+      reactions: this.reactionList,
+      reviewRequests: this.reviewRequestList,
       calls: this.callCounts,
       nextId: this.nextId,
     };
@@ -92,6 +132,47 @@ export class FakeGitHub implements GitHubClient {
     return this.prList;
   }
 
+  get reactions(): readonly { repo: string; nodeId: string }[] {
+    return this.reactionList;
+  }
+
+  get reviewRequests(): readonly { repo: string; pr: number; login: string }[] {
+    return this.reviewRequestList;
+  }
+
+  /** Submits a review whose inline comments each start a thread, or reply to one with `inReplyTo`. */
+  addReview(
+    repo: string,
+    pr: number,
+    review: {
+      reviewer: string;
+      state: string;
+      body: string;
+      comments?: { path: string; line: number; body: string; inReplyTo?: number }[];
+    },
+  ): { reviewId: number; commentIds: number[] } {
+    const reviewId = this.nextId++;
+    this.reviewList.push({ id: reviewId, repo, pr, reviewer: review.reviewer, state: review.state, body: review.body });
+    const commentIds = (review.comments ?? []).map(({ inReplyTo, ...comment }) => {
+      const id = this.nextId++;
+      this.reviewCommentList.push({
+        ...comment,
+        id,
+        repo,
+        pr,
+        reviewId,
+        author: review.reviewer,
+        inReplyTo: inReplyTo ?? null,
+      });
+      return id;
+    });
+    return { reviewId, commentIds };
+  }
+
+  reviewCommentsOn(repo: string, pr: number): FakeReviewComment[] {
+    return this.reviewCommentList.filter((comment) => comment.repo === repo && comment.pr === pr);
+  }
+
   callCount(method: keyof GitHubClient): number {
     return this.callCounts[method] ?? 0;
   }
@@ -109,7 +190,7 @@ export class FakeGitHub implements GitHubClient {
 
   async upsertComment(repo: string, issue: number, marker: string, body: string): Promise<void> {
     this.called("upsertComment");
-    this.issue(repo, issue);
+    if (!this.prList.some((pr) => pr.repo === repo && pr.number === issue)) this.issue(repo, issue);
     const tag = COMMENT_MARKER(marker);
     const fullBody = `${tag}\n${body}`;
     const existing = this.commentsOn(repo, issue).find(
@@ -140,7 +221,8 @@ export class FakeGitHub implements GitHubClient {
     this.called("createPr");
     if (this.openPr(repo, pr.head))
       throw new Error(`422 Validation Failed: A pull request already exists for ${pr.head}`);
-    const number = this.nextId++;
+    // Apart from issue numbers, so a PR's comments never mix with an issue's.
+    const number = 100 + this.nextId++;
     const created: FakePr = {
       ...pr,
       repo,
@@ -154,9 +236,86 @@ export class FakeGitHub implements GitHubClient {
 
   async updatePr(repo: string, number: number, pr: { title: string; body: string }): Promise<void> {
     this.called("updatePr");
-    const existing = this.prList.find((candidate) => candidate.repo === repo && candidate.number === number);
-    if (!existing) throw new Error(`404 Not Found: ${repo} pull ${number}`);
-    Object.assign(existing, pr);
+    Object.assign(this.pr(repo, number), pr);
+  }
+
+  async getPr(repo: string, number: number): Promise<PullRequestInfo> {
+    this.called("getPr");
+    const pr = this.pr(repo, number);
+    return { number, url: pr.url, state: pr.state, headRef: pr.head, fromFork: false };
+  }
+
+  async getReviewFeedback(repo: string, pr: number, reviewId: number): Promise<ReviewFeedback> {
+    this.called("getReviewFeedback");
+    const review = this.reviewList.find((candidate) => candidate.repo === repo && candidate.id === reviewId);
+    if (!review) throw new Error(`404 Not Found: ${repo} review ${reviewId}`);
+    const all = this.reviewCommentsOn(repo, pr);
+    const url = this.pr(repo, pr).url;
+    return {
+      reviewer: review.reviewer,
+      state: review.state,
+      body: review.body,
+      url: `${url}#pullrequestreview-${reviewId}`,
+      comments: all
+        .filter((comment) => comment.reviewId === reviewId)
+        .map((comment) => ({
+          id: comment.id,
+          threadRootId: comment.inReplyTo ?? comment.id,
+          path: comment.path,
+          line: comment.line,
+          diffHunk: `@@ -1 +1 @@\n+${comment.path}`,
+          body: comment.body,
+          url: `${url}#discussion_r${comment.id}`,
+          thread: all
+            .filter(
+              (other) => (other.inReplyTo ?? other.id) === (comment.inReplyTo ?? comment.id) && other.id < comment.id,
+            )
+            .map(({ author, body }) => ({ author, body })),
+        })),
+    };
+  }
+
+  async listReviewThreads(repo: string, pr: number): Promise<ReviewThread[]> {
+    this.called("listReviewThreads");
+    const all = this.reviewCommentsOn(repo, pr);
+    return all
+      .filter((comment) => comment.inReplyTo === null)
+      .map((root) => ({
+        path: root.path,
+        line: root.line,
+        comments: all
+          .filter((comment) => (comment.inReplyTo ?? comment.id) === root.id)
+          .map(({ id, author, body }) => ({ id, author, body })),
+      }));
+  }
+
+  async react(repo: string, nodeId: string): Promise<void> {
+    this.called("react");
+    if (!this.reactionList.some((reaction) => reaction.repo === repo && reaction.nodeId === nodeId))
+      this.reactionList.push({ repo, nodeId });
+  }
+
+  async replyToReviewComment(repo: string, pr: number, commentId: number, marker: string, body: string) {
+    this.called("replyToReviewComment");
+    const tag = COMMENT_MARKER(marker);
+    const all = this.reviewCommentsOn(repo, pr);
+    if (all.some((comment) => comment.author === BOT_LOGIN && comment.body.includes(tag))) return true;
+    const target = all.find((comment) => comment.id === commentId);
+    if (!target) return false;
+    this.reviewCommentList.push({
+      ...target,
+      id: this.nextId++,
+      author: BOT_LOGIN,
+      body: `${tag}\n${body}`,
+      inReplyTo: target.inReplyTo ?? target.id,
+    });
+    return true;
+  }
+
+  async requestReview(repo: string, pr: number, login: string): Promise<void> {
+    this.called("requestReview");
+    this.pr(repo, pr);
+    this.reviewRequestList.push({ repo, pr, login });
   }
 
   async gitToken(_repo: string): Promise<string> {
@@ -177,6 +336,12 @@ export class FakeGitHub implements GitHubClient {
     const data = this.issues.get(this.key(repo, issue));
     if (!data) throw new Error(`404 Not Found: ${repo}#${issue}`);
     return data;
+  }
+
+  private pr(repo: string, number: number): FakePr {
+    const pr = this.prList.find((candidate) => candidate.repo === repo && candidate.number === number);
+    if (!pr) throw new Error(`404 Not Found: ${repo} pull ${number}`);
+    return pr;
   }
 
   private openPr(repo: string, head: string) {

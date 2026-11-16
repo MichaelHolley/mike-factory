@@ -74,8 +74,9 @@ export function bashViolation(command: string, worktreePath: string): string | u
   return outside && `path outside the issue worktree: ${outside}`;
 }
 
-export const assistantTurns = (messages: readonly Message[]) =>
-  messages.filter((message) => message.role === "assistant").length;
+/** Assistant turns since `at`; a timestamp, not a context count, because compaction shrinks the context mid-run. */
+export const turnsSince = (messages: readonly Message[], at: number) =>
+  messages.filter((message) => message.role === "assistant" && message.timestamp >= at).length;
 
 export const totalCostUsd = (usage: Readonly<UsageState> | undefined) =>
   usage
@@ -92,17 +93,28 @@ export function budgetBreach(
   return undefined;
 }
 
-/** Reads a conversation's spend as the budget sees it. `messages` are the model context. */
-export async function spentOf(
+/** When the run started and what the conversation had spent by then; budgets apply per run. */
+export type RunStart = { at: number; costUsd: number };
+
+/** The run's spend so far. `messages` are the model context. */
+export const spentSince = (messages: readonly Message[], costUsd: number, from: RunStart | null | undefined) => ({
+  turns: turnsSince(messages, from?.at ?? 0),
+  costUsd: Math.max(0, costUsd - (from?.costUsd ?? 0)),
+});
+
+/** Why the current run must stop spending, or undefined while it is within its repo's budgets. */
+export async function runBudgetBreach(
   read: DocumentReader,
   conversationId: ConversationId,
   messages: readonly Message[],
   context: Context,
-) {
-  return {
-    turns: assistantTurns(messages),
-    costUsd: totalCostUsd(await read.snapshot(UsageDoc, conversationId, context)),
-  };
+  config: AppConfig,
+): Promise<string | undefined> {
+  const state = await read.snapshot(IssueState, conversationId, context);
+  const repo = state && findRepo(config, state.repo);
+  if (!repo) return undefined;
+  const costUsd = totalCostUsd(await read.snapshot(UsageDoc, conversationId, context));
+  return budgetBreach(repo, spentSince(messages, costUsd, state.budgetFrom));
 }
 
 export const lastAssistantText = (messages: readonly Message[]): string => {
@@ -143,11 +155,8 @@ export function createGuards(opts: { config: AppConfig; abortTask: (id: TaskId) 
       }),
       hook(GenerationTask, {
         beforeRequest: async (request, api, context) => {
-          const state = await api.snapshot(IssueState, api.conversationId, context);
-          const repo = state && findRepo(opts.config, state.repo);
-          if (!repo) return undefined;
-          const spent = await spentOf(api, api.conversationId, request.messages, context);
-          if (budgetBreach(repo, spent)) opts.abortTask(api.taskId);
+          if (await runBudgetBreach(api, api.conversationId, request.messages, context, opts.config))
+            opts.abortTask(api.taskId);
           return undefined;
         },
       }),

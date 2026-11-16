@@ -23,7 +23,7 @@ To give the agent repo-specific instructions, commit an `AGENTS.md` at the root 
 Create the app under your account and install it on selected repositories. Every repo must also be listed in `config/repos.yaml`.
 
 - Repository permissions: Contents, Issues and Pull requests read/write; Metadata read.
-- Events: **Issue comment** and **Pull request**.
+- Events: **Issue comment**, **Pull request**, **Pull request review** and **Pull request review comment**.
 
 In each repo, set the squash merge default commit message to **Pull request title**, so merges produce conventional commits.
 

@@ -11,7 +11,7 @@ import { git, OTHER_REPO, REPO } from "./support.ts";
 const runner = fileURLToPath(new URL("./crash-runner.ts", import.meta.url));
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 
-function runProcess(dir: string, mode: "first" | "second", crashAt?: string) {
+function runProcess(dir: string, mode: string, crashAt?: string) {
   const { CRASH_AT: _inherited, ...env } = process.env;
   return new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(process.execPath, ["--import", "tsx", runner], {
@@ -65,4 +65,19 @@ describe("restart safety", () => {
       expect(existsSync(join(dir, "data", "worktrees", REPO, "issue-1"))).toBe(true);
     },
   );
+
+  it("reposts no replies and re-requests no review after a hard exit in report", async () => {
+    const first = await runProcess(dir, "review-first", "report:replied");
+    expect(first.code, first.stderr).toBe(137);
+
+    const second = await runProcess(dir, "review-second");
+    expect(second.code, second.stderr).toBe(0);
+    expect(second.stdout).toContain('"outcomes":["completed"]');
+
+    const github = JSON.parse(readFileSync(join(dir, "github.json"), "utf8")) as FakeGitHubState;
+    // The exit came between posting and recording the reply, so the rerun posts again and its marker finds the first.
+    expect(github.calls.replyToReviewComment).toBe(2);
+    expect(github.reviewComments.filter((comment) => comment.inReplyTo !== null)).toHaveLength(1);
+    expect(github.reviewRequests).toHaveLength(1);
+  });
 });

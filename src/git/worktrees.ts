@@ -180,6 +180,8 @@ export function createWorktrees(opts: {
         }
       }),
 
+    headSha: (repo, issue) => git(worktreePath(repo, issue), ["rev-parse", `refs/heads/${branchName(issue)}`]),
+
     async commitsAhead(repo, issue) {
       const count = await git(worktreePath(repo.name, issue), [
         "rev-list",

@@ -4,6 +4,14 @@ import type { RepoConfig } from "./config.ts";
 export const branchName = (issue: number) => `agent/issue-${issue}`;
 export const issueKey = (owner: string, repo: string, issue: number) => `${owner}/${repo}#${issue}`;
 
+/** The issue behind an agent PR's head branch, or why the PR is not one. A fork can name its branch agent/issue-<n> too. */
+export function agentPrIssue(head: { ref?: string; fromFork: boolean }): { issue: number } | { reason: string } {
+  const match = /^agent\/issue-(\d+)$/.exec(head.ref ?? "");
+  if (!match) return { reason: `branch ${head.ref} is not an agent branch` };
+  if (head.fromFork) return { reason: "pull request comes from a fork" };
+  return { issue: Number(match[1]) };
+}
+
 export interface IssueData {
   number: number;
   title: string;
@@ -23,6 +31,40 @@ export interface PullRequestRef {
   url: string;
 }
 
+export interface PullRequestInfo extends PullRequestRef {
+  state: "open" | "closed";
+  headRef: string;
+  fromFork: boolean;
+}
+
+export type ReviewComment = {
+  id: number;
+  /** The thread's first comment; GitHub only takes replies to it. */
+  threadRootId: number;
+  path: string;
+  line: number | null;
+  diffHunk: string;
+  body: string;
+  url: string;
+  /** Earlier comments in the same thread, oldest first. */
+  thread: { author: string; body: string }[];
+};
+
+export type ReviewFeedback = {
+  reviewer: string;
+  /** Lowercase GitHub review state, e.g. `changes_requested`. */
+  state: string;
+  body: string;
+  url: string;
+  comments: ReviewComment[];
+};
+
+export interface ReviewThread {
+  path: string;
+  line: number | null;
+  comments: { id: number; author: string; body: string }[];
+}
+
 export interface GitIdentity {
   name: string;
   email: string;
@@ -37,6 +79,18 @@ export interface GitHubClient {
   findOpenPr(repo: string, head: string): Promise<PullRequestRef | undefined>;
   createPr(repo: string, pr: { head: string; base: string; title: string; body: string }): Promise<PullRequestRef>;
   updatePr(repo: string, number: number, pr: { title: string; body: string }): Promise<void>;
+  getPr(repo: string, number: number): Promise<PullRequestInfo>;
+  getReviewFeedback(repo: string, pr: number, reviewId: number): Promise<ReviewFeedback>;
+  /** Unresolved review threads of the PR. */
+  listReviewThreads(repo: string, pr: number): Promise<ReviewThread[]>;
+  /** Adds an 👀 reaction to an issue comment, review or review comment by its GraphQL node id. Idempotent. */
+  react(repo: string, nodeId: string): Promise<void>;
+  /**
+   * Replies in the thread of `commentId` unless the bot already posted a reply carrying the hidden `marker`. False when the PR
+   * has no such comment.
+   */
+  replyToReviewComment(repo: string, pr: number, commentId: number, marker: string, body: string): Promise<boolean>;
+  requestReview(repo: string, pr: number, login: string): Promise<void>;
   /** Short-lived token for git over HTTPS. Only push/fetch code may see it. */
   gitToken(repo: string): Promise<string>;
   botIdentity(): Promise<GitIdentity>;
@@ -58,6 +112,8 @@ export interface Worktrees {
   uncommitted(repo: string, issue: number): Promise<string>;
   /** Pushes `agent/issue-<n>` (and only that ref) to origin. Idempotent. */
   push(repo: RepoConfig, issue: number): Promise<void>;
+  /** Commit the issue branch points at. */
+  headSha(repo: string, issue: number): Promise<string>;
   /** Number of commits on the issue branch that are not on `origin/<defaultBranch>`. */
   commitsAhead(repo: RepoConfig, issue: number): Promise<number>;
   /** Subject of the latest commit on the issue branch. */
@@ -76,12 +132,29 @@ export type WebhookAction =
   | { kind: "stop"; repo: string; issue: number; requestId: string }
   /** An agent PR was merged or closed. */
   | { kind: "cleanup"; repo: string; issue: number }
+  /**
+   * Owner feedback on an agent PR. `id` is `review-<reviewId>` for a review and its inline comments, so one review is
+   * one trigger, or `pr-comment-<id>` for a conversation comment. `nodeId` is the triggering object, for the reaction.
+   */
+  | {
+      kind: "feedback";
+      repo: string;
+      pr: number;
+      id: string;
+      reviewer: string;
+      nodeId: string;
+      source: { type: "review"; reviewId: number } | { type: "comment" };
+      instructions: string;
+    }
+  | { kind: "pr-stop"; repo: string; pr: number }
   | { kind: "ignore"; reason: string };
 
 /** What the HTTP server calls. Implemented by the Pi Durable layer. */
 export interface IssueService {
   start(action: Extract<WebhookAction, { kind: "start" }>): Promise<void>;
-  stop(action: Extract<WebhookAction, { kind: "stop" }>): Promise<void>;
+  stop(action: Extract<WebhookAction, { kind: "stop" | "pr-stop" }>): Promise<void>;
+  /** Stores PR feedback as a note: steered into the issue's live run, or starting a run that reports on the PR. */
+  feedback(action: Extract<WebhookAction, { kind: "feedback" }>): Promise<void>;
   /**
    * Stores an owner message from the run page. A live pipeline steers it into the agent's work (`steered`); otherwise
    * it starts a follow-up run on the same conversation and branch (`started`). A repeated `id` adds nothing.

@@ -1,5 +1,12 @@
+import type { Message } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
-import { bashViolation, budgetBreach, pathOutsideWorktree, totalCostUsd } from "../../src/agent/extensions/guards.ts";
+import {
+  bashViolation,
+  budgetBreach,
+  pathOutsideWorktree,
+  spentSince,
+  totalCostUsd,
+} from "../../src/agent/extensions/guards.ts";
 
 const worktree = "/data/worktrees/demo/issue-1";
 
@@ -71,5 +78,20 @@ describe("budget", () => {
     expect(budgetBreach(limits, { turns: 2, costUsd: 0.99 })).toBeUndefined();
     expect(budgetBreach(limits, { turns: 3, costUsd: 0 })).toContain("turn budget exhausted");
     expect(budgetBreach(limits, { turns: 0, costUsd: 1.2 })).toContain("cost budget exhausted");
+  });
+
+  it("counts only the current run, so spend from earlier runs does not block a new one", () => {
+    const turn = (timestamp: number) => ({ role: "assistant", timestamp }) as Message;
+    const earlier = [turn(1), turn(2), turn(3), turn(4)];
+    expect(budgetBreach(limits, spentSince([...earlier, turn(10)], 1.5, null))).toBeDefined();
+    expect(spentSince([...earlier, turn(10)], 1.5, { at: 10, costUsd: 1 })).toEqual({ turns: 1, costUsd: 0.5 });
+  });
+
+  it("keeps counting the run's turns after compaction drops earlier ones from the context", () => {
+    const compacted = [
+      { role: "user", timestamp: 9 } as Message,
+      ...[10, 11, 12].map((timestamp) => ({ role: "assistant", timestamp }) as Message),
+    ];
+    expect(budgetBreach(limits, spentSince(compacted, 0, { at: 10, costUsd: 0 }))).toContain("turn budget exhausted");
   });
 });
