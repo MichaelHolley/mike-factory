@@ -20,7 +20,7 @@ import {
   type Worktrees,
 } from "../../contracts.ts";
 import { HUMAN_ENTRY, IssueNotes, IssueState, ReviewReplies, type IssueStateValue, type Note } from "../docs.ts";
-import { lastAssistantText, runBudgetBreach, spentOf, totalCostUsd } from "../extensions/guards.ts";
+import { lastAssistantText, runBudgetBreach, totalCostUsd } from "../extensions/guards.ts";
 import { closingRef, CONVENTIONAL_TITLE, prBodyLimit } from "../extensions/pull-request.ts";
 import { createSlots } from "../slots.ts";
 
@@ -432,7 +432,6 @@ export function createIssuePipeline(deps: PipelineDeps) {
           const result = await run(rt, context, config.setup, worktree.path);
           if (!result.ok) throw new PipelineFailure(`setup failed: ${config.setup}`, result.output);
         }
-        const messages = (await rt.context(rt.conversationId, context)).messages;
         await go(
           rt,
           context,
@@ -442,7 +441,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
             worktreePath: worktree.path,
             branch: worktree.branch,
             startHead: state?.pushedHead ?? null,
-            budgetFrom: await spentOf(rt, rt.conversationId, messages, context),
+            budgetFrom: { at: Date.now(), costUsd: await spentCostUsd(rt, context) },
           },
         );
       }),
@@ -540,7 +539,10 @@ export function createIssuePipeline(deps: PipelineDeps) {
         const pr = state?.prNumber;
         if (pr != null) {
           await postReplies(rt, context, repo, pr);
-          if (state?.reviewer) await github.requestReview(repo, pr, state.reviewer);
+          if (state?.reviewer)
+            await github
+              .requestReview(repo, pr, state.reviewer)
+              .catch((error) => log("could not re-request the review", { error: messageOf(error) }));
         }
         const costUsd = await spentCostUsd(rt, context);
         const unchanged = state?.startHead != null && (await worktrees.headSha(repo, issue)) === state.startHead;
@@ -570,7 +572,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
           rt,
           context,
           { status: "terminal", outcome: { status: "failed", error: { message: reason } } },
-          { phase: "failed", lastError: reason, costUsd: await spentCostUsd(rt, context), reviewer: null },
+          { phase: "failed", lastError: reason, costUsd: await spentCostUsd(rt, context) },
         );
       },
     },
@@ -603,7 +605,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
         rt,
         context,
         { status: "terminal", outcome: { status: "aborted", reason: "/mike stop" } },
-        { phase: "aborted", reviewer: null },
+        { phase: "aborted" },
       );
     },
   });

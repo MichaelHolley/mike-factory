@@ -74,8 +74,9 @@ export function bashViolation(command: string, worktreePath: string): string | u
   return outside && `path outside the issue worktree: ${outside}`;
 }
 
-export const assistantTurns = (messages: readonly Message[]) =>
-  messages.filter((message) => message.role === "assistant").length;
+/** Assistant turns since `at`; a timestamp, not a context count, because compaction shrinks the context mid-run. */
+export const turnsSince = (messages: readonly Message[], at: number) =>
+  messages.filter((message) => message.role === "assistant" && message.timestamp >= at).length;
 
 export const totalCostUsd = (usage: Readonly<UsageState> | undefined) =>
   usage
@@ -92,24 +93,14 @@ export function budgetBreach(
   return undefined;
 }
 
-type Spend = { turns: number; costUsd: number };
+/** When the run started and what the conversation had spent by then; budgets apply per run. */
+export type RunStart = { at: number; costUsd: number };
 
-/** Reads a conversation's total spend. `messages` are the model context. */
-export async function spentOf(
-  read: DocumentReader,
-  conversationId: ConversationId,
-  messages: readonly Message[],
-  context: Context,
-): Promise<Spend> {
-  return {
-    turns: assistantTurns(messages),
-    costUsd: totalCostUsd(await read.snapshot(UsageDoc, conversationId, context)),
-  };
-}
-
-/** Spend since `from`, the conversation's spend when the run started; budgets apply per run. */
-export const spentSince = (spent: Spend, from: Spend | null | undefined): Spend =>
-  from ? { turns: Math.max(0, spent.turns - from.turns), costUsd: Math.max(0, spent.costUsd - from.costUsd) } : spent;
+/** The run's spend so far. `messages` are the model context. */
+export const spentSince = (messages: readonly Message[], costUsd: number, from: RunStart | null | undefined) => ({
+  turns: turnsSince(messages, from?.at ?? 0),
+  costUsd: Math.max(0, costUsd - (from?.costUsd ?? 0)),
+});
 
 /** Why the current run must stop spending, or undefined while it is within its repo's budgets. */
 export async function runBudgetBreach(
@@ -122,7 +113,8 @@ export async function runBudgetBreach(
   const state = await read.snapshot(IssueState, conversationId, context);
   const repo = state && findRepo(config, state.repo);
   if (!repo) return undefined;
-  return budgetBreach(repo, spentSince(await spentOf(read, conversationId, messages, context), state.budgetFrom));
+  const costUsd = totalCostUsd(await read.snapshot(UsageDoc, conversationId, context));
+  return budgetBreach(repo, spentSince(messages, costUsd, state.budgetFrom));
 }
 
 export const lastAssistantText = (messages: readonly Message[]): string => {

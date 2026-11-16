@@ -1,3 +1,4 @@
+import type { Message } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import {
   bashViolation,
@@ -80,9 +81,17 @@ describe("budget", () => {
   });
 
   it("counts only the current run, so spend from earlier runs does not block a new one", () => {
-    const spent = { turns: 5, costUsd: 1.5 };
-    expect(budgetBreach(limits, spent)).toBeDefined();
-    expect(budgetBreach(limits, spentSince(spent, { turns: 4, costUsd: 1.2 }))).toBeUndefined();
-    expect(spentSince({ turns: 1, costUsd: 0 }, { turns: 4, costUsd: 1 })).toEqual({ turns: 0, costUsd: 0 });
+    const turn = (timestamp: number) => ({ role: "assistant", timestamp }) as Message;
+    const earlier = [turn(1), turn(2), turn(3), turn(4)];
+    expect(budgetBreach(limits, spentSince([...earlier, turn(10)], 1.5, null))).toBeDefined();
+    expect(spentSince([...earlier, turn(10)], 1.5, { at: 10, costUsd: 1 })).toEqual({ turns: 1, costUsd: 0.5 });
+  });
+
+  it("keeps counting the run's turns after compaction drops earlier ones from the context", () => {
+    const compacted = [
+      { role: "user", timestamp: 9 } as Message,
+      ...[10, 11, 12].map((timestamp) => ({ role: "assistant", timestamp }) as Message),
+    ];
+    expect(budgetBreach(limits, spentSince(compacted, 0, { at: 10, costUsd: 0 }))).toContain("turn budget exhausted");
   });
 });

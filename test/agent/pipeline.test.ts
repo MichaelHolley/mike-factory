@@ -601,6 +601,58 @@ describe("issue pipeline", () => {
       expect(git(world.remote, "ls-tree", "--name-only", "agent/issue-1")).not.toContain("broken.txt");
     });
 
+    it("keeps the reviewer through a failed round and re-requests once a later round finishes", async () => {
+      const world = createWorld({ dir, repo: { checks: ["test ! -f broken.txt"], maxFixAttempts: 1 } });
+      autopilot(world.faux, (messages) => {
+        const last = textOf(messages.at(-1));
+        if (last.includes("<review>")) return commitFile("broken.txt", "x");
+        if (last.includes("<owner-instructions>\nRemove broken.txt"))
+          return fauxAssistantMessage(
+            fauxToolCall("bash", {
+              command: "git rm -q broken.txt && git -c user.name=agent -c user.email=agent@example.com commit -qm fix",
+            }),
+            { stopReason: "toolUse" },
+          );
+        return undefined;
+      });
+      const { harness, service, pr } = await finishedRun(world);
+      const { reviewId } = world.github.addReview(REPO, pr, {
+        reviewer: "owner",
+        state: "changes_requested",
+        body: "Add broken.txt",
+        comments: [],
+      });
+
+      await service.feedback(reviewFeedback(pr, reviewId));
+      expect((await pipelineResult(harness, 1)).status).toBe("failed");
+      expect(world.github.reviewRequests).toEqual([]);
+
+      await service.start(startAction(1, "comment-2", "Remove broken.txt"));
+      expect((await pipelineResult(harness, 1)).status).toBe("completed");
+      expect(world.github.reviewRequests).toEqual([{ repo: REPO, pr, login: "owner" }]);
+    });
+
+    it("finishes the round when GitHub rejects the review re-request", async () => {
+      const world = createWorld({ dir });
+      autopilot(world.faux, (messages) =>
+        messages.some((m) => textOf(m).includes("<review>")) ? replyToReview(messages, "Answered.") : undefined,
+      );
+      const { harness, service, pr } = await finishedRun(world);
+      world.github.requestReview = () =>
+        Promise.reject(new Error("422 Reviews may only be requested from collaborators"));
+      const { reviewId } = world.github.addReview(REPO, pr, {
+        reviewer: "owner",
+        state: "commented",
+        body: "/mike",
+        comments: [{ path: "hello.txt", line: 1, body: "Why?" }],
+      });
+
+      await service.feedback(reviewFeedback(pr, reviewId));
+
+      expect((await pipelineResult(harness, 1)).status).toBe("completed");
+      expect(status(world, pr)).toContain(NO_CHANGES_STATUS);
+    });
+
     it("re-requests the review again when feedback arrives while a round reports", async () => {
       const world = createWorld({ dir });
       autopilot(world.faux, (messages) =>
@@ -920,6 +972,17 @@ describe("issue pipeline", () => {
     expect(world.github.commentsOn(REPO, 1)[0]!.body).toContain("turn budget exhausted");
     expect(world.faux.state.callCount).toBeLessThanOrEqual(4);
     expect(status(world)).toContain("could not finish");
+  });
+
+  it("gives a follow-up run its own turn budget", async () => {
+    const world = createWorld({ dir, repo: { maxTurns: 3 } });
+    autopilot(world.faux);
+    const { harness, service } = await launch(world);
+    await service.start(startAction(1, "comment-1"));
+    expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+    await service.start(startAction(1, "comment-2", "again"));
+    expect((await pipelineResult(harness, 1)).status).toBe("completed");
   });
 
   it("fails the pipeline when the cost budget is exhausted", async () => {

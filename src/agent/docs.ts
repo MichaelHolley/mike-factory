@@ -1,6 +1,7 @@
 import { defineDoc, defineDocFamily, type ConversationId } from "@earendil-works/pi-durable";
 import type { ReviewFeedback } from "../contracts.ts";
 import type { IssuePhase } from "../runStatus.ts";
+import type { RunStart } from "./extensions/guards.ts";
 
 export type { IssuePhase };
 
@@ -45,7 +46,7 @@ export type IssueStateValue = {
   /** `pushedHead` when the run started, so a head equal to it means the run has nothing new to verify or push. */
   startHead?: string | null;
   /** Conversation spend when the run started, so budgets count per run. */
-  budgetFrom?: { turns: number; costUsd: number } | null;
+  budgetFrom?: RunStart | null;
 };
 
 export const IssueState = defineDoc<IssueStateValue>({
