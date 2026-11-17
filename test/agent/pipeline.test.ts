@@ -1166,6 +1166,25 @@ describe("issue pipeline", () => {
     expect((await service.status())[0]?.prMerged).toBe(true);
   });
 
+  it("opens a follow-up PR after a merge as unmerged", async () => {
+    const world = createWorld({ dir });
+    autopilot(world.faux, (messages) =>
+      textOf(messages.at(-1)).includes("also add more") ? commitFile("more.txt", "more") : undefined,
+    );
+    const { harness, service } = await launch(world);
+    await service.start(startAction(1, "comment-1"));
+    await pipelineResult(harness, 1);
+    world.github.prs[0]!.state = "closed";
+    git(world.remote, "branch", "-D", "mike/1-add-hello");
+    await service.cleanup({ kind: "cleanup", repo: REPO, issue: 1, branch: "mike/1-add-hello", merged: true });
+
+    await service.start(startAction(1, "comment-2", "also add more"));
+    expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+    expect(world.github.prs).toHaveLength(2);
+    expect((await service.status())[0]).toMatchObject({ prUrl: world.github.prs[1]!.url, prMerged: false });
+  });
+
   it("sweeps only the worktrees of closed issues", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux);
