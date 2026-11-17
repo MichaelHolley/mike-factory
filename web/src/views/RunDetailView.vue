@@ -124,8 +124,11 @@ const duration = computed(() => {
         >{{ run.lastError }}</pre>
     </section>
 
-    <ConversationLog :repo="run.repo" :issue="String(run.issue)" />
-    <MessageComposer :repo="run.repo" :issue="String(run.issue)" :phase="run.phase" />
+    <!-- Scope the desktop sticky composer to the conversation, below the run details. -->
+    <div class="flow-root">
+      <ConversationLog :repo="run.repo" :issue="String(run.issue)" />
+      <MessageComposer :repo="run.repo" :issue="String(run.issue)" :phase="run.phase" />
+    </div>
   </template>
   <EmptyState v-else-if="loaded && !error" :icon="SearchX">
     No run found for {{ route.params.repo }} #{{ route.params.issue }}. It may not have started yet.
