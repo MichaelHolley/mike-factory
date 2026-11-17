@@ -50,7 +50,7 @@ Run the Docker image behind a reverse proxy; the app listens on port 3000 and ha
 - Set `PUBLIC_URL` to the public URL so status comments link to the run page.
 - `config/repos.yaml` is baked into the image; rebuild it, or mount the file and point `REPOS_CONFIG` at it.
 
-Run it as two services: the server, which holds the secrets, and a runner, where the agent's tools and its git commands run over SSH. Give secrets to the server only. With Traefik on an external `proxy` network:
+Run it as two services: the server, which holds the secrets, and a runner, where the agent's tools and its git commands run over SSH. Give secrets to the server only. The shared image includes ripgrep (`rg`) for repository searches. With Traefik on an external `proxy` network:
 
 ```yaml
 services:

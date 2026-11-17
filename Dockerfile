@@ -25,7 +25,7 @@ RUN pnpm install --frozen-lockfile --prod --filter mike-factory
 
 FROM base AS runtime
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates openssh-server openssh-client \
+ && apt-get install -y --no-install-recommends git ca-certificates openssh-server openssh-client ripgrep \
  && rm -rf /var/lib/apt/lists/* /etc/ssh/ssh_host_* \
  && useradd --uid 10001 --create-home --shell /bin/bash agent \
  && mkdir /data /mirrors /ssh \
