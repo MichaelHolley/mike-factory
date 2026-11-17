@@ -16,7 +16,7 @@ const config: AppConfig = {
     {
       name: "byok-imagen",
       defaultBranch: "main",
-      model: { provider: "openrouter", modelId: "openai/gpt-6.1-sol" },
+      model: { provider: "openrouter", modelId: "openai/gpt-6.2-sol" },
       maxTurns: 10,
       maxCostUsd: 1,
       thinkingLevel: "high",

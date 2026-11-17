@@ -21,7 +21,7 @@ function run(
     phase,
     attempts: 1,
     costUsd: 0.42,
-    model: "gpt-6.1-sol",
+    model: "gpt-6.2-sol",
     thinkingLevel: "high",
     prUrl: null,
     lastError: null,
