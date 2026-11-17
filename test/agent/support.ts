@@ -152,12 +152,11 @@ export function createWorld(opts: {
   return { dir: opts.dir, remote, remotes, github: fake, config, repo, faux, models, deps, logs };
 }
 
-export const textOf = (message: Message | undefined) =>
-  message?.role === "user"
-    ? typeof message.content === "string"
-      ? message.content
-      : message.content.map((part) => (part.type === "text" ? part.text : "")).join("")
-    : "";
+export function textOf(message: Message | undefined) {
+  if (message?.role !== "user") return "";
+  if (typeof message.content === "string") return message.content;
+  return message.content.map((part) => (part.type === "text" ? part.text : "")).join("");
+}
 
 /**
  * A model that never runs out of responses, so a restarted process can keep going. It commits hello.txt for a task,

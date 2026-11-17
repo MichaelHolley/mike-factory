@@ -20,6 +20,10 @@ let id = crypto.randomUUID();
 watch(text, () => (id = crypto.randomUUID()));
 
 const finished = computed(() => FINISHED.includes(props.phase));
+const sendLabel = computed(() => {
+  if (sending.value) return "Sending message";
+  return finished.value ? "Continue run" : "Steer agent";
+});
 const canSend = computed(() => !sending.value && text.value.trim() !== "" && text.value.length <= MAX_CHARS);
 
 async function send() {
@@ -78,7 +82,7 @@ async function send() {
           :disabled="!canSend"
           focusable-when-disabled
           :aria-busy="sending"
-          :aria-label="sending ? 'Sending message' : finished ? 'Continue run' : 'Steer agent'"
+          :aria-label="sendLabel"
           class="ml-auto size-10 flex-none rounded-full border-0 bg-run p-0 text-surface hover:bg-run/90 sm:ml-0"
         >
           <component

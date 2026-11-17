@@ -43,9 +43,9 @@ export function pipelineSteps(phase: IssuePhase): { name: IssuePhase; state: Ste
   const outcome = OUTCOMES.includes(phase) ? phase : "done";
   const current = OUTCOMES.includes(phase) ? FLOW.length : (FLOW as readonly IssuePhase[]).indexOf(phase);
   // A failed or aborted run doesn't record where it stopped, so earlier steps can't be shown as passed.
-  const reached = phase === "done" ? current : phase === "failed" || phase === "aborted" ? 0 : current;
-  return [...FLOW, outcome].map((name, i) => ({
-    name,
-    state: i === current ? "current" : i < reached ? "passed" : "pending",
-  }));
+  const reached = phase === "failed" || phase === "aborted" ? 0 : current;
+  return [...FLOW, outcome].map((name, i) => {
+    if (i === current) return { name, state: "current" };
+    return { name, state: i < reached ? "passed" : "pending" };
+  });
 }

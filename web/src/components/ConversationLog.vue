@@ -85,7 +85,10 @@ const speaker = (entry: Entry) => (entry.kind === "tools" ? "assistant" : entry.
 const startsTurn = (index: number) =>
   index === 0 || speaker(entries.value[index - 1]!) !== speaker(entries.value[index]!);
 
-const tone = (call: Call) => (call.result ? (call.result.isError ? "bg-bad" : "bg-muted/55") : "bg-run");
+const tone = (call: Call) => {
+  if (!call.result) return "bg-run";
+  return call.result.isError ? "bg-bad" : "bg-muted/55";
+};
 
 const SAY = "col-2 min-w-0 max-sm:col-1";
 const WHO: Record<Message["kind"], string> = { user: "pt-3.5 text-muted", assistant: "", human: "pt-2.5 text-you" };

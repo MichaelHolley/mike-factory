@@ -571,11 +571,8 @@ export function createIssuePipeline(deps: PipelineDeps) {
         const costUsd = await spentCostUsd(rt, context);
         const unchanged =
           state?.startHead != null && (await worktrees.headSha(repo, issue, state.branch)) === state.startHead;
-        const headline = state?.statusOn
-          ? unchanged
-            ? NO_CHANGES_STATUS
-            : "Done. Pushed the changes."
-          : `Pull request: ${prUrl}`;
+        let headline = `Pull request: ${prUrl}`;
+        if (state?.statusOn) headline = unchanged ? NO_CHANGES_STATUS : "Done. Pushed the changes.";
         await upsertStatus(
           deps,
           { repo, issue, statusOn: state?.statusOn },
