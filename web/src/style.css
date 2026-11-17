@@ -11,6 +11,7 @@
   --color-chrome: #18212b;
   --color-chrome-ink: #e9edf1;
   --color-run: #2447f5;
+  --color-focus: #2447f5;
   --color-ok: #22c27a;
   --color-bad: #ff5650;
   --color-halt: #6e6a86;
@@ -40,6 +41,7 @@
     --color-line: #2c333d;
     --color-chrome: #0e1216;
     --color-run: #6e8bff;
+    --color-focus: #6e8bff;
     --color-ok: #2fd98a;
     --color-bad: #ff5650;
     --color-halt: #a9a3c9;
@@ -75,7 +77,7 @@
   }
 
   :focus-visible {
-    @apply rounded-xs outline-2 outline-offset-2 outline-run;
+    @apply rounded-xs outline-2 outline-offset-2 outline-focus;
   }
 
   code,
@@ -98,8 +100,8 @@
   --ui-primary: var(--color-run);
   --ui-primary-foreground: var(--color-surface);
   --ui-destructive: var(--color-bad);
-  --ui-ring: var(--color-run);
-  --ui-ring-border: var(--color-run);
+  --ui-ring: var(--color-focus);
+  --ui-ring-border: var(--color-focus);
   --ui-radius: 0.25rem;
   --ui-font-size: 0.875rem;
   --ui-font-sans: var(--font-sans);

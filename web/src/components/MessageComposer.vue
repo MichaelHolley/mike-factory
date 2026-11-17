@@ -45,7 +45,7 @@ async function send() {
 
 <template>
   <form
-    class="relative z-10 mt-5 rounded-xl border border-line bg-surface shadow-sm focus-within:border-run focus-within:ring-2 focus-within:ring-run/15 md:sticky md:bottom-4"
+    class="relative z-10 mt-5 rounded-xl border border-line bg-surface shadow-sm focus-within:border-focus focus-within:ring-2 focus-within:ring-focus/15 md:sticky md:bottom-4"
     @submit.prevent="send"
   >
     <Field class="gap-0">
