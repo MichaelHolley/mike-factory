@@ -12,7 +12,7 @@ defineProps<{ run: RunStatus; now: number }>();
 
 <template>
   <li
-    class="relative grid grid-cols-[minmax(0,16rem)_minmax(0,1fr)_8rem_6rem] items-center gap-6 py-4 pr-5 pl-6 hover:bg-run/4 not-first:border-t not-first:border-line max-md:grid-cols-[minmax(0,1fr)_auto] max-md:gap-x-4 max-md:gap-y-2"
+    class="relative grid grid-cols-[minmax(0,16rem)_minmax(0,1fr)_8rem_1.75rem_4.5rem] items-center gap-6 py-4 pr-5 pl-6 hover:bg-run/4 not-first:border-t not-first:border-line max-md:grid-cols-[minmax(0,1fr)_auto_auto] max-md:gap-x-4 max-md:gap-y-2"
   >
     <span class="absolute inset-y-0 left-0 w-0.75 bg-current" :class="stepLook[run.phase].hue" aria-hidden="true" />
     <RouterLink
@@ -26,17 +26,16 @@ defineProps<{ run: RunStatus; now: number }>();
     </RouterLink>
     <span class="truncate max-md:col-span-full" :title="run.title ?? undefined">{{ run.title }}</span>
     <PhaseBadge :phase="run.phase" />
-    <span class="flex items-center justify-end gap-2 text-sm whitespace-nowrap text-muted tabular-nums">
-      <IconButton
-        v-if="run.prUrl"
-        :href="run.prUrl"
-        :icon="GitPullRequest"
-        label="Open pull request"
-        target="_blank"
-        rel="noopener"
-        class="relative z-1 -my-1"
-      />
-      {{ timeAgo(run.updatedAt, now) }}
-    </span>
+    <IconButton
+      v-if="run.prUrl"
+      :href="run.prUrl"
+      :icon="GitPullRequest"
+      label="Open pull request"
+      target="_blank"
+      rel="noopener"
+      class="relative z-1 -my-1 justify-self-center"
+    />
+    <span v-else class="justify-self-center text-muted">-</span>
+    <span class="text-right text-sm whitespace-nowrap text-muted tabular-nums">{{ timeAgo(run.updatedAt, now) }}</span>
   </li>
 </template>
