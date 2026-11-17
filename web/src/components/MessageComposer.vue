@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Command, CornerDownLeft, LoaderCircle, Play, Send } from "@lucide/vue";
+import { ArrowUp, Command, CornerDownLeft, LoaderCircle } from "@lucide/vue";
 import { Button } from "@ui-sdk/vue/button";
 import { Field, FieldDescription, FieldLabel } from "@ui-sdk/vue/field";
 import { Textarea } from "@ui-sdk/vue/textarea";
@@ -19,7 +19,6 @@ let id = crypto.randomUUID();
 watch(text, () => (id = crypto.randomUUID()));
 
 const finished = computed(() => FINISHED.includes(props.phase));
-const submitIcon = computed(() => (sending.value ? LoaderCircle : finished.value ? Play : Send));
 const canSend = computed(() => !sending.value && text.value.trim() !== "" && text.value.length <= MAX_CHARS);
 
 async function send() {
@@ -74,15 +73,15 @@ async function send() {
           :disabled="!canSend"
           focusable-when-disabled
           :aria-busy="sending"
-          class="min-h-10 gap-2 rounded-lg border-0 bg-run px-4 text-sm font-semibold text-surface hover:bg-run/90"
+          :aria-label="sending ? 'Sending message' : finished ? 'Continue run' : 'Steer agent'"
+          class="size-10 flex-none rounded-full border-0 bg-run p-0 text-surface hover:bg-run/90"
         >
           <component
-            :is="submitIcon"
-            class="size-4"
+            :is="sending ? LoaderCircle : ArrowUp"
+            class="size-5"
             :class="sending && 'animate-spin motion-reduce:animate-none'"
             aria-hidden="true"
           />
-          {{ sending ? "Sending…" : finished ? "Continue" : "Steer" }}
         </Button>
       </div>
     </Field>
