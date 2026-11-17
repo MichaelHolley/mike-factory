@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ToolResultEntry, MemoryStorage, type Harness } from "@earendil-works/pi-durable";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
+import type { UserMessage } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HUMAN_ENTRY } from "../../src/agent/docs.ts";
 import { openAgentHarness } from "../../src/agent/harness.ts";
@@ -126,6 +127,44 @@ describe("issue pipeline", () => {
     expect(comments[0]!.body).toMatch(/Cost: \$\d+\.\d{4}/);
     const state = await issueStateOf(harness, 1);
     expect(state).toMatchObject({ phase: "done", prUrl: pr.url, branch: "mike/1-add-hello" });
+  });
+
+  it("sends images from the issue body and comments in the implement message", async () => {
+    const world = createWorld({ dir });
+    let implement: UserMessage | undefined;
+    autopilot(world.faux, (messages) => {
+      implement ??= messages.find(
+        (message): message is UserMessage =>
+          message.role === "user" && textOf(message).startsWith("Implement GitHub issue"),
+      );
+      return undefined;
+    });
+    const { harness, service } = await launch(world);
+    const bodyImage = "https://github.com/user-attachments/assets/body";
+    const commentImage = "https://user-images.githubusercontent.com/123/comment.png";
+    world.github.addIssue(REPO, {
+      number: 1,
+      title: "Add hello",
+      body: `Use this screenshot: ![Reference](${bodyImage})`,
+    });
+    world.github.addComment(REPO, 1, "owner", `<img src="${commentImage}" width="400">`);
+    const images = [
+      { mimeType: "image/png", data: "Ym9keSBpbWFnZQ==" },
+      { mimeType: "image/webp", data: "Y29tbWVudCBpbWFnZQ==" },
+    ];
+    world.github.addIssueImage(bodyImage, { ok: true, image: images[0]! });
+    world.github.addIssueImage(commentImage, { ok: true, image: images[1]! });
+
+    await service.start(startAction(1, "comment-1"));
+    expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+    expect(implement?.content).toEqual([
+      { type: "text", text: expect.stringContaining(`![Reference](${bodyImage})`) },
+      ...images.map((image) => ({ type: "image", ...image })),
+    ]);
+    expect(textOf(implement)).toContain(`${bodyImage}: attached as image 1.`);
+    expect(textOf(implement)).toContain(`${commentImage}: attached as image 2.`);
+    expect(world.github.callCount("downloadIssueImage")).toBe(2);
   });
 
   it("opens the PR with the drafted title and body", async () => {

@@ -72,6 +72,7 @@ function persisted(github: FakeGitHub, file: string): FakeGitHub {
 const FAKE_CLIENT_METHODS: Record<keyof GitHubClient, true> = {
   getIssue: true,
   listIssueComments: true,
+  downloadIssueImage: true,
   upsertComment: true,
   findOpenPr: true,
   createPr: true,
