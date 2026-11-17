@@ -71,11 +71,14 @@ describe("verifyWebhook", () => {
     expect(parseCommand(body)).toEqual(expected);
   });
 
-  const closedPr = (overrides: { action?: string; ref?: string; headRepo?: string; repo?: string } = {}) => {
+  const closedPr = (
+    overrides: { action?: string; ref?: string; headRepo?: string; repo?: string; merged?: boolean } = {},
+  ) => {
     const repo = overrides.repo ?? "byok-imagen";
     return {
       action: overrides.action ?? "closed",
       pull_request: {
+        merged: overrides.merged ?? false,
         head: {
           ref: overrides.ref ?? "agent/issue-12",
           repo: { full_name: overrides.headRepo ?? `MichaelHolley/${repo}` },
@@ -91,7 +94,12 @@ describe("verifyWebhook", () => {
       repo: "byok-imagen",
       issue: 12,
       branch: ref,
+      merged: false,
     });
+  });
+
+  it("marks the cleanup of a merged agent PR as merged", async () => {
+    expect(await run(closedPr({ merged: true }), { event: "pull_request" })).toMatchObject({ merged: true });
   });
 
   it.each([

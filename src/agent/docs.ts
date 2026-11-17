@@ -25,6 +25,7 @@ export type IssueStateValue = {
   phase: IssuePhase;
   attempts: number;
   prUrl: string | null;
+  prMerged?: boolean;
   costUsd: number;
   lastError: string | null;
   pipelineTaskId: number | null;
@@ -64,6 +65,7 @@ export const IssueState = defineDoc<IssueStateValue>({
     phase: "prepare",
     attempts: 0,
     prUrl: null,
+    prMerged: false,
     costUsd: 0,
     lastError: null,
     pipelineTaskId: null,

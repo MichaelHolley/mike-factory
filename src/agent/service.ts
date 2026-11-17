@@ -304,10 +304,17 @@ export function createIssueService(opts: {
         log("pipeline abort requested", { key, outcome });
       }),
 
-    cleanup: ({ repo, issue, branch }) =>
+    cleanup: ({ repo, issue, branch, merged }) =>
       mutex.run(async () => {
-        const { key, state } = await lookup(repo, issue);
+        const { key, conversationId, state } = await lookup(repo, issue);
         if (state?.branch !== branch) return log("cleanup ignored: not the issue's agent branch", { key, branch });
+        const conversation = merged && conversationId && (await harness.conversation(conversationId, context));
+        if (conversation) {
+          await conversation.commit(async (tx) => {
+            (await tx.doc(IssueState, conversation.id)).prMerged = true;
+          }, context);
+          log("pull request merged", { key });
+        }
         await cleanup(repo, issue);
       }),
 
@@ -350,6 +357,7 @@ export function createIssueService(opts: {
             model: agent?.model?.modelId ?? null,
             thinkingLevel: agent?.thinkingLevel ?? null,
             prUrl: state.prUrl,
+            prMerged: state.prMerged ?? false,
             lastError: state.lastError,
             startedAt: state.startedAt ?? null,
             updatedAt: state.updatedAt ?? null,

@@ -100,7 +100,9 @@ const duration = computed(() => {
           <OutboundLink :href="run.issueUrl">#{{ run.issue }}</OutboundLink>
         </Fact>
         <Fact :icon="GitPullRequest" label="Pull request">
-          <OutboundLink v-if="run.prUrl" :href="run.prUrl"> #{{ run.prUrl.split("/").pop() }} </OutboundLink>
+          <OutboundLink v-if="run.prUrl" :href="run.prUrl" :class="{ 'text-merged': run.prMerged }">
+            #{{ run.prUrl.split("/").pop() }}
+          </OutboundLink>
           <span v-else class="text-muted">Not opened yet</span>
         </Fact>
         <Fact :icon="GitBranch" label="Branch">

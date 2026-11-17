@@ -155,7 +155,7 @@ export type WebhookAction =
   | { kind: "start"; repo: string; issue: number; requestId: string; instructions: string }
   | { kind: "stop"; repo: string; issue: number; requestId: string }
   /** An agent PR was merged or closed. */
-  | { kind: "cleanup"; repo: string; issue: number; branch: string }
+  | { kind: "cleanup"; repo: string; issue: number; branch: string; merged: boolean }
   /**
    * Owner feedback on an agent PR. `id` is `review-<reviewId>` for a review and its inline comments, so one review is
    * one trigger, or `pr-comment-<id>` for a conversation comment. `nodeId` is the triggering object, for the reaction.
@@ -196,7 +196,10 @@ export interface IssueService {
     id: string;
     text: string;
   }): Promise<"steered" | "started" | "not_found">;
-  /** Removes the issue's worktree and local branch unless a pipeline is still running for it. */
+  /**
+   * Records a merged PR on the run, then removes the issue's worktree and local branch unless a pipeline is still
+   * running for it.
+   */
   cleanup(action: Extract<WebhookAction, { kind: "cleanup" }>): Promise<void>;
   /** Removes worktrees and branches of closed issues, then prunes every repo. */
   sweep(): Promise<void>;

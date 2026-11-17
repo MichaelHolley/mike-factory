@@ -4,7 +4,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@ui-sdk/vue/tooltip";
 import type { Component } from "vue";
 
 defineOptions({ inheritAttrs: false });
-defineProps<{ icon: Component; label: string; href?: string; tone?: "chrome" }>();
+const TONES = {
+  default: "text-muted hover:bg-ink/6 hover:text-ink",
+  chrome: "text-chrome-ink/80 hover:bg-chrome-ink/10 hover:text-chrome-ink",
+  merged: "text-merged hover:bg-merged/10",
+};
+
+defineProps<{ icon: Component; label: string; href?: string; tone?: keyof typeof TONES }>();
 </script>
 
 <template>
@@ -14,11 +20,7 @@ defineProps<{ icon: Component; label: string; href?: string; tone?: "chrome" }>(
         <Button
           v-bind="trigger"
           class="inline-grid size-7 flex-none place-items-center border-0 bg-transparent p-0 no-underline"
-          :class="
-            tone === 'chrome'
-              ? 'text-chrome-ink/80 hover:bg-chrome-ink/10 hover:text-chrome-ink'
-              : 'text-muted hover:bg-ink/6 hover:text-ink'
-          "
+          :class="TONES[tone ?? 'default']"
         >
           <template v-if="href" #render="{ props: button, children }">
             <a v-bind="button" :href><component :is="children" /></a>
