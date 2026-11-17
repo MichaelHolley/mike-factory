@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Command, CornerDownLeft, LoaderCircle, Play, Send } from "@lucide/vue";
+import { ArrowUp, Command, CornerDownLeft, LoaderCircle } from "@lucide/vue";
 import { Button } from "@ui-sdk/vue/button";
 import { Field, FieldDescription, FieldLabel } from "@ui-sdk/vue/field";
 import { Textarea } from "@ui-sdk/vue/textarea";
@@ -19,7 +19,6 @@ let id = crypto.randomUUID();
 watch(text, () => (id = crypto.randomUUID()));
 
 const finished = computed(() => FINISHED.includes(props.phase));
-const submitIcon = computed(() => (sending.value ? LoaderCircle : finished.value ? Play : Send));
 const canSend = computed(() => !sending.value && text.value.trim() !== "" && text.value.length <= MAX_CHARS);
 
 async function send() {
@@ -44,24 +43,27 @@ async function send() {
 </script>
 
 <template>
-  <form class="mt-4 rounded-md border border-line bg-surface px-5 py-4" @submit.prevent="send">
-    <Field class="gap-2">
-      <FieldLabel class="text-sm font-semibold text-muted">
-        {{ finished ? "Continue this run with a follow-up" : "Steer the agent while it works" }}
-      </FieldLabel>
+  <form
+    class="relative z-10 mt-5 rounded-xl border border-line bg-surface shadow-sm focus-within:border-run focus-within:ring-2 focus-within:ring-run/15 md:sticky md:bottom-4"
+    @submit.prevent="send"
+  >
+    <Field class="gap-0">
       <Textarea
         v-model:value="text"
         auto-resize
         submit-shortcut="mod+enter"
-        class="max-h-80 min-h-18 resize-none bg-bg px-3 py-2.5 text-base leading-normal disabled:opacity-60"
-        rows="3"
+        class="max-h-64 min-h-24 resize-none rounded-none border-0 bg-transparent px-4 pt-4 pb-2 text-base leading-relaxed shadow-none focus-visible:outline-none disabled:opacity-60"
+        rows="2"
         :maxlength="MAX_CHARS"
         :disabled="sending"
         placeholder="Message the agent…"
       />
-      <div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
-        <p v-if="error" class="mr-auto text-sm text-bad wrap-anywhere" role="alert">Couldn't send: {{ error }}</p>
-        <FieldDescription class="flex items-center gap-1 text-xs text-muted">
+      <p v-if="error" class="px-4 pb-3 text-sm text-bad wrap-anywhere" role="alert">Couldn't send: {{ error }}</p>
+      <div class="flex flex-wrap items-center justify-between gap-3 px-4 pb-3">
+        <FieldLabel class="sr-only sm:not-sr-only sm:text-xs sm:font-medium sm:text-muted">
+          {{ finished ? "Continue this run with a follow-up" : "Steer the agent while it works" }}
+        </FieldLabel>
+        <FieldDescription class="flex items-center gap-1 text-xs text-muted sm:ml-auto">
           <span class="sr-only">Send with Command or Control plus Enter</span>
           <Command class="size-3" aria-hidden="true" /><span aria-hidden="true">/ Ctrl +</span
           ><CornerDownLeft class="size-3" aria-hidden="true" />
@@ -70,15 +72,16 @@ async function send() {
           type="submit"
           :disabled="!canSend"
           focusable-when-disabled
-          class="min-h-9 gap-2 border-0 bg-run px-4.5 text-base font-semibold text-surface"
+          :aria-busy="sending"
+          :aria-label="sending ? 'Sending message' : finished ? 'Continue run' : 'Steer agent'"
+          class="size-10 flex-none rounded-full border-0 bg-run p-0 text-surface hover:bg-run/90"
         >
           <component
-            :is="submitIcon"
-            class="size-4"
+            :is="sending ? LoaderCircle : ArrowUp"
+            class="size-5"
             :class="sending && 'animate-spin motion-reduce:animate-none'"
             aria-hidden="true"
           />
-          {{ sending ? "Sending…" : finished ? "Continue" : "Steer" }}
         </Button>
       </div>
     </Field>
