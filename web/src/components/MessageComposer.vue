@@ -5,6 +5,7 @@ import { Field, FieldDescription, FieldLabel } from "@ui-sdk/vue/field";
 import { Textarea } from "@ui-sdk/vue/textarea";
 import { computed, ref, watch } from "vue";
 import type { IssuePhase } from "../../../src/runStatus.ts";
+import PhaseBadge from "./PhaseBadge.vue";
 
 const MAX_CHARS = 8000;
 const FINISHED: readonly IssuePhase[] = ["done", "failed", "aborted"];
@@ -60,10 +61,14 @@ async function send() {
       />
       <p v-if="error" class="px-4 pb-3 text-sm text-bad wrap-anywhere" role="alert">Couldn't send: {{ error }}</p>
       <div class="flex flex-wrap items-center justify-between gap-3 px-4 pb-3">
-        <FieldLabel class="sr-only sm:not-sr-only sm:text-xs sm:font-medium sm:text-muted">
+        <FieldLabel class="sr-only">
           {{ finished ? "Continue this run with a follow-up" : "Steer the agent while it works" }}
         </FieldLabel>
-        <FieldDescription class="flex items-center gap-1 text-xs text-muted sm:ml-auto">
+        <div role="status" aria-atomic="true">
+          <span class="sr-only">Current pipeline phase: </span>
+          <PhaseBadge :phase="phase" />
+        </div>
+        <FieldDescription class="sr-only items-center gap-1 text-xs text-muted sm:not-sr-only sm:ml-auto sm:flex">
           <span class="sr-only">Send with Command or Control plus Enter</span>
           <Command class="size-3" aria-hidden="true" /><span aria-hidden="true">/ Ctrl +</span
           ><CornerDownLeft class="size-3" aria-hidden="true" />
@@ -74,7 +79,7 @@ async function send() {
           focusable-when-disabled
           :aria-busy="sending"
           :aria-label="sending ? 'Sending message' : finished ? 'Continue run' : 'Steer agent'"
-          class="size-10 flex-none rounded-full border-0 bg-run p-0 text-surface hover:bg-run/90"
+          class="ml-auto size-10 flex-none rounded-full border-0 bg-run p-0 text-surface hover:bg-run/90 sm:ml-0"
         >
           <component
             :is="sending ? LoaderCircle : ArrowUp"
