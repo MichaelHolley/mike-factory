@@ -158,6 +158,7 @@ describe("webhook server", () => {
       model: null,
       thinkingLevel: null,
       prUrl: null,
+      prMerged: false,
       lastError: null,
       startedAt: null,
       updatedAt: null,

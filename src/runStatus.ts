@@ -52,6 +52,7 @@ export type RunStatus = {
   model: string | null;
   thinkingLevel: string | null;
   prUrl: string | null;
+  prMerged: boolean;
   lastError: string | null;
   startedAt: string | null;
   updatedAt: string | null;

@@ -4,7 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@ui-sdk/vue/tooltip";
 import type { Component } from "vue";
 
 defineOptions({ inheritAttrs: false });
-defineProps<{ icon: Component; label: string; href?: string; tone?: "chrome" }>();
+defineProps<{ icon: Component; label: string; href?: string; tone?: "chrome" | "merged" }>();
 </script>
 
 <template>
@@ -17,7 +17,9 @@ defineProps<{ icon: Component; label: string; href?: string; tone?: "chrome" }>(
           :class="
             tone === 'chrome'
               ? 'text-chrome-ink/80 hover:bg-chrome-ink/10 hover:text-chrome-ink'
-              : 'text-muted hover:bg-ink/6 hover:text-ink'
+              : tone === 'merged'
+                ? 'text-merged hover:bg-merged/10'
+                : 'text-muted hover:bg-ink/6 hover:text-ink'
           "
         >
           <template v-if="href" #render="{ props: button, children }">

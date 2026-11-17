@@ -546,7 +546,12 @@ export function createIssuePipeline(deps: PipelineDeps) {
           rt,
           context,
           { phase: "report", prUrl: pr.url },
-          { prUrl: pr.url, prNumber: pr.number, pushedHead: await worktrees.headSha(repo, issue, head) },
+          {
+            prUrl: pr.url,
+            prMerged: false,
+            prNumber: pr.number,
+            pushedHead: await worktrees.headSha(repo, issue, head),
+          },
         );
       }),
 

@@ -24,6 +24,7 @@ function run(
     model: "gpt-6.1-sol",
     thinkingLevel: "high",
     prUrl: null,
+    prMerged: false,
     lastError: null,
     startedAt: ago(30),
     updatedAt: ago(1),
@@ -160,6 +161,7 @@ function createMockService(): IssueService {
     }),
     run("web-shop", 9, "Show delivery estimates on the product page", "done", {
       prUrl: "https://github.com/example/web-shop/pull/14",
+      prMerged: true,
       startedAt: ago(180),
       updatedAt: ago(150),
       costUsd: 2.31,

@@ -248,6 +248,7 @@ describe("issue pipeline", () => {
       model: "faux-1",
       thinkingLevel: "high",
       prUrl: world.github.prs[0]!.url,
+      prMerged: false,
       lastError: null,
       startedAt: done!.startedAt,
       updatedAt: done!.updatedAt,
@@ -1154,13 +1155,15 @@ describe("issue pipeline", () => {
     await service.start(startAction(1, "comment-1"));
     await pipelineResult(harness, 1);
 
-    await service.cleanup({ kind: "cleanup", repo: REPO, issue: 1, branch: "mike/1-other-work" });
+    await service.cleanup({ kind: "cleanup", repo: REPO, issue: 1, branch: "mike/1-other-work", merged: true });
     expect(existsSync(world.deps.worktrees.worktreePath(REPO, 1))).toBe(true);
+    expect((await issueStateOf(harness, 1))?.prMerged).toBe(false);
 
-    await service.cleanup({ kind: "cleanup", repo: REPO, issue: 1, branch: "mike/1-add-hello" });
+    await service.cleanup({ kind: "cleanup", repo: REPO, issue: 1, branch: "mike/1-add-hello", merged: true });
 
     expect(existsSync(world.deps.worktrees.worktreePath(REPO, 1))).toBe(false);
     expect(await world.deps.worktrees.issues(REPO)).toEqual([]);
+    expect((await service.status())[0]?.prMerged).toBe(true);
   });
 
   it("sweeps only the worktrees of closed issues", async () => {

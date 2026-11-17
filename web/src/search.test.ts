@@ -15,6 +15,7 @@ function run(repo: string, issue: number, fields: Partial<RunStatus> = {}): RunS
     model: null,
     thinkingLevel: null,
     prUrl: null,
+    prMerged: false,
     lastError: null,
     startedAt: null,
     updatedAt: null,
