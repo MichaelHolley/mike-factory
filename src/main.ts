@@ -19,9 +19,23 @@ import { takeSecrets } from "./secrets.ts";
 
 const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_BRANCH_MODEL = "openai/gpt-6-luna";
+const GPT_6_2_SOL = "openai/gpt-6.2-sol";
 
 const log = (msg: string, data: object = {}) =>
   console.log(JSON.stringify({ time: new Date().toISOString(), msg, ...data }));
+
+// pi-ai's bundled catalog predates gpt-6.2-sol; it reuses gpt-6.1-sol's limits and prices until pi-ai ships it.
+function withGpt62Sol(provider: ReturnType<typeof openrouterProvider>): ReturnType<typeof openrouterProvider> {
+  const known = provider.getModels();
+  const base = known.find((model) => model.id === "openai/gpt-6.1-sol");
+  if (!base || known.some((model) => model.id === GPT_6_2_SOL)) return provider;
+  const added = { ...base, id: GPT_6_2_SOL, name: "OpenAI: GPT-6.2 Sol" };
+  return {
+    ...provider,
+    getModels: () => [...known, added],
+    getAllModels: () => [...(provider.getAllModels?.() ?? known), added],
+  };
+}
 
 function buildModels(openrouterApiKey: string | undefined, useFaux: boolean) {
   if (useFaux) {
@@ -39,7 +53,7 @@ function buildModels(openrouterApiKey: string | undefined, useFaux: boolean) {
       fileExists: async () => false,
     },
   });
-  models.setProvider(openrouterProvider());
+  models.setProvider(withGpt62Sol(openrouterProvider()));
   return { models, model: undefined };
 }
 
