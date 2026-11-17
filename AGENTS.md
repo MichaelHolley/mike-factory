@@ -29,6 +29,7 @@ Self-hosted agent that turns a `/mike` comment on a GitHub issue into a pull req
 ## Tests
 
 - Unit tests sit next to the source as `*.test.ts`.
+- Never test the web app's Vue components. Test its plain `.ts` modules only, and only when critical.
 - Pipeline tests live in `test/agent/` and use `support.ts` (`FakeGitHub`, faux model, local git remotes).
 - A guard change needs a case in `test/agent/guards.test.ts`.
 - Test real behavior, not mocks: a test that only checks what a mock returns, or a test for a test fake, adds nothing.
