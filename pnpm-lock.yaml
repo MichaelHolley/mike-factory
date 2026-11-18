@@ -64,11 +64,11 @@ importers:
         specifier: 1.73.0
         version: 1.73.0(vue@3.5.45(typescript@6.0.3))
       '@ui-sdk/core':
-        specifier: 0.1.0-beta.3
-        version: 0.1.0-beta.3
+        specifier: 0.1.0-beta.4
+        version: 0.1.0-beta.4
       '@ui-sdk/vue':
-        specifier: 0.1.0-beta.3
-        version: 0.1.0-beta.3(@ui-sdk/core@0.1.0-beta.3)(vue@3.5.45(typescript@6.0.3))
+        specifier: 0.1.0-beta.4
+        version: 0.1.0-beta.4(@ui-sdk/core@0.1.0-beta.4)(vue@3.5.45(typescript@6.0.3))
       markdown-it:
         specifier: 15.0.3
         version: 15.0.3
@@ -1222,15 +1222,15 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@ui-sdk/core@0.1.0-beta.3':
-    resolution: {integrity: sha512-K2cMLsxY2jgX7Eu7UiP/DU14euO8KLIeDjMrDsM/JFj+faeLJAzAp0eUpTvQlTxRnhJhvTIhPwG8GO9ZOnEKdQ==}
+  '@ui-sdk/core@0.1.0-beta.4':
+    resolution: {integrity: sha512-yUtuFpodT9wjb29qdbmomRpnsMxoqf5SraPX2LYihC8v9povcoEQbfHwVo0KazOWLNspr7k2c2ub7mDXKaiBcQ==}
 
-  '@ui-sdk/vue@0.1.0-beta.3':
-    resolution: {integrity: sha512-jCzyiR0LFJR1+8iUvBDZrWxlnqwc+imd91bUxfERHNXE7oYhwQ8a6bN738xxVNAz938vKGu2lZoocvcY301Vtw==}
+  '@ui-sdk/vue@0.1.0-beta.4':
+    resolution: {integrity: sha512-3vkYn9IHygf3/BPS1/dIC0hw8+UAp+FC+ReEnVSHCB2ITeoAvgu3VMNgXyYNfR6iNw2LdHGI2YmbKF7TGWMeaw==}
     peerDependencies:
       '@nuxt/kit': ^4.0.0 || ^5.0.0-0
       '@nuxt/schema': ^4.0.0 || ^5.0.0-0
-      '@ui-sdk/core': ^0.1.0-beta.3
+      '@ui-sdk/core': ^0.1.0-beta.4
       nuxt: ^4.0.0 || ^5.0.0-0
       vue: '>=3.5'
     peerDependenciesMeta:
@@ -3052,11 +3052,11 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
-  '@ui-sdk/core@0.1.0-beta.3': {}
+  '@ui-sdk/core@0.1.0-beta.4': {}
 
-  '@ui-sdk/vue@0.1.0-beta.3(@ui-sdk/core@0.1.0-beta.3)(vue@3.5.45(typescript@6.0.3))':
+  '@ui-sdk/vue@0.1.0-beta.4(@ui-sdk/core@0.1.0-beta.4)(vue@3.5.45(typescript@6.0.3))':
     dependencies:
-      '@ui-sdk/core': 0.1.0-beta.3
+      '@ui-sdk/core': 0.1.0-beta.4
       vue: 3.5.45(typescript@6.0.3)
 
   '@vitejs/plugin-vue@6.0.11(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.45(typescript@6.0.3))':
