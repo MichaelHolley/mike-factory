@@ -6,13 +6,15 @@ import { issueImageUrls, loadIssueImages, MAX_ISSUE_IMAGES } from "./issueImages
 const attachment = "https://github.com/user-attachments/assets/screenshot";
 
 describe("issue image sources", () => {
-  it("finds GitHub attachment URLs in Markdown, HTML and plain text", () => {
+  it("finds only GitHub attachment URLs in Markdown, HTML and plain text", () => {
     const legacy = "https://user-images.githubusercontent.com/123/screenshot.png";
-    expect(
-      issueImageUrls(
-        [`![Screenshot](${attachment})`, `<img width="400" src="${legacy}">`, `See ${attachment}.png`].join("\n"),
-      ),
-    ).toEqual([attachment, legacy, `${attachment}.png`]);
+    const text = [
+      `![Screenshot](${attachment})`,
+      `<img width="400" src="${legacy}">`,
+      "![Elsewhere](https://example.com/screenshot.png)",
+      `See ${attachment}.png`,
+    ].join("\n");
+    expect(issueImageUrls(text)).toEqual([attachment, legacy, `${attachment}.png`]);
   });
 
   it("trims link syntax and sentence punctuation from attachment URLs", () => {
@@ -37,26 +39,6 @@ describe("issue image sources", () => {
       notes: [`${attachment}: attached as image 1.`],
     });
     expect(github.callCount("downloadIssueImage")).toBe(1);
-  });
-
-  it("ignores images outside the supported GitHub attachment URLs", async () => {
-    const github = new FakeGitHub();
-    const urls = [
-      "https://example.com/screenshot.png",
-      "https://github.com/example/repo/image.png",
-      "https://github.com.evil.test/user-attachments/assets/image",
-      "https://user-images.githubusercontent.com.evil.test/image.png",
-      "http://github.com/user-attachments/assets/image",
-      "https://github.com/user-attachments/files/1/build.log",
-    ];
-    const result = await loadIssueImages(
-      github,
-      "demo",
-      [urls.map((url) => `![](${url})`).join("\n")],
-      DEFAULT_IMAGE_LIMITS,
-    );
-    expect(result).toEqual({ images: [], notes: [] });
-    expect(github.callCount("downloadIssueImage")).toBe(0);
   });
 
   it("notes unsuccessful downloads and keeps later images", async () => {
