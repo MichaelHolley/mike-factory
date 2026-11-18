@@ -38,9 +38,10 @@ export async function projectInstructions(read: (name: string) => Promise<string
   for (const name of CONTEXT_FILES) {
     const content = await read(name);
     if (content === undefined) continue;
-    const truncated =
-      content.length > MAX_DOC_CHARS ? `\n[Truncated at ${MAX_DOC_CHARS} characters; read ${name} for the rest.]` : "";
-    return `${NESTED_HINT}\n\n${name}\n${content.slice(0, MAX_DOC_CHARS)}${truncated}`;
+    if (content.length <= MAX_DOC_CHARS) {
+      return `${NESTED_HINT}\n\n${name} (already included in full; don't read it again, even on follow-up rounds):\n${content}`;
+    }
+    return `${NESTED_HINT}\n\n${name} (already included up to the truncation point; don't read that part again, even on follow-up rounds):\n${content.slice(0, MAX_DOC_CHARS)}\n[Truncated at ${MAX_DOC_CHARS} characters; read ${name} for the rest.]`;
   }
   return NESTED_HINT;
 }
