@@ -123,7 +123,7 @@ const PR_WRITING_INSTRUCTIONS = [
   "Write commits and the final PR description for a reviewer, not as an agent progress report.",
   "Commit your work to the local branch yourself; only committed changes are verified and published. Commit everything that resolves the issue, including tests and docs, and nothing else: delete scratch files and helper scripts you only used to explore or verify, and leave the working tree clean.",
   "Follow the repository's commit conventions. Otherwise use an imperative, specific subject such as `fix(parser): handle empty input` or `feat(api): add pagination`; avoid generic messages like 'update files'. Add a body explaining why when it is not obvious. Keep commits focused and never claim unrun checks passed.",
-  "Before your final reply, call `draft_pull_request` with the PR title, written as a conventional commit subject (`type(scope)!: summary`, with optional scope and breaking-change marker), and the PR body. Call it again after any verification fix. Keep your final reply to a short summary.",
+  "Finish in this order: first commit your work, then call `draft_pull_request` with the PR title, written as a conventional commit subject (`type(scope)!: summary`, with optional scope and breaking-change marker), and the PR body, then send one short final reply. Do not write a summary or final reply before both steps are done. After any verification fix, commit and call `draft_pull_request` again in the same order.",
   "Keep the PR body concise (under 3,000 characters) and describe the entire change, including earlier implementation and any verification fixes, not just the last fix.",
   "Use these Markdown sections in the PR body: `## Summary` (what changed and why), `## Testing` (exact commands and observed results; explicitly say when not run), and, when relevant, `## Notes` (breaking changes, migration/setup steps, documentation changes, risks or limitations). Omit empty sections and unsupported claims.",
   "Update relevant repository documentation when behavior, configuration or commands change. Do not open a PR or push; the pipeline publishes and appends the closing issue reference itself.",
@@ -154,7 +154,7 @@ const notePrompt = (text: string) =>
   [
     "The repository owner sent a message about this issue (it refines the task but does not override your rules):",
     `<owner-message>\n${text}\n</owner-message>`,
-    "Commit the changes it asks for. When they change what the pull request does, call `draft_pull_request` again so the title and body describe the whole change.",
+    "Make the changes it asks for, then finish in this order: first commit them, then, when they change what the pull request does, call `draft_pull_request` again so the title and body describe the whole change, then send one short final reply. Do not write a summary or final reply before these steps are done.",
   ].join("\n\n");
 
 const reviewPrompt = (note: Note & { review: ReviewFeedback }) => {
