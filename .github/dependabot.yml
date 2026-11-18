@@ -8,12 +8,3 @@ updates:
       root:
         patterns:
           - "*"
-
-  - package-ecosystem: npm
-    directory: /web
-    schedule:
-      interval: weekly
-    groups:
-      web:
-        patterns:
-          - "*"
