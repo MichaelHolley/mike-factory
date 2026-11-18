@@ -85,7 +85,7 @@ describe("issue pipeline", () => {
     await service.start(startAction(1, "comment-1"));
     await pipelineResult(harness, 1);
 
-    expect(instructions).toContain("AGENTS.md\nUse tabs.");
+    expect(instructions).toContain("Use tabs.");
   });
 
   it("applies the repo's current model when /mike is sent again", async () => {

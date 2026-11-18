@@ -9,35 +9,26 @@ describe("projectInstructions", () => {
     [{ "AGENTS.md": "agents", "CLAUDE.md": "claude", "README.md": "readme" }, "AGENTS.md", "agents"],
     [{ "CLAUDE.md": "claude", "README.md": "readme" }, "CLAUDE.md", "claude"],
     [{ "README.md": "readme" }, "README.md", "readme"],
-  ])("picks the first context file present in %j and identifies it as fully included", async (files, name, content) => {
+  ])("picks the first context file present in %j", async (files, name, content) => {
     const result = await projectInstructions(reader(files));
-    expect(result.startsWith(`${nestedHint}\n\n`)).toBe(true);
-    expect(result).toContain(
-      `${name} is already included below in full; do not re-read the included content, including on follow-up rounds.`,
-    );
-    expect(result.endsWith(`${name}\n${content}`)).toBe(true);
+    expect(result.startsWith(`${nestedHint}\n\n${name} (`)).toBe(true);
+    expect(result.endsWith(`):\n${content}`)).toBe(true);
   });
 
   it("still hints at nested AGENTS.md files when the root has none", async () => {
     expect(await projectInstructions(reader({}))).toBe(nestedHint);
   });
 
-  it("identifies the included portion of a truncated file and points to the rest", async () => {
-    const result = await projectInstructions(reader({ "AGENTS.md": "a".repeat(MAX_DOC_CHARS + 1) }));
-    expect(result.startsWith(`${nestedHint}\n\n`)).toBe(true);
-    expect(result).toContain(
-      "AGENTS.md is already included below up to the truncation point; do not re-read the included content, including on follow-up rounds.",
-    );
-    expect(
-      result.endsWith(
-        `AGENTS.md\n${"a".repeat(MAX_DOC_CHARS)}\n[Truncated at ${MAX_DOC_CHARS} characters; read AGENTS.md for the rest.]`,
-      ),
-    ).toBe(true);
+  it("marks a file within the limit as included in full", async () => {
+    const result = await projectInstructions(reader({ "AGENTS.md": "a".repeat(MAX_DOC_CHARS) }));
+    expect(result).toContain("AGENTS.md (already included in full; don't read it again, even on follow-up rounds):\n");
+    expect(result).not.toContain("Truncated");
   });
 
-  it("leaves a file within the limit unmarked", async () => {
-    const result = await projectInstructions(reader({ "AGENTS.md": "a".repeat(MAX_DOC_CHARS) }));
-    expect(result).toContain("AGENTS.md is already included below in full;");
-    expect(result).not.toContain("Truncated");
+  it("marks a file cut off at the size limit and points to the rest", async () => {
+    const result = await projectInstructions(reader({ "AGENTS.md": "a".repeat(MAX_DOC_CHARS + 1) }));
+    expect(result).toContain(
+      `AGENTS.md (already included up to the truncation point; don't read that part again, even on follow-up rounds):\n${"a".repeat(MAX_DOC_CHARS)}\n[Truncated at ${MAX_DOC_CHARS} characters; read AGENTS.md for the rest.]`,
+    );
   });
 });
