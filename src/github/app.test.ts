@@ -104,9 +104,58 @@ describe("GitHub issue image downloads", () => {
     expect(imageFetch).toHaveBeenCalledTimes(4);
   });
 
-  it.each(["image/png", "image/jpeg", "image/gif", "image/webp"])("allows %s", async (mimeType) => {
-    imageFetch.mockResolvedValueOnce(new Response(png, { headers: { "content-type": mimeType } }));
-    expect(await client.downloadIssueImage("demo", attachment)).toMatchObject({ ok: true, image: { mimeType } });
+  it.each(["image/png", "image/jpeg", "image/gif", "image/webp"])(
+    "allows %s and takes the format from the bytes",
+    async (contentType) => {
+      imageFetch.mockResolvedValueOnce(new Response(png, { headers: { "content-type": contentType } }));
+      expect(await client.downloadIssueImage("demo", attachment)).toMatchObject({
+        ok: true,
+        image: { mimeType: "image/png" },
+      });
+    },
+  );
+
+  it("skips bytes that are not a supported image", async () => {
+    imageFetch.mockResolvedValueOnce(new Response("<svg/>", { headers: { "content-type": "image/png" } }));
+    expect(await client.downloadIssueImage("demo", attachment)).toEqual({
+      ok: false,
+      reason: "not a PNG, JPEG, GIF or WebP image",
+    });
+  });
+
+  const huge = 20_000;
+  const u16 = (value: number, le = false) => {
+    const bytes = Buffer.alloc(2);
+    if (le) bytes.writeUInt16LE(value);
+    else bytes.writeUInt16BE(value);
+    return bytes;
+  };
+  const u24le = (value: number) => Buffer.from([value & 0xff, (value >> 8) & 0xff, value >> 16]);
+  const pngBomb = Buffer.from(png);
+  pngBomb.writeUInt32BE(huge, 16);
+  pngBomb.writeUInt32BE(huge, 20);
+  it.each([
+    ["image/png", pngBomb],
+    ["image/gif", Buffer.concat([Buffer.from("GIF89a"), u16(huge, true), u16(huge, true), Buffer.alloc(8)])],
+    [
+      "image/webp",
+      Buffer.concat([Buffer.from("RIFF\0\0\0\0WEBPVP8X\0\0\0\0\0\0\0\0"), u24le(huge - 1), u24le(huge - 1)]),
+    ],
+    [
+      "image/jpeg",
+      Buffer.concat([
+        Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 4, 0, 0, 0xff, 0xc0, 0, 17, 8]),
+        u16(huge),
+        u16(huge),
+        Buffer.alloc(8),
+      ]),
+    ],
+  ])("skips a %s whose header declares too many pixels, before decoding it", async (mimeType, bytes) => {
+    imageFetch.mockResolvedValueOnce(new Response(bytes, { headers: { "content-type": mimeType } }));
+    expect(await client.downloadIssueImage("demo", attachment)).toEqual({
+      ok: false,
+      reason: "image exceeds the 50 megapixel limit",
+    });
   });
 
   it.each(["image/svg+xml", "text/html", "application/octet-stream", ""])(
@@ -154,13 +203,12 @@ describe("GitHub issue image downloads", () => {
     expect(cancel).toHaveBeenCalled();
   });
 
-  it("accepts the raw size limit without exceeding 5 MiB of base64", async () => {
+  it("accepts an image of exactly the size limit", async () => {
     imageFetch.mockResolvedValueOnce(
-      new Response(new Uint8Array(MAX_ISSUE_IMAGE_BYTES), { headers: { "content-type": "image/png" } }),
+      new Response(Buffer.concat([png], MAX_ISSUE_IMAGE_BYTES), { headers: { "content-type": "image/png" } }),
     );
     const result = await client.downloadIssueImage("demo", attachment);
     expect(result.ok && Buffer.from(result.image.data, "base64").length).toBe(MAX_ISSUE_IMAGE_BYTES);
-    expect(result.ok && result.image.data.length).toBe(5 * 1024 * 1024);
   });
 
   it("skips empty images and HTTP failures", async () => {

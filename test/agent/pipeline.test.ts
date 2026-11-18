@@ -8,6 +8,7 @@ import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/provid
 import type { UserMessage } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HUMAN_ENTRY } from "../../src/agent/docs.ts";
+import { PNG_IMAGE } from "../fakes/github.ts";
 import { openAgentHarness } from "../../src/agent/harness.ts";
 import type { TranscriptItem } from "../../src/runStatus.ts";
 import { NO_CHANGES_STATUS, STATUS_MARKER, WORKING_STATUS } from "../../src/agent/tasks/issuePipeline.ts";
@@ -148,19 +149,16 @@ describe("issue pipeline", () => {
       body: `Use this screenshot: ![Reference](${bodyImage})`,
     });
     world.github.addComment(REPO, 1, "owner", `<img src="${commentImage}" width="400">`);
-    const images = [
-      { mimeType: "image/png", data: "Ym9keSBpbWFnZQ==" },
-      { mimeType: "image/webp", data: "Y29tbWVudCBpbWFnZQ==" },
-    ];
-    world.github.addIssueImage(bodyImage, { ok: true, image: images[0]! });
-    world.github.addIssueImage(commentImage, { ok: true, image: images[1]! });
+    world.github.addIssueImage(bodyImage, { ok: true, image: PNG_IMAGE });
+    world.github.addIssueImage(commentImage, { ok: true, image: PNG_IMAGE });
 
     await service.start(startAction(1, "comment-1"));
     expect((await pipelineResult(harness, 1)).status).toBe("completed");
 
     expect(implement?.content).toEqual([
       { type: "text", text: expect.stringContaining(`![Reference](${bodyImage})`) },
-      ...images.map((image) => ({ type: "image", ...image })),
+      { type: "image", ...PNG_IMAGE },
+      { type: "image", ...PNG_IMAGE },
     ]);
     expect(textOf(implement)).toContain(`${bodyImage}: attached as image 1.`);
     expect(textOf(implement)).toContain(`${commentImage}: attached as image 2.`);

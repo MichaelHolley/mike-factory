@@ -25,7 +25,7 @@ import { HUMAN_ENTRY, IssueNotes, IssueState, ReviewReplies, type IssueStateValu
 import { lastAssistantText, runBudgetBreach, totalCostUsd } from "../extensions/guards.ts";
 import { closingRef, CONVENTIONAL_TITLE, prBodyLimit } from "../extensions/pull-request.ts";
 import { createSlots } from "../slots.ts";
-import { loadIssueImages } from "./issueImages.ts";
+import { loadIssueImages, modelImageLimits } from "./issueImages.ts";
 
 export type PipelineInput = {
   repo: string;
@@ -483,10 +483,12 @@ export function createIssuePipeline(deps: PipelineDeps) {
             github.getIssue(repo, issue),
             github.listIssueComments(repo, issue),
           ]);
-          const { images, notes } = await loadIssueImages(github, repo, [
-            data.body,
-            ...comments.map(({ body }) => body),
-          ]);
+          const { images, notes } = await loadIssueImages(
+            github,
+            repo,
+            [data.body, ...comments.map(({ body }) => body)],
+            modelImageLimits(rt.models, (await rt.agent(context)).model),
+          );
           const text = implementPrompt(deps.config.owner, repo, data, comments, instructions, notes);
           await converse(rt, context, repo, {
             content: images.length > 0 ? [{ type: "text", text }, ...images] : text,

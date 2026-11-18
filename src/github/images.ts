@@ -1,10 +1,42 @@
 import type { IssueImageDownload } from "../contracts.ts";
 
-// Base64 expands bytes by 4/3; keep the encoded image within a 5 MiB provider limit.
-export const MAX_ISSUE_IMAGE_BYTES = 3.75 * 1024 * 1024;
+// GitHub's upload limit for images; the pipeline scales them down to the model's limits.
+export const MAX_ISSUE_IMAGE_BYTES = 10 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT_MS = 15_000;
 const MAX_REDIRECTS = 3;
 const IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+// Decoding takes 4 bytes per pixel, so a small file declaring huge dimensions would take gigabytes of memory.
+const MAX_IMAGE_PIXELS = 50_000_000;
+
+/** The format and size an image's header declares, read without decoding it; the bytes decide, not Content-Type. */
+function imageHeader(bytes: Buffer): { mimeType: string; width: number; height: number } | undefined {
+  const ascii = (offset: number, text: string) => bytes.toString("latin1", offset, offset + text.length) === text;
+  if (bytes.length >= 24 && ascii(0, "\x89PNG\r\n\x1a\n") && ascii(12, "IHDR"))
+    return { mimeType: "image/png", width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+  if (bytes.length >= 10 && (ascii(0, "GIF87a") || ascii(0, "GIF89a")))
+    return { mimeType: "image/gif", width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) };
+  if (bytes.length >= 30 && ascii(0, "RIFF") && ascii(8, "WEBP")) {
+    const webp = (width: number, height: number) => ({ mimeType: "image/webp", width, height });
+    if (ascii(12, "VP8 ")) return webp(bytes.readUInt16LE(26) & 0x3fff, bytes.readUInt16LE(28) & 0x3fff);
+    if (ascii(12, "VP8L")) {
+      const bits = bytes.readUInt32LE(21);
+      return webp((bits & 0x3fff) + 1, ((bits >>> 14) & 0x3fff) + 1);
+    }
+    if (ascii(12, "VP8X")) return webp(bytes.readUIntLE(24, 3) + 1, bytes.readUIntLE(27, 3) + 1);
+    return undefined;
+  }
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return undefined;
+  for (let offset = 2; offset + 9 <= bytes.length;) {
+    if (bytes[offset] !== 0xff) return undefined;
+    const marker = bytes[offset + 1]!;
+    if (marker === 0xff) offset++;
+    // SOF0 to SOF15, except DHT (C4), JPG (C8) and DAC (CC), which share the range.
+    else if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc)
+      return { mimeType: "image/jpeg", width: bytes.readUInt16BE(offset + 7), height: bytes.readUInt16BE(offset + 5) };
+    else offset += 2 + bytes.readUInt16BE(offset + 2);
+  }
+  return undefined;
+}
 
 const secureUrl = (value: string) => {
   try {
@@ -58,20 +90,24 @@ export async function downloadIssueImage(
           continue;
         }
         if (!response.ok) return { ok: false, reason: `download returned HTTP ${response.status}` };
-        const mimeType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-        if (!IMAGE_MIME_TYPES.has(mimeType)) return { ok: false, reason: "unsupported image MIME type" };
+        const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+        if (!IMAGE_MIME_TYPES.has(contentType)) return { ok: false, reason: "unsupported image MIME type" };
         if (Number(response.headers.get("content-length")) > MAX_ISSUE_IMAGE_BYTES)
-          return { ok: false, reason: "image exceeds the 3.75 MiB raw size limit" };
+          return { ok: false, reason: "image exceeds the 10 MiB size limit" };
         if (!response.body) return { ok: false, reason: "empty image" };
         const chunks: Uint8Array[] = [];
         let size = 0;
         for await (const chunk of response.body) {
           size += chunk.byteLength;
-          if (size > MAX_ISSUE_IMAGE_BYTES) return { ok: false, reason: "image exceeds the 3.75 MiB raw size limit" };
+          if (size > MAX_ISSUE_IMAGE_BYTES) return { ok: false, reason: "image exceeds the 10 MiB size limit" };
           chunks.push(chunk);
         }
-        if (size === 0) return { ok: false, reason: "empty image" };
-        return { ok: true, image: { mimeType, data: Buffer.concat(chunks, size).toString("base64") } };
+        const bytes = Buffer.concat(chunks, size);
+        const header = imageHeader(bytes);
+        if (!header) return { ok: false, reason: "not a PNG, JPEG, GIF or WebP image" };
+        if (header.width * header.height > MAX_IMAGE_PIXELS)
+          return { ok: false, reason: "image exceeds the 50 megapixel limit" };
+        return { ok: true, image: { mimeType: header.mimeType, data: bytes.toString("base64") } };
       } finally {
         if (!response.body?.locked) await response.body?.cancel();
       }

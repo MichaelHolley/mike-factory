@@ -60,6 +60,12 @@ export interface FakeReviewComment {
   inReplyTo: number | null;
 }
 
+/** A decodable 2x2 PNG, for images the pipeline must prepare for the model. */
+export const PNG_IMAGE = {
+  mimeType: "image/png",
+  data: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGP4z8DwH4QZYAwAR8oH+WdZbrcAAAAASUVORK5CYII=",
+};
+
 export interface FakeGitHubState {
   issues: FakeIssue[];
   images: [string, IssueImageDownload][];

@@ -2,6 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { openAgentHarness } from "../../src/agent/harness.ts";
+import { PNG_IMAGE } from "../fakes/github.ts";
 import {
   autopilot,
   conversationIdOf,
@@ -34,7 +35,7 @@ const runs = review
 
 if (mode === "first" || mode === "review-first") {
   const imageUrl = "https://github.com/user-attachments/assets/reference";
-  world.github.addIssueImage(imageUrl, { ok: true, image: { mimeType: "image/png", data: "cmVmZXJlbmNl" } });
+  world.github.addIssueImage(imageUrl, { ok: true, image: PNG_IMAGE });
   for (const { repo, issue } of runs)
     world.github.addIssue(repo, {
       number: issue,
