@@ -4,6 +4,7 @@ import {
   type GitIdentity,
   type IssueComment,
   type IssueData,
+  type IssueImageDownload,
   type PullRequestInfo,
   type PullRequestRef,
   type ReviewFeedback,
@@ -59,8 +60,15 @@ export interface FakeReviewComment {
   inReplyTo: number | null;
 }
 
+/** A decodable 2x2 PNG, for images the pipeline must prepare for the model. */
+export const PNG_IMAGE = {
+  mimeType: "image/png",
+  data: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGP4z8DwH4QZYAwAR8oH+WdZbrcAAAAASUVORK5CYII=",
+};
+
 export interface FakeGitHubState {
   issues: FakeIssue[];
+  images: [string, IssueImageDownload][];
   comments: FakeComment[];
   prs: FakePr[];
   reviews: FakeReview[];
@@ -73,6 +81,7 @@ export interface FakeGitHubState {
 
 export class FakeGitHub implements GitHubClient {
   private issues = new Map<string, FakeIssue>();
+  private images = new Map<string, IssueImageDownload>();
   private commentList: FakeComment[] = [];
   private prList: FakePr[] = [];
   private reviewList: FakeReview[] = [];
@@ -85,6 +94,7 @@ export class FakeGitHub implements GitHubClient {
   static fromJSON(state: FakeGitHubState): FakeGitHub {
     const fake = new FakeGitHub();
     for (const issue of state.issues) fake.issues.set(fake.key(issue.repo, issue.number), issue);
+    fake.images = new Map(state.images);
     fake.commentList = state.comments;
     fake.prList = state.prs;
     fake.reviewList = state.reviews;
@@ -99,6 +109,7 @@ export class FakeGitHub implements GitHubClient {
   toJSON(): FakeGitHubState {
     return {
       issues: [...this.issues.values()],
+      images: [...this.images],
       comments: this.commentList,
       prs: this.prList,
       reviews: this.reviewList,
@@ -112,6 +123,15 @@ export class FakeGitHub implements GitHubClient {
 
   addIssue(repo: string, issue: Partial<IssueData> & { number: number }): void {
     this.issues.set(this.key(repo, issue.number), { title: "", body: "", labels: [], state: "open", ...issue, repo });
+  }
+
+  addIssueImage(url: string, result: IssueImageDownload): void {
+    this.images.set(url, result);
+  }
+
+  async downloadIssueImage(_repo: string, url: string): Promise<IssueImageDownload> {
+    this.called("downloadIssueImage");
+    return this.images.get(url) ?? { ok: false, reason: "download returned HTTP 404" };
   }
 
   addComment(repo: string, issue: number, author: string, body: string): void {

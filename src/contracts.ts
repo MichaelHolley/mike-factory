@@ -50,6 +50,14 @@ export interface IssueComment {
   createdAt: string;
 }
 
+/** Base64 image bytes, bounded and MIME-checked by the server's GitHub client. */
+export interface IssueImage {
+  data: string;
+  mimeType: string;
+}
+
+export type IssueImageDownload = { ok: true; image: IssueImage } | { ok: false; reason: string };
+
 export interface PullRequestRef {
   number: number;
   url: string;
@@ -98,6 +106,11 @@ export interface GitIdentity {
 export interface GitHubClient {
   getIssue(repo: string, issue: number): Promise<IssueData>;
   listIssueComments(repo: string, issue: number): Promise<IssueComment[]>;
+  /**
+   * Downloads only GitHub issue attachments, authenticated on the server; no credentials reach the runner.
+   * Never throws: skipped images and failures return `ok: false`.
+   */
+  downloadIssueImage(repo: string, url: string): Promise<IssueImageDownload>;
   /** Creates the comment, or edits the bot's existing comment that carries the same hidden `marker`. */
   upsertComment(repo: string, issue: number, marker: string, body: string): Promise<void>;
   findOpenPr(repo: string, head: string): Promise<PullRequestRef | undefined>;

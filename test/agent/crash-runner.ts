@@ -2,8 +2,10 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { openAgentHarness } from "../../src/agent/harness.ts";
+import { PNG_IMAGE } from "../fakes/github.ts";
 import {
   autopilot,
+  conversationIdOf,
   createWorld,
   ctx,
   issueStateOf,
@@ -32,8 +34,14 @@ const runs = review
   : [...[1, 2, 3].map((issue) => ({ repo: REPO, issue })), { repo: OTHER_REPO, issue: 1 }];
 
 if (mode === "first" || mode === "review-first") {
+  const imageUrl = "https://github.com/user-attachments/assets/reference";
+  world.github.addIssueImage(imageUrl, { ok: true, image: PNG_IMAGE });
   for (const { repo, issue } of runs)
-    world.github.addIssue(repo, { number: issue, title: "Add hello", body: "Please add hello.txt." });
+    world.github.addIssue(repo, {
+      number: issue,
+      title: "Add hello",
+      body: `Please add hello.txt. ![Reference](${imageUrl})`,
+    });
   writeFileSync(githubFile, JSON.stringify(world.github.toJSON()));
 }
 autopilot(world.faux, (messages) => replyToReview(messages, "Done as asked."));
@@ -65,6 +73,17 @@ if (mode === "first") {
   await service.message({ repo: REPO, issue: 1, id: "7d2f8c1e-5b3a-4c6d-9e8f-0a1b2c3d4e5f", text: "Keep it short." });
 }
 const outcomes = await Promise.all(runs.map(({ repo, issue }) => pipelineResult(harness, issue, repo)));
-console.log(JSON.stringify({ outcomes: outcomes.map((outcome) => outcome.status) }));
+const imageMessages = await Promise.all(
+  runs.map(async ({ repo, issue }) => {
+    const conversation = (await harness.conversation((await conversationIdOf(harness, issue, repo))!, ctx))!;
+    return (await conversation.context(ctx)).messages.filter(
+      (message) =>
+        message.role === "user" &&
+        Array.isArray(message.content) &&
+        message.content.some((part) => part.type === "image"),
+    ).length;
+  }),
+);
+console.log(JSON.stringify({ outcomes: outcomes.map((outcome) => outcome.status), imageMessages }));
 await harness.close(ctx);
 process.exit(0);

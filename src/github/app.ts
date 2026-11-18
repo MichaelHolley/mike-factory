@@ -8,6 +8,8 @@ import {
   type ReviewThread,
 } from "../contracts.ts";
 
+import { downloadIssueImage } from "./images.ts";
+
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60_000;
 const PER_PAGE = 100;
 
@@ -104,6 +106,14 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
         body: comment.body ?? "",
         createdAt: comment.created_at,
       }));
+    },
+
+    async downloadIssueImage(repo, url) {
+      return downloadIssueImage(url, async () => {
+        const octokit = await octokitFor(repo);
+        const { token } = (await octokit.auth({ type: "installation", repositoryNames: [repo] })) as { token: string };
+        return token;
+      });
     },
 
     async upsertComment(repo, issue, marker, body) {
