@@ -1,6 +1,7 @@
 import type { IssueImageDownload } from "../contracts.ts";
 
-export const MAX_ISSUE_IMAGE_BYTES = 5 * 1024 * 1024;
+// Base64 expands bytes by 4/3; keep the encoded image within a 5 MiB provider limit.
+export const MAX_ISSUE_IMAGE_BYTES = 3.75 * 1024 * 1024;
 const DOWNLOAD_TIMEOUT_MS = 15_000;
 const MAX_REDIRECTS = 3;
 const IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
@@ -60,13 +61,13 @@ export async function downloadIssueImage(
         const mimeType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
         if (!IMAGE_MIME_TYPES.has(mimeType)) return { ok: false, reason: "unsupported image MIME type" };
         if (Number(response.headers.get("content-length")) > MAX_ISSUE_IMAGE_BYTES)
-          return { ok: false, reason: "image exceeds the 5 MiB size limit" };
+          return { ok: false, reason: "image exceeds the 3.75 MiB raw size limit" };
         if (!response.body) return { ok: false, reason: "empty image" };
         const chunks: Uint8Array[] = [];
         let size = 0;
         for await (const chunk of response.body) {
           size += chunk.byteLength;
-          if (size > MAX_ISSUE_IMAGE_BYTES) return { ok: false, reason: "image exceeds the 5 MiB size limit" };
+          if (size > MAX_ISSUE_IMAGE_BYTES) return { ok: false, reason: "image exceeds the 3.75 MiB raw size limit" };
           chunks.push(chunk);
         }
         if (size === 0) return { ok: false, reason: "empty image" };

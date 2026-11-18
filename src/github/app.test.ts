@@ -153,12 +153,13 @@ describe("GitHub issue image downloads", () => {
     expect(cancel).toHaveBeenCalled();
   });
 
-  it("accepts an image exactly at the size limit", async () => {
+  it("accepts the raw size limit without exceeding 5 MiB of base64", async () => {
     imageFetch.mockResolvedValueOnce(
       new Response(new Uint8Array(MAX_ISSUE_IMAGE_BYTES), { headers: { "content-type": "image/png" } }),
     );
     const result = await client.downloadIssueImage("demo", attachment);
     expect(result.ok && Buffer.from(result.image.data, "base64").length).toBe(MAX_ISSUE_IMAGE_BYTES);
+    expect(result.ok && result.image.data.length).toBe(5 * 1024 * 1024);
   });
 
   it("skips empty images and HTTP failures", async () => {

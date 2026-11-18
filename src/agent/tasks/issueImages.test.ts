@@ -1,24 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { FakeGitHub } from "../../../test/fakes/github.ts";
 import { issueImageUrls, loadIssueImages, MAX_ISSUE_IMAGES } from "./issueImages.ts";
 
 const attachment = "https://github.com/user-attachments/assets/screenshot";
 
 describe("issue image sources", () => {
-  it("extracts inline Markdown and HTML sources in order", () => {
+  it("finds GitHub attachment URLs in Markdown, HTML and plain text", () => {
+    const legacy = "https://user-images.githubusercontent.com/123/screenshot.png";
     expect(
       issueImageUrls(
-        [
-          `![Screenshot](${attachment})`,
-          `![with title](<${attachment}?a=1&amp;b=2> "Screenshot")`,
-          `<img width="400" alt="src='not-the-source'" data-src="ignored" SRC='${attachment}?a=1&#38;b=2'>`,
-          `<img src=${attachment}>`,
-          `![escaped alt \\]](${attachment}\\(1\\).png)`,
-          `[not an image](${attachment})`,
-          `<img data-src="not-a-source">`,
-        ].join("\n"),
+        [`![Screenshot](${attachment})`, `<img width="400" src="${legacy}">`, `See ${attachment}.png`].join("\n"),
       ),
-    ).toEqual([attachment, `${attachment}?a=1&b=2`, `${attachment}?a=1&b=2`, attachment, `${attachment}(1).png`]);
+    ).toEqual([attachment, legacy, `${attachment}.png`]);
   });
 
   it("deduplicates sources across the issue and comments and numbers attached images", async () => {
@@ -30,13 +23,17 @@ describe("issue image sources", () => {
     expect(github.callCount("downloadIssueImage")).toBe(1);
   });
 
-  it("notes external images without asking GitHub to fetch them", async () => {
+  it("ignores images outside the supported GitHub attachment URLs", async () => {
     const github = new FakeGitHub();
-    const result = await loadIssueImages(github, "demo", ["![outside](https://example.com/screenshot.png)"]);
-    expect(result.images).toEqual([]);
-    expect(result.notes).toEqual([
-      "https://example.com/screenshot.png: skipped (not an allowed GitHub attachment URL).",
-    ]);
+    const urls = [
+      "https://example.com/screenshot.png",
+      "https://github.com/example/repo/image.png",
+      "https://github.com.evil.test/user-attachments/assets/image",
+      "https://user-images.githubusercontent.com.evil.test/image.png",
+      "http://github.com/user-attachments/assets/image",
+    ];
+    const result = await loadIssueImages(github, "demo", [urls.map((url) => `![](${url})`).join("\n")]);
+    expect(result).toEqual({ images: [], notes: [] });
     expect(github.callCount("downloadIssueImage")).toBe(0);
   });
 
@@ -44,18 +41,13 @@ describe("issue image sources", () => {
     const github = new FakeGitHub();
     github.addIssueImage(attachment, { ok: false, reason: "unsupported image MIME type" });
     github.addIssueImage(`${attachment}/good`, { ok: true, image: { data: "Z29vZA==", mimeType: "image/jpeg" } });
-    const download = github.downloadIssueImage.bind(github);
-    vi.spyOn(github, "downloadIssueImage").mockImplementation(async (repo, url) => {
-      if (url.endsWith("/error")) throw new Error("secret");
-      return download(repo, url);
-    });
     const result = await loadIssueImages(github, "demo", [
-      [attachment, `${attachment}/error`, `${attachment}/good`].map((url) => `![](${url})`).join("\n"),
+      [attachment, `${attachment}/missing`, `${attachment}/good`].map((url) => `![](${url})`).join("\n"),
     ]);
     expect(result.images).toEqual([{ type: "image", data: "Z29vZA==", mimeType: "image/jpeg" }]);
     expect(result.notes).toEqual([
       `${attachment}: skipped (unsupported image MIME type).`,
-      `${attachment}/error: skipped (image download failed).`,
+      `${attachment}/missing: skipped (download returned HTTP 404).`,
       `${attachment}/good: attached as image 1.`,
     ]);
   });

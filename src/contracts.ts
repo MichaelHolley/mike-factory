@@ -106,7 +106,10 @@ export interface GitIdentity {
 export interface GitHubClient {
   getIssue(repo: string, issue: number): Promise<IssueData>;
   listIssueComments(repo: string, issue: number): Promise<IssueComment[]>;
-  /** Downloads only GitHub issue attachments, authenticated on the server; no credentials reach the runner. */
+  /**
+   * Downloads only GitHub issue attachments, authenticated on the server; no credentials reach the runner.
+   * Never throws: skipped images and failures return `ok: false`.
+   */
   downloadIssueImage(repo: string, url: string): Promise<IssueImageDownload>;
   /** Creates the comment, or edits the bot's existing comment that carries the same hidden `marker`. */
   upsertComment(repo: string, issue: number, marker: string, body: string): Promise<void>;
