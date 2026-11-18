@@ -14,6 +14,14 @@ describe("issue image sources", () => {
     ).toEqual([attachment, legacy, `${attachment}.png`]);
   });
 
+  it("trims link syntax and sentence punctuation from attachment URLs", () => {
+    expect(issueImageUrls(`[${attachment}](${attachment}) and see ${attachment}/2.`)).toEqual([
+      attachment,
+      attachment,
+      `${attachment}/2`,
+    ]);
+  });
+
   it("deduplicates sources across the issue and comments and numbers attached images", async () => {
     const github = new FakeGitHub();
     const image = { data: "aW1hZ2U=", mimeType: "image/png" };
@@ -31,6 +39,7 @@ describe("issue image sources", () => {
       "https://github.com.evil.test/user-attachments/assets/image",
       "https://user-images.githubusercontent.com.evil.test/image.png",
       "http://github.com/user-attachments/assets/image",
+      "https://github.com/user-attachments/files/1/build.log",
     ];
     const result = await loadIssueImages(github, "demo", [urls.map((url) => `![](${url})`).join("\n")]);
     expect(result).toEqual({ images: [], notes: [] });

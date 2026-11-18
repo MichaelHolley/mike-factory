@@ -20,7 +20,7 @@ export const isIssueImageUrl = (value: string): boolean => {
   const url = secureUrl(value);
   return (
     !!url &&
-    ((url.hostname === "github.com" && url.pathname.startsWith("/user-attachments/")) ||
+    ((url.hostname === "github.com" && url.pathname.startsWith("/user-attachments/assets/")) ||
       url.hostname === "user-images.githubusercontent.com")
   );
 };

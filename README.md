@@ -12,8 +12,7 @@ A self-hosted coding agent that turns a GitHub issue into a pull request. Commen
 - `/mike stop` aborts the run.
 - On mike's PR, request changes or comment `/mike <text>` (including inline) to have it revise the PR. It replies in the threads and re-requests your review.
 
-Paste GitHub screenshot attachment URLs in the issue body or comments, as Markdown images, `<img>` tags or plain links. The agent receives up to five PNG, JPEG, GIF or WebP images (3.75 MiB raw each, 5 MiB base64); download failures and over-limit attachments are noted in its prompt.
-Private-repository attachments may be skipped if GitHub denies the app token.
+Screenshots dropped into the issue or its comments are shown to the agent, up to five per run; private-repository images may be skipped.
 
 Progress appears in a single status comment on the issue, or on the PR for runs started there. A status page lists all runs live, shows each agent's conversation, and lets you steer a running agent or continue a finished one.
 

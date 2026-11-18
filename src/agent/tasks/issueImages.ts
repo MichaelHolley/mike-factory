@@ -1,11 +1,12 @@
 import type { ImageContent } from "@earendil-works/pi-ai";
 import type { GitHubClient } from "../../contracts.ts";
+import { isIssueImageUrl } from "../../github/images.ts";
 
 export const MAX_ISSUE_IMAGES = 5;
 
 /** GitHub's pasted attachment URLs, whether in Markdown, HTML or plain text. */
 export const issueImageUrls = (text: string): string[] =>
-  text.match(/https:\/\/(?:github\.com\/user-attachments\/|user-images\.githubusercontent\.com\/)[^\s)"'<>]+/gi) ?? [];
+  (text.match(/https:\/\/[^\s)\]"'<>]+/gi) ?? []).map((url) => url.replace(/[.,;:!?]+$/, "")).filter(isIssueImageUrl);
 
 /** Downloads are read-only and may repeat after a crash; submission deduplication keeps the message exactly once. */
 export async function loadIssueImages(github: GitHubClient, repo: string, bodies: string[]) {

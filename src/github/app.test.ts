@@ -60,6 +60,7 @@ describe("GitHub issue image downloads", () => {
     "http://github.com/user-attachments/assets/x",
     "https://github.com/owner/repo/image.png",
     "https://github.com/user-attachments-evil/x",
+    "https://github.com/user-attachments/files/1/build.log",
     "https://github.com.evil.test/user-attachments/assets/x",
     "https://user-images.githubusercontent.com.evil.test/x",
     "https://github.com@evil.test/user-attachments/assets/x",
