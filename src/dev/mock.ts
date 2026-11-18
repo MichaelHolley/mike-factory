@@ -141,6 +141,23 @@ function liveTail(tick: number): TranscriptItem[] {
 
 const FINISHED: RunStatus["phase"][] = ["done", "failed", "aborted"];
 
+/** Enough older finished runs across repos and weeks to scroll through. */
+function history(): RunStatus[] {
+  const repos = ["mike-factory", "web-shop", "docs-site"];
+  return Array.from({ length: 90 }, (_, i) => {
+    const finished = 30 * 60 + i * 9 * 60;
+    let phase: RunStatus["phase"] = "done";
+    if (i % 7 === 3) phase = "failed";
+    if (i % 11 === 5) phase = "aborted";
+    return run(repos[i % repos.length]!, 100 + i, `Historic change number ${i + 1}`, phase, {
+      prUrl: phase === "done" ? `https://github.com/example/pull/${200 + i}` : null,
+      prMerged: phase === "done" && i % 3 !== 0,
+      startedAt: ago(finished + 20 + (i % 5) * 15),
+      updatedAt: ago(finished),
+    });
+  });
+}
+
 /** In-memory runs and conversations; messages get a canned reply instead of reaching an agent. */
 function createMockService(): IssueService {
   const runs: RunStatus[] = [
@@ -179,6 +196,7 @@ function createMockService(): IssueService {
       updatedAt: ago(1490),
       costUsd: 0.05,
     }),
+    ...history(),
   ];
   const key = (repo: string, issue: number) => `${repo}/${issue}`;
   const conversations = new Map(runs.map((r) => [key(r.repo, r.issue), sampleConversation()]));

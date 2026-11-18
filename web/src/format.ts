@@ -43,3 +43,18 @@ export function formatDuration(ms: number): string {
   if (hours < 24) return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
   return hours % 24 ? `${Math.floor(hours / 24)}d ${hours % 24}h` : `${Math.floor(hours / 24)}d`;
 }
+
+/** "Today", "Yesterday", or the weekday and date, with the year only when it isn't this year. */
+export function formatDay(iso: string, now = Date.now()): string {
+  const date = new Date(iso);
+  const today = new Date(now);
+  if (date.toDateString() === today.toDateString()) return "Today";
+  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() === today.getFullYear() ? undefined : "numeric",
+  });
+}
