@@ -25,6 +25,8 @@
   --font-sans: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
+  --ease-out-quint: cubic-bezier(0.23, 1, 0.32, 1);
+
   --animate-pulse-dot: pulse-dot 1.4s ease-in-out infinite;
   @keyframes pulse-dot {
     50% {
