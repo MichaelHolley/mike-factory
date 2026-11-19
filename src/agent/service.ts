@@ -309,12 +309,25 @@ export function createIssueService(opts: {
       mutex.run(async () => {
         const { key, conversationId, state } = await lookup(repo, issue);
         if (state?.branch !== branch) return log("cleanup ignored: not the issue's agent branch", { key, branch });
-        const conversation = merged && conversationId && (await harness.conversation(conversationId, context));
+        const conversation = conversationId && (await harness.conversation(conversationId, context));
         if (conversation) {
+          const phase = merged ? "merged" : "closed";
+          // Only a run waiting on review ends here, so a live run or a redelivered webhook keeps its phase.
+          const ends = state.phase === "done";
+          if (ends) {
+            const headline = merged ? "Pull request merged" : "Pull request closed without merging";
+            await upsertStatus(
+              deps,
+              { repo, issue, statusOn: state.statusOn },
+              `${headline}: ${state.prUrl}\n\nCost: $${state.costUsd.toFixed(4)}`,
+            );
+          }
           await conversation.commit(async (tx) => {
-            (await tx.doc(IssueState, conversation.id)).prMerged = true;
+            const doc = await tx.doc(IssueState, conversation.id);
+            if (merged) doc.prMerged = true;
+            if (ends) Object.assign(doc, { phase, updatedAt: new Date().toISOString() });
           }, context);
-          log("pull request merged", { key });
+          log(`pull request ${phase}`, { key, ends });
         }
         await cleanup(repo, issue);
       }),
@@ -352,7 +365,8 @@ export function createIssueService(opts: {
             issueUrl: `https://github.com/${config.owner}/${state.repo}/issues/${state.issue}`,
             title: state.title ?? null,
             branch: state.branch,
-            phase: state.phase,
+            // The PR may have merged before the run reached `done`, which the cleanup webhook doesn't revisit.
+            phase: state.phase === "done" && state.prMerged ? "merged" : state.phase,
             attempts: state.attempts,
             costUsd: state.costUsd,
             model: agent?.model?.modelId ?? null,

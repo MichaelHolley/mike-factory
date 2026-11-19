@@ -210,7 +210,7 @@ export interface IssueService {
     text: string;
   }): Promise<"steered" | "started" | "not_found">;
   /**
-   * Records a merged PR on the run, then removes the issue's worktree and local branch unless a pipeline is still
+   * Records a merged PR on the run and ends a run waiting on review as `merged` or `closed`, then removes the issue's worktree and local branch unless a pipeline is still
    * running for it.
    */
   cleanup(action: Extract<WebhookAction, { kind: "cleanup" }>): Promise<void>;

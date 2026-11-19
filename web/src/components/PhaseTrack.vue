@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { IssuePhase } from "../../../src/runStatus.ts";
-import { isFinished, pipelineSteps, stepLook } from "../phase.ts";
+import { hasEnded, phaseLabel, pipelineSteps, stepLook } from "../phase.ts";
 
 const props = defineProps<{ phase: IssuePhase }>();
 
-const running = computed(() => props.phase !== "queued" && !isFinished(props.phase));
+const running = computed(() => props.phase !== "queued" && !hasEnded(props.phase));
 const steps = computed(() => pipelineSteps(props.phase).map((step) => ({ ...step, ...stepLook[step.name] })));
 </script>
 
@@ -24,7 +24,7 @@ const steps = computed(() => pipelineSteps(props.phase).map((step) => ({ ...step
           'text-base font-semibold': step.state === 'current',
           'text-sm font-medium text-muted max-sm:invisible': step.state !== 'current',
         }"
-        >{{ step.name }}</span
+        >{{ phaseLabel(step.name) }}</span
       >
       <div class="flex h-12 w-full items-center max-sm:h-9" aria-hidden="true">
         <span class="h-0.5 flex-1 bg-idle" :class="{ invisible: i === 0 }" />

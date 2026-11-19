@@ -1,7 +1,7 @@
-import type { RunStatus } from "../../src/runStatus.ts";
+import type { IssuePhase, RunStatus } from "../../src/runStatus.ts";
 import { isFinished } from "./phase.ts";
 
-export type Outcome = "merged" | "done" | "failed" | "aborted";
+export type Outcome = Extract<IssuePhase, "merged" | "closed" | "failed" | "aborted">;
 
 export type FinishedFilter = {
   repo: string | null;
@@ -9,12 +9,6 @@ export type FinishedFilter = {
   /** Inclusive local dates as `YYYY-MM-DD`. */
   started: [string, string] | null;
 };
-
-export function outcomeOf(run: RunStatus): Outcome | null {
-  if (!isFinished(run.phase)) return null;
-  if (run.phase === "done" && run.prMerged) return "merged";
-  return run.phase as Exclude<Outcome, "merged">;
-}
 
 /** `YYYY-MM-DD` in the viewer's time zone, the shape the date picker uses. */
 export function localDate(iso: string): string {
@@ -28,10 +22,9 @@ export function filterFinished(runs: readonly RunStatus[], filter: FinishedFilte
   const finishedAt = (run: RunStatus) => (run.updatedAt ? Date.parse(run.updatedAt) : 0);
   return runs
     .filter((run) => {
-      const outcome = outcomeOf(run);
-      if (!outcome) return false;
+      if (!isFinished(run.phase)) return false;
       if (filter.repo && run.repo !== filter.repo) return false;
-      if (filter.outcome && outcome !== filter.outcome) return false;
+      if (filter.outcome && run.phase !== filter.outcome) return false;
       if (filter.started) {
         if (!run.startedAt) return false;
         const day = localDate(run.startedAt);

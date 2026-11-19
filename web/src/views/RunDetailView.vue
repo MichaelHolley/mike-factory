@@ -28,7 +28,7 @@ import PhaseTrack from "../components/PhaseTrack.vue";
 import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
 import { formatCost, formatDuration, formatModel, formatTime, timeAgo } from "../format.ts";
-import { isFinished } from "../phase.ts";
+import { hasEnded } from "../phase.ts";
 
 const route = useRoute();
 const { runs, error, loaded } = useRuns();
@@ -37,7 +37,7 @@ const now = useNow();
 const run = computed(() =>
   runs.value.find((r) => r.repo === route.params.repo && String(r.issue) === route.params.issue),
 );
-const finished = computed(() => !!run.value && isFinished(run.value.phase));
+const finished = computed(() => !!run.value && hasEnded(run.value.phase));
 const duration = computed(() => {
   const { startedAt, updatedAt } = run.value ?? {};
   if (!startedAt) return null;

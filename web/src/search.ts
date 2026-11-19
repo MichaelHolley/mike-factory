@@ -1,5 +1,5 @@
 import type { RunStatus } from "../../src/runStatus.ts";
-import { isFinished } from "./phase.ts";
+import { hasEnded } from "./phase.ts";
 
 /** Runs matching every whitespace-separated token in their repo, title or `#issue`, live first, then newest. */
 export function searchRuns(runs: readonly RunStatus[], query: string, limit = 8): RunStatus[] {
@@ -11,6 +11,6 @@ export function searchRuns(runs: readonly RunStatus[], query: string, limit = 8)
       const text = `${run.repo}\n${run.title ?? ""}\n#${run.issue}`.toLowerCase();
       return tokens.every((token) => text.includes(token));
     })
-    .sort((a, b) => Number(isFinished(a.phase)) - Number(isFinished(b.phase)) || updated(b) - updated(a))
+    .sort((a, b) => Number(hasEnded(a.phase)) - Number(hasEnded(b.phase)) || updated(b) - updated(a))
     .slice(0, limit);
 }

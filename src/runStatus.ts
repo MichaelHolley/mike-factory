@@ -10,6 +10,8 @@ export type IssuePhase =
   | "publish"
   | "report"
   | "done"
+  | "merged"
+  | "closed"
   | "failed"
   | "aborted";
 

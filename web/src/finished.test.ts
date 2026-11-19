@@ -9,7 +9,7 @@ function run(repo: string, issue: number, fields: Partial<RunStatus> = {}): RunS
     issueUrl: `https://github.com/${repo}/issues/${issue}`,
     title: null,
     branch: `mike/${issue}`,
-    phase: "done",
+    phase: "merged",
     attempts: 1,
     costUsd: 0,
     model: null,
@@ -30,6 +30,7 @@ describe("filterFinished", () => {
   it("keeps only finished runs, newest finish first across repos", () => {
     const runs = [
       run("o/a", 1, { updatedAt: "2026-11-10T10:00:00" }),
+      run("o/a", 5, { phase: "done", updatedAt: "2026-11-14T10:00:00" }),
       run("o/b", 2, { updatedAt: "2026-11-12T10:00:00" }),
       run("o/a", 3, { phase: "implement", updatedAt: "2026-11-13T10:00:00" }),
       run("o/a", 4, { phase: "failed", updatedAt: "2026-11-11T10:00:00" }),
@@ -42,10 +43,9 @@ describe("filterFinished", () => {
     expect(keys(filterFinished(runs, { ...none, repo: "o/b" }))).toEqual(["o/b#2"]);
   });
 
-  it("tells merged runs apart from other done runs", () => {
-    const runs = [run("o/a", 1, { prMerged: true }), run("o/a", 2), run("o/a", 3, { phase: "aborted" })];
-    expect(keys(filterFinished(runs, { ...none, outcome: "merged" }))).toEqual(["o/a#1"]);
-    expect(keys(filterFinished(runs, { ...none, outcome: "done" }))).toEqual(["o/a#2"]);
+  it("filters by outcome", () => {
+    const runs = [run("o/a", 1), run("o/a", 2, { phase: "closed" }), run("o/a", 3, { phase: "aborted" })];
+    expect(keys(filterFinished(runs, { ...none, outcome: "closed" }))).toEqual(["o/a#2"]);
   });
 
   it("filters by local start day, inclusive on both ends, dropping runs that never started", () => {

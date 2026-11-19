@@ -1203,6 +1203,28 @@ describe("issue pipeline", () => {
     expect((await service.status())[0]?.prMerged).toBe(true);
   });
 
+  it.each([
+    { merged: true, phase: "merged", comment: "Pull request merged" },
+    { merged: false, phase: "closed", comment: "Pull request closed without merging" },
+  ])("ends a run waiting on review as $phase when its PR closes", async ({ merged, phase, comment }) => {
+    const world = createWorld({ dir });
+    autopilot(world.faux);
+    const { harness, service } = await launch(world);
+    await service.start(startAction(1, "comment-1"));
+    await pipelineResult(harness, 1);
+    expect((await service.status())[0]?.phase).toBe("done");
+
+    const action = { kind: "cleanup", repo: REPO, issue: 1, branch: "mike/1-add-hello", merged } as const;
+    await service.cleanup(action);
+
+    expect((await service.status())[0]).toMatchObject({ phase, prMerged: merged });
+    expect(status(world)).toContain(`${comment}: ${world.github.prs[0]!.url}`);
+
+    const upsert = vi.spyOn(world.github, "upsertComment");
+    await service.cleanup(action);
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
   it("opens a follow-up PR after a merge as unmerged", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux, (messages) =>

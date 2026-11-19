@@ -139,19 +139,19 @@ function liveTail(tick: number): TranscriptItem[] {
   return [answer, { ...tool, result: { text: LIVE_OUTPUT.join("\n"), isError: false } }];
 }
 
-const FINISHED: RunStatus["phase"][] = ["done", "failed", "aborted"];
+const FINISHED: RunStatus["phase"][] = ["done", "merged", "closed", "failed", "aborted"];
 
 /** Enough older finished runs across repos and weeks to scroll through. */
 function history(): RunStatus[] {
   const repos = ["mike-factory", "web-shop", "docs-site"];
   return Array.from({ length: 90 }, (_, i) => {
     const finished = 30 * 60 + i * 9 * 60;
-    let phase: RunStatus["phase"] = "done";
+    let phase: RunStatus["phase"] = i % 3 === 0 ? "closed" : "merged";
     if (i % 7 === 3) phase = "failed";
     if (i % 11 === 5) phase = "aborted";
     return run(repos[i % repos.length]!, 100 + i, `Historic change number ${i + 1}`, phase, {
-      prUrl: phase === "done" ? `https://github.com/example/pull/${200 + i}` : null,
-      prMerged: phase === "done" && i % 3 !== 0,
+      prUrl: phase === "merged" || phase === "closed" ? `https://github.com/example/pull/${200 + i}` : null,
+      prMerged: phase === "merged",
       startedAt: ago(finished + 20 + (i % 5) * 15),
       updatedAt: ago(finished),
     });
@@ -176,12 +176,18 @@ function createMockService(): IssueService {
       updatedAt: null,
       costUsd: 0,
     }),
-    run("web-shop", 9, "Show delivery estimates on the product page", "done", {
+    run("web-shop", 9, "Show delivery estimates on the product page", "merged", {
       prUrl: "https://github.com/example/web-shop/pull/14",
       prMerged: true,
       startedAt: ago(180),
       updatedAt: ago(150),
       costUsd: 2.31,
+    }),
+    run("web-shop", 11, "Add a size guide to product pages", "done", {
+      prUrl: "https://github.com/example/web-shop/pull/15",
+      startedAt: ago(95),
+      updatedAt: ago(70),
+      costUsd: 1.42,
     }),
     run("mike-factory", 27, "Recover worktrees after the server crashes mid-run", "failed", {
       attempts: 3,
@@ -214,6 +220,7 @@ function createMockService(): IssueService {
     "publish",
     "report",
     "done",
+    "merged",
     "failed",
     "aborted",
   ];
