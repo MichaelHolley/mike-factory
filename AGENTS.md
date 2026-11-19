@@ -25,7 +25,7 @@ Self-hosted agent that turns a `/mike` comment on a GitHub issue into a pull req
 - No nested ternaries. oxlint's `no-nested-ternary` doesn't reach Vue templates, so avoid them there too.
 - Build interactive controls from `@ui-sdk/vue` components, themed through the `--ui-*` tokens in `web/src/style.css`. Use the `ui-sdk` skill if it's installed. Its docs for the installed version are in `web/node_modules/@ui-sdk/vue/docs/`: read `llms.txt` first, then only the pages you need. Its default styles are in `web/node_modules/@ui-sdk/core/dist/web.css`.
 - Style the web UI with Tailwind utilities and the theme tokens in `web/src/style.css`, not custom CSS. Avoid arbitrary values like `w-[6px]` or `max-[48rem]:`; use the nearest scale class or breakpoint, even if it isn't pixel-identical.
-- Use distinctive `@lucide/vue` icons to make things recognizable at a glance, and use the same icon for a concept everywhere. For example, a run's PR always uses `GitPullRequest`, and a phase always uses its icon from `stepLook` in `web/src/phase.ts`.
+- Use distinctive `@lucide/vue` icons to make things recognizable at a glance, and use the same icon for a concept everywhere. For example, a run's PR always uses `GitPullRequest` (`GitMerge` once merged), and a phase always uses its icon from `stepLook` in `web/src/phase.ts`.
 
 ## Tests
 

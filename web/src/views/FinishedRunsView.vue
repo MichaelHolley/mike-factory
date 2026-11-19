@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Calendar, ChevronLeft, ChevronRight, GitPullRequest, ListFilter, X } from "@lucide/vue";
+import { ArrowLeft, Calendar, ChevronLeft, ChevronRight, GitMerge, ListFilter, X } from "@lucide/vue";
 import { Button } from "@ui-sdk/vue/button";
 import {
   CalendarDay,
@@ -48,7 +48,7 @@ const repoOptions = computed<FilterOption<string>[]>(() => [
 ]);
 const outcomes: FilterOption<Outcome | typeof ALL>[] = [
   { value: ALL, label: "Any outcome", icon: ListFilter, hue: "text-muted" },
-  { value: "merged", label: "Merged", icon: GitPullRequest, hue: "text-merged" },
+  { value: "merged", label: "Merged", icon: GitMerge, hue: "text-merged" },
   { value: "done", label: "Done, not merged", ...stepLook.done },
   { value: "failed", label: "Failed", ...stepLook.failed },
   { value: "aborted", label: "Aborted", ...stepLook.aborted },
