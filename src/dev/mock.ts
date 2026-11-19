@@ -141,6 +141,12 @@ function liveTail(tick: number): TranscriptItem[] {
 
 const IDLE: RunStatus["phase"][] = ["review", "merged", "closed", "done", "failed", "aborted"];
 
+const FAILURES = [
+  "verify: `pnpm test` failed 3 times",
+  "no changes: the agent produced no commits",
+  "run budget exceeded: $5.00",
+];
+
 /** Enough older finished runs across repos and weeks to scroll through. */
 function history(): RunStatus[] {
   const repos = ["mike-factory", "web-shop", "docs-site"];
@@ -153,9 +159,13 @@ function history(): RunStatus[] {
     if (i % 11 === 5) phase = "aborted";
     const published = phase === prState;
     return run(repos[i % repos.length]!, 100 + i, `Historic change number ${i + 1}`, phase, {
+      costUsd: 0.15 + ((i * 37) % 100) / 40 + (i % 17 === 2 ? 4 : 0),
+      model: i % 4 === 1 ? "gpt-6.1-terra" : "gpt-6.1-sol",
+      attempts: i % 5 === 1 ? 2 : 0,
+      lastError: phase === "failed" ? FAILURES[i % FAILURES.length]! : null,
       prUrl: published ? `https://github.com/example/pull/${200 + i}` : null,
       prState: published ? prState : null,
-      startedAt: ago(finished + 20 + (i % 5) * 15),
+      startedAt: ago(finished + 20 + (i % 5) * 15 + ((i * 53) % 90)),
       updatedAt: ago(finished),
     });
   });
