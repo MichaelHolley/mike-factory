@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HUMAN_ENTRY } from "../../src/agent/docs.ts";
 import { PNG_IMAGE } from "../fakes/github.ts";
 import { openAgentHarness } from "../../src/agent/harness.ts";
+import type { IssueService } from "../../src/contracts.ts";
 import type { PrState, TranscriptItem } from "../../src/runStatus.ts";
 import { NO_CHANGES_STATUS, STATUS_MARKER, WORKING_STATUS } from "../../src/agent/tasks/issuePipeline.ts";
 import {
@@ -779,6 +780,50 @@ describe("issue pipeline", () => {
       expect(world.github.reviewRequests).toEqual([{ repo: REPO, pr, login: "owner" }]);
     });
 
+    it("settles a failed review round whose PR closed without a webhook", async () => {
+      const world = createWorld({ dir, repo: { checks: ["test ! -f broken.txt"], maxFixAttempts: 1 } });
+      autopilot(world.faux, (messages) =>
+        textOf(messages.at(-1)).includes("<review>") ? commitFile("broken.txt", "x") : undefined,
+      );
+      const { harness, service, pr } = await finishedRun(world);
+      const { reviewId } = world.github.addReview(REPO, pr, {
+        reviewer: "owner",
+        state: "changes_requested",
+        body: "Add broken.txt",
+        comments: [],
+      });
+      await service.feedback(reviewFeedback(pr, reviewId));
+      expect((await pipelineResult(harness, 1)).status).toBe("failed");
+      world.github.prs[0]!.state = "closed";
+
+      await service.sweep();
+
+      expect(await service.status()).toMatchObject([{ phase: "failed", prState: "closed" }]);
+      expect(await world.deps.worktrees.issues(REPO)).toEqual([]);
+    });
+
+    it("removes the worktree of a round stopped after its PR closed", async () => {
+      const world = createWorld({ dir });
+      autopilot(world.faux, (messages) =>
+        textOf(messages.at(-1)).includes("take your time")
+          ? fauxAssistantMessage(fauxToolCall("bash", { command: "sleep 60" }), { stopReason: "toolUse" })
+          : undefined,
+      );
+      const { harness, service } = await finishedRun(world);
+      const calls = world.faux.state.callCount;
+      await service.start(startAction(1, "comment-2", "take your time"));
+      await waitFor(() => world.faux.state.callCount > calls);
+      world.github.prs[0]!.state = "closed";
+      await service.prState({ kind: "pr-state", repo: REPO, issue: 1, branch: "mike/1-add-hello", state: "closed" });
+      await service.stop(stopAction(1, "comment-3"));
+      expect((await pipelineResult(harness, 1)).status).toBe("aborted");
+      expect(await world.deps.worktrees.issues(REPO)).toEqual([1]);
+
+      await service.sweep();
+
+      expect(await world.deps.worktrees.issues(REPO)).toEqual([]);
+    });
+
     it("finishes the round when GitHub rejects the review re-request", async () => {
       const world = createWorld({ dir });
       autopilot(world.faux, (messages) =>
@@ -1263,6 +1308,62 @@ describe("issue pipeline", () => {
     expect(await world.deps.worktrees.issues(REPO)).toEqual([2]);
     const phases = (await service.status()).map(({ issue, phase }) => `${issue}:${phase}`).sort();
     expect(phases).toEqual(["1:merged", "2:review"]);
+  });
+
+  describe("sweep", () => {
+    const finishedRuns = async (world: World, issues: number[]) => {
+      autopilot(world.faux);
+      const run = await launch(world, issues);
+      for (const issue of issues) {
+        await run.service.start(startAction(issue, `comment-${issue}`));
+        await pipelineResult(run.harness, issue);
+      }
+      const prOf = (issue: number) => world.github.prs.find((pr) => pr.head.startsWith(`mike/${issue}-`))!;
+      return { ...run, prOf };
+    };
+    const phases = async (service: IssueService) =>
+      (await service.status()).map(({ issue, phase }) => `${issue}:${phase}`).sort();
+
+    it("settles a run whose PR merged without a webhook, even without a worktree", async () => {
+      const world = createWorld({ dir });
+      const { service, prOf } = await finishedRuns(world, [1, 2]);
+      prOf(1).state = "merged";
+      await world.deps.worktrees.remove(REPO, 1);
+
+      await service.sweep();
+      await service.sweep();
+
+      expect(await phases(service)).toEqual(["1:merged", "2:review"]);
+      expect(await world.deps.worktrees.issues(REPO)).toEqual([2]);
+    });
+
+    it("settles a run whose PR closed without a webhook and removes its worktree", async () => {
+      const world = createWorld({ dir });
+      const { service, prOf } = await finishedRuns(world, [1]);
+      prOf(1).state = "closed";
+
+      await service.sweep();
+
+      expect(await phases(service)).toEqual(["1:closed"]);
+      expect(await world.deps.worktrees.issues(REPO)).toEqual([]);
+    });
+
+    it("logs a GitHub failure for one run and still settles the next", async () => {
+      const world = createWorld({ dir });
+      const { service, prOf } = await finishedRuns(world, [1, 2]);
+      prOf(1).state = "merged";
+      prOf(2).state = "merged";
+      const getPr = world.github.getPr.bind(world.github);
+      vi.spyOn(world.github, "getPr").mockImplementation(async (repo, number) => {
+        if (number === prOf(1).number) throw new Error("502 Bad Gateway");
+        return getPr(repo, number);
+      });
+
+      await service.sweep();
+
+      expect(await phases(service)).toEqual(["1:review", "2:merged"]);
+      expect(world.logs.filter(({ msg }) => msg === "sweep failed for pull request")).toHaveLength(1);
+    });
   });
 });
 
