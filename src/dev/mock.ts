@@ -53,10 +53,12 @@ const sampleConversation = (): TranscriptItem[] => [
       "The web UI lives in `web/` and uses Vue 3 with plain CSS custom properties in `web/src/style.css`.",
     ].join("\n"),
   },
+
   {
     kind: "assistant",
     text: "I'll look at how the styles are organised first. The plan:\n\n- read `web/src/style.css`\n- find where the colours are defined\n- add a **toggle** in the header",
   },
+
   {
     kind: "tool",
     name: "bash",
@@ -64,6 +66,7 @@ const sampleConversation = (): TranscriptItem[] => [
     args: '{ "command": "ls web/src" }',
     result: { text: "App.vue\ncomponents\ncomposables\nmain.ts\nstyle.css", isError: false },
   },
+
   {
     kind: "tool",
     name: "read",
@@ -71,6 +74,7 @@ const sampleConversation = (): TranscriptItem[] => [
     args: '{ "path": "web/src/style.css" }',
     result: { text: ":root {\n  --bg: #fff;\n  --fg: #111;\n}", isError: false },
   },
+
   {
     kind: "tool",
     name: "bash",
@@ -81,13 +85,18 @@ const sampleConversation = (): TranscriptItem[] => [
       isError: true,
     },
   },
+
   { kind: "assistant", text: "The typecheck fails because `dark` is read as a", interrupted: true },
+
   { kind: "human", text: "Please use the system preference by default." },
+
   {
     kind: "assistant",
     text: 'Got it. I\'ll default to `prefers-color-scheme` and keep the toggle as an override.\n\n```ts\nconst dark = matchMedia("(prefers-color-scheme: dark)").matches;\ndocument.documentElement.dataset.theme = stored ?? (dark ? "dark" : "light");\n```\n\nSee [MDN](https://developer.mozilla.org/docs/Web/CSS/@media/prefers-color-scheme) for details.',
   },
+
   { kind: "tool", name: "edit", summary: "web/src/App.vue", args: '{ "path": "web/src/App.vue" }' },
+
   {
     kind: "human",
     text: "Keep the toggle out of the mobile header.",
@@ -132,10 +141,13 @@ function liveTail(tick: number): TranscriptItem[] {
   const answer = { kind: "assistant", text: LIVE_ANSWER } as const;
   const tool = { kind: "tool", name: "bash", summary: "pnpm test", args: '{ "command": "pnpm test" }' } as const;
   const busy = { kind: "busy" } as const;
+
   const t = tick % (words.length + LIVE_OUTPUT.length + LIVE_PAUSE_TICKS);
   if (t < words.length) return [{ ...answer, text: words.slice(0, t + 1).join(" "), streaming: true }, busy];
+
   const lines = t - words.length + 1;
   if (lines <= LIVE_OUTPUT.length) return [answer, { ...tool, output: LIVE_OUTPUT.slice(0, lines).join("\n") }, busy];
+
   return [answer, { ...tool, result: { text: LIVE_OUTPUT.join("\n"), isError: false } }];
 }
 
@@ -150,14 +162,18 @@ const FAILURES = [
 /** Enough older finished runs across repos and weeks to scroll through. */
 function history(): RunStatus[] {
   const repos = ["mike-factory", "web-shop", "docs-site"];
+
   return Array.from({ length: 90 }, (_, i) => {
     const finished = 30 * 60 + i * 9 * 60;
     const prState: PrState = i % 3 === 0 ? "closed" : "merged";
+
     let phase: RunStatus["phase"] = prState;
     if (i % 13 === 4) phase = "done";
     if (i % 7 === 3) phase = "failed";
     if (i % 11 === 5) phase = "aborted";
+
     const published = phase === prState;
+
     return run(repos[i % repos.length]!, 100 + i, `Historic change number ${i + 1}`, phase, {
       costUsd: 0.15 + ((i * 37) % 100) / 40 + (i % 17 === 2 ? 4 : 0),
       model: i % 4 === 1 ? "gpt-6.1-terra" : "gpt-6.1-sol",
@@ -248,14 +264,17 @@ function createMockService(): IssueService {
   const demo = run("phase-demo", 1, "Walk through every phase", "queued", { startedAt: ago(0), updatedAt: ago(0) });
   runs.unshift(demo);
   conversations.set(key(demo.repo, demo.issue), sampleConversation());
+
   const streaming = conversations.get(key("mike-factory", 31))!;
   const stopped = conversations.get(key("web-shop", 7))!;
   stopped.push({ kind: "failure", reason: "aborted", detail: "Stopped from the issue with /mike stop." });
+
   let tick = 0;
   const items = (k: string) => {
     const conversation = conversations.get(k);
     return conversation === streaming ? [...conversation, ...liveTail(tick)] : conversation;
   };
+
   setInterval(() => {
     tick++;
     notify(transcriptListeners.get(key("mike-factory", 31)));
@@ -296,11 +315,13 @@ function createMockService(): IssueService {
       const item: TranscriptItem = { kind: "human", text, pending: true };
       conversation.push(item);
       notify(transcriptListeners.get(k));
+
       if (result === "started") {
         target.phase = "prepare";
         target.updatedAt = new Date().toISOString();
         notify(statusListeners);
       }
+
       setTimeout(() => {
         delete item.pending;
         conversation.push({ kind: "assistant", text: `(sample reply) Noted: “${text.slice(0, 80)}”` });

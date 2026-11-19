@@ -129,6 +129,7 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
             ROLES[speaker(entry)].label
           }}</span
         >
+
         <template v-if="entry.kind === 'message'">
           <PipelineMessage v-if="entry.message.kind === 'user'" :text="entry.message.text" :class="SAY" />
           <div v-else :class="[SAY, TEXT[entry.message.kind]]">
@@ -155,6 +156,7 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
             >
           </div>
         </template>
+
         <div
           v-else
           :class="[
@@ -163,6 +165,7 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
           ]"
         >
           <ToolCall v-if="entry.calls.length === 1" :call="entry.calls[0]!" quiet />
+
           <Collapsible v-else class="group/tools">
             <CollapsibleTrigger
               class="flex min-h-9 w-full items-center gap-2.5 px-3 text-sm font-normal text-muted group-data-open/tools:text-ink hover:bg-ink/4 hover:text-ink focus-visible:-outline-offset-2"
@@ -182,6 +185,7 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
                 ></span>
               </span>
             </CollapsibleTrigger>
+
             <CollapsiblePanel
               hidden-until-found
               class="h-(--collapsible-panel-height) overflow-hidden text-ink transition-[height] duration-200 ease-out data-ending-style:h-0 data-starting-style:h-0 motion-reduce:transition-none"
@@ -202,11 +206,13 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
         <span v-if="busy.retry" class="min-w-0 wrap-anywhere">Retrying after an error: {{ busy.retry }}</span>
         <span v-else>Working…</span>
       </p>
+
       <div v-if="failure" :class="[SAY, 'text-sm', busy && 'mt-2']">
         <p class="flex items-center gap-2">
           <CircleAlert class="size-3.5 flex-none text-bad" aria-hidden="true" />The agent's last run ended without an
           answer: {{ FAILURES[failure.reason] }}.
         </p>
+
         <p v-if="failure.detail" class="mt-1 pl-5.5 text-muted wrap-anywhere">{{ failure.detail }}</p>
       </div>
     </div>

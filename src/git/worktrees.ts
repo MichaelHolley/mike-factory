@@ -37,6 +37,7 @@ export function createWorktrees(opts: {
   const git = async (cwd: string, args: string[]) => {
     let stdout = "";
     let stderr = "";
+
     const { exitCode } = getOrThrow(
       await workspace.exec(
         ["git", ...args],
@@ -47,6 +48,7 @@ export function createWorktrees(opts: {
         ctx,
       ),
     );
+
     if (exitCode !== 0) throw new Error(`git ${args.join(" ")} failed with exit code ${exitCode}: ${stderr.trim()}`);
     return stdout.trim();
   };
@@ -61,6 +63,7 @@ export function createWorktrees(opts: {
 
   const authEnv = async (repo: string): Promise<Record<string, string>> => {
     if (!opts.token) return {};
+
     const basic = Buffer.from(`x-access-token:${await opts.token(repo)}`).toString("base64");
     return {
       GIT_CONFIG_COUNT: "1",
@@ -84,6 +87,7 @@ export function createWorktrees(opts: {
       () => true,
       () => false,
     );
+
     if (!cloned) {
       await mkdir(opts.mirrorDir, { recursive: true });
       await mirrorGit(opts.mirrorDir, ["clone", "--bare", remoteUrl(repo), mirror], await authEnv(repo));
@@ -93,6 +97,7 @@ export function createWorktrees(opts: {
 
   const ensureRepo = async (repo: string) => {
     const bare = barePath(repo);
+
     if (!(await exists(join(bare, "HEAD")))) {
       await createDir(dirname(bare));
       // `--no-local` so the clone never hardlinks the mirror's object files when both share a file system. The refspec
@@ -107,6 +112,7 @@ export function createWorktrees(opts: {
         bare,
       ]);
     }
+
     // Clones made before the mirror existed still fetch from GitHub, without credentials.
     await git(bare, ["remote", "set-url", "origin", mirrorPath(repo)]);
   };
@@ -124,6 +130,7 @@ export function createWorktrees(opts: {
       withLock(repo.name, async () => {
         const path = worktreePath(repo.name, issue);
         const bare = barePath(repo.name);
+
         await fetchMirror(repo.name);
         await ensureRepo(repo.name);
         if (await exists(path)) return { path, branch, created: false };
@@ -131,6 +138,7 @@ export function createWorktrees(opts: {
         await git(bare, ["fetch", "--prune", "origin"]);
         await createDir(dirname(path));
         await git(bare, ["worktree", "prune"]);
+
         if (await refExists(repo.name, `refs/heads/${branch}`)) {
           await git(bare, ["worktree", "add", path, branch]);
         } else {
@@ -152,6 +160,7 @@ export function createWorktrees(opts: {
         const ref = `refs/heads/${branch}`;
         const bundle = getOrThrow(await workspace.createTempFile({ prefix: "publish-", suffix: ".bundle" }, ctx));
         const local = await mkdtemp(join(tmpdir(), "publish-"));
+
         try {
           await git(barePath(repo.name), [
             "bundle",
@@ -159,8 +168,10 @@ export function createWorktrees(opts: {
             bundle,
             `refs/remotes/origin/${repo.defaultBranch}..${ref}`,
           ]);
+
           const localBundle = join(local, "issue.bundle");
           await writeFile(localBundle, getOrThrow(await workspace.readBinaryFile(bundle, ctx)));
+
           const mirror = mirrorPath(repo.name);
           await mirrorGit(mirror, [
             "-c",
@@ -192,9 +203,11 @@ export function createWorktrees(opts: {
       withLock(repo, async () => {
         const bare = barePath(repo);
         if (!(await exists(join(bare, "HEAD")))) return;
+
         const path = worktreePath(repo, issue);
         if (await exists(path)) await git(bare, ["worktree", "remove", "--force", path]);
         await git(bare, ["worktree", "prune"]);
+
         const branches = await git(bare, [
           "for-each-ref",
           "--format=%(refname:short)",
@@ -207,11 +220,13 @@ export function createWorktrees(opts: {
 
     async issues(repo) {
       const numbers = new Set<number>();
+
       const dirs = await workspace.listDir(join(dataDir, "worktrees", repo), ctx);
       for (const { name } of dirs.ok ? dirs.value : []) {
         const match = /^issue-(\d+)$/.exec(name);
         if (match) numbers.add(Number(match[1]));
       }
+
       if (await exists(join(barePath(repo), "HEAD"))) {
         const branches = await git(barePath(repo), [
           "branch",
@@ -225,6 +240,7 @@ export function createWorktrees(opts: {
           if (issue !== undefined) numbers.add(issue);
         }
       }
+
       return [...numbers].sort((a, b) => a - b);
     },
 

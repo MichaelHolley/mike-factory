@@ -88,6 +88,7 @@ export function budgetBreach(
   spent: { turns: number; costUsd: number },
 ): string | undefined {
   if (spent.turns >= repo.maxTurns) return `turn budget exhausted (${spent.turns} of ${repo.maxTurns} turns used)`;
+
   if (spent.costUsd >= repo.maxCostUsd)
     return `cost budget exhausted ($${spent.costUsd.toFixed(4)} of $${repo.maxCostUsd})`;
   return undefined;
@@ -113,6 +114,7 @@ export async function runBudgetBreach(
   const state = await read.snapshot(IssueState, conversationId, context);
   const repo = state && findRepo(config, state.repo);
   if (!repo) return undefined;
+
   const costUsd = totalCostUsd(await read.snapshot(UsageDoc, conversationId, context));
   return budgetBreach(repo, spentSince(messages, costUsd, state.budgetFrom));
 }
@@ -141,11 +143,14 @@ export function createGuards(opts: { config: AppConfig; abortTask: (id: TaskId) 
         beforeTool: async (call, api, context) => {
           const state = await api.snapshot(IssueState, api.conversationId, context);
           if (!state || state.worktreePath === "") return undefined;
+
           const args = call.arguments as { command?: unknown; path?: unknown };
+
           if (call.name === "bash" && typeof args.command === "string") {
             const reason = bashViolation(args.command, state.worktreePath);
             if (reason) return { block: `Blocked: ${reason}.` };
           }
+
           if (PATH_TOOLS.has(call.name) && typeof args.path === "string") {
             const outside = pathOutsideWorktree(args.path, state.worktreePath);
             if (outside) return { block: `Blocked: path outside the issue worktree: ${outside}.` };

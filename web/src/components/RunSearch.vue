@@ -25,6 +25,7 @@ const search = createAutocompleteController();
 const query = ref("");
 const dismissed = ref(false);
 const expanded = ref(false);
+
 const results = computed(() => searchRuns(runs.value, query.value));
 // Autocomplete only asks to open when it has items, so the "No matching runs" row needs open driven from the text.
 const open = computed(() => !dismissed.value && query.value.trim() !== "");

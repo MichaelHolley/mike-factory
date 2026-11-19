@@ -63,6 +63,7 @@ async function main() {
   const github = createGitHubClient({ appId: secrets.appId, privateKey: secrets.privateKey, owner: config.owner });
   const runnerHost = process.env.RUNNER_HOST || undefined;
   const workspace = await openWorkspace({ runnerHost, dataDir, gitIdentity: await github.botIdentity() });
+
   if (!runnerHost) log("RUNNER_HOST is unset: agent tools run unsandboxed in the server process");
   if (!secrets.proxySecret) log("PROXY_SECRET is unset: anything that reaches the port can use the status API");
 
@@ -77,6 +78,7 @@ async function main() {
   const { models, model } = buildModels(secrets.openrouterApiKey, useFaux);
   const branchModel = useFaux ? undefined : models.getModel("openrouter", branchModelId);
   if (!useFaux && !branchModel) throw new Error(`BRANCH_MODEL ${branchModelId} is not a known OpenRouter model`);
+
   const nameBranch = branchModel ? createBranchNamer({ models, model: branchModel, log }) : titleBranchNamer;
   const effectiveConfig: AppConfig = model
     ? { ...config, repos: config.repos.map((repo) => ({ ...repo, model })) }
@@ -123,6 +125,7 @@ async function main() {
     proxySecret: secrets.proxySecret,
     shutdownSignal: shutdownController.signal,
   });
+
   const server = serve({ fetch: app.fetch, port, hostname }, (info) =>
     log("listening", {
       port: info.port,
@@ -137,15 +140,18 @@ async function main() {
     shuttingDown = true;
     log("shutting down", { signal });
     shutdownController.abort();
+
     const serverClosed = new Promise<void>((resolve) => server.close(() => resolve()));
     if ("closeIdleConnections" in server) server.closeIdleConnections();
     // A client that stopped reading never drains its live stream, so its socket would never close.
     if ("closeAllConnections" in server) setTimeout(() => server.closeAllConnections(), 5_000).unref();
+
     await serverClosed;
     await harness.close(BACKGROUND_CONTEXT);
     workspace.close();
     process.exit(0);
   };
+
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   process.on("SIGINT", () => void shutdown("SIGINT"));
 }

@@ -33,6 +33,7 @@ const mostExpensive = computed(() => metrics.value.costs.slice(0, 5));
 const facts = computed(() => {
   const { prs, mergeRate, cost, firstPassRate, fixAttemptsPerPr, medianRunMs, runs: count } = metrics.value;
   const { p90PerMergedPr } = cost;
+
   const list: { icon: Component; hue: string; label: string; value: string; note: string }[] = [
     {
       icon: GitMerge,

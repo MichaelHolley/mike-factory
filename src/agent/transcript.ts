@@ -87,6 +87,7 @@ export function toTranscript(
       ),
     ),
   };
+
   const shown = new Set<string>();
   const human = (message: HumanMessage | undefined, pending: boolean): TranscriptItem[] => {
     if (!message || shown.has(message.id)) return [];
@@ -100,16 +101,20 @@ export function toTranscript(
       },
     ];
   };
+
   const placed = entries.flatMap((entry, index): TranscriptItem[] =>
     entry.kind === HUMAN_ENTRY
       ? human(humanMessage(entry.data), false)
       : contributions[index]!.flatMap((message) => itemsOf(message, calls)),
   );
+
   const streaming = (live?.generation?.message?.content ?? []).flatMap((part): TranscriptItem[] =>
     part.type === "text" && part.text.trim() ? [{ kind: "assistant", text: clip(part.text), streaming: true }] : [],
   );
+
   const retry = live?.generation?.retry?.error;
   const failure = live?.runFailure;
+
   return [
     ...placed,
     ...streaming,

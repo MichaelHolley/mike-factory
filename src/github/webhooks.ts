@@ -79,6 +79,7 @@ export async function verifyWebhook(input: {
   } catch {
     return ignore("payload is not valid JSON");
   }
+
   if (event === "pull_request") return pullRequestAction(parsed as PullRequestPayload, config);
   if (event === "pull_request_review") return reviewAction(parsed as ReviewPayload, config);
   if (event === "pull_request_review_comment") return reviewCommentAction(parsed as ReviewCommentPayload, config);
@@ -169,11 +170,14 @@ function prFeedback(
 ): WebhookAction {
   const notAllowed = senderNotAllowed(payload, config);
   if (notAllowed) return ignore(notAllowed);
+
   const target = agentPr(payload, config);
   if ("reason" in target) return ignore(target.reason);
   if (!target.pr) return ignore("payload has no pull request number");
+
   if (command?.kind === "stop") return { kind: "pr-stop", repo: target.repo, pr: target.pr };
   if (payload.pull_request?.state !== "open") return ignore("pull request is not open");
+
   return {
     kind: "feedback",
     repo: target.repo,
@@ -197,8 +201,10 @@ function agentPr(
     fromFork: head?.repo?.full_name !== payload.repository?.full_name,
   });
   if ("reason" in target) return target;
+
   const notAllowed = repoNotAllowed(payload, config);
   if (notAllowed) return { reason: notAllowed };
+
   return { repo: payload.repository!.name!, pr: payload.pull_request?.number ?? 0, issue: target.issue };
 }
 

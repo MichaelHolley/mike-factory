@@ -19,7 +19,9 @@ export function createReviewTools(github: GitHubClient) {
         execute: async (_args, api, context) => {
           const state = await api.snapshot(IssueState, api.conversationId, context);
           if (!state?.prNumber) return { output: text("This issue has no pull request yet.") };
+
           const threads = await github.listReviewThreads(state.repo, state.prNumber);
+
           return {
             output: text(
               threads.length === 0
@@ -38,6 +40,7 @@ export function createReviewTools(github: GitHubClient) {
           };
         },
       }),
+
       defineTool({
         name: "reply_to_review_comment",
         description:
@@ -56,8 +59,10 @@ export function createReviewTools(github: GitHubClient) {
               isError: true,
             };
           }
+
           const state = await api.snapshot(IssueState, api.conversationId, context);
           if (!state?.prNumber) return { output: text("Rejected: this issue has no pull request yet."), isError: true };
+
           const notes = await api.snapshot(IssueNotes, api.conversationId, context);
           const known =
             notes?.items.some((note) => note.review?.comments.some(({ id }) => id === args.commentId)) ||
@@ -72,12 +77,14 @@ export function createReviewTools(github: GitHubClient) {
               isError: true,
             };
           }
+
           await api.commit(async (tx) => {
             const replies = await tx.doc(ReviewReplies, api.conversationId);
             const draft = replies.items.find((item) => item.commentId === args.commentId && !item.postedAt);
             if (draft) draft.body = body;
             else replies.items.push({ commentId: args.commentId, body, postedAt: null });
           }, context);
+
           return { output: text("Saved. The pipeline posts it after pushing.") };
         },
       }),

@@ -31,6 +31,7 @@ export function createPullRequestTools() {
           if (!state || state.issue === 0) throw new Error("This conversation is not bound to a GitHub issue.");
           const title = args.title.trim();
           const body = args.body.trim();
+
           if (!CONVENTIONAL_TITLE.test(title)) {
             return {
               output: text(
@@ -46,9 +47,11 @@ export function createPullRequestTools() {
               isError: true,
             };
           }
+
           await api.commit(async (tx) => {
             Object.assign(await tx.doc(IssueState, api.conversationId), { prTitle: title, prBody: body });
           }, context);
+
           return { output: text("Saved.") };
         },
       }),

@@ -23,7 +23,9 @@ export function createGithubTools(github: GitHubClient) {
         replay: "safe",
         execute: async (_args, api, context) => {
           const { repo, issue } = await currentIssue(api, context);
+
           const data = await github.getIssue(repo, issue);
+
           return {
             output: text(
               `#${data.number} ${data.title}\nstate: ${data.state}\nlabels: ${data.labels.join(", ") || "none"}\n\n${data.body}`,
@@ -31,6 +33,7 @@ export function createGithubTools(github: GitHubClient) {
           };
         },
       }),
+
       defineTool({
         name: "list_issue_comments",
         description:
@@ -39,7 +42,9 @@ export function createGithubTools(github: GitHubClient) {
         replay: "safe",
         execute: async (_args, api, context) => {
           const { repo, issue } = await currentIssue(api, context);
+
           const comments = await github.listIssueComments(repo, issue);
+
           return {
             output: text(
               comments.length === 0

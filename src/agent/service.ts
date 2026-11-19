@@ -80,6 +80,7 @@ export function createIssueService(opts: {
     const index = await harness.snapshot(IssueIndex, key, context);
     const conversationId = index?.conversationId ?? undefined;
     if (conversationId === undefined) return { key };
+
     return {
       key,
       conversationId: asConversationId(conversationId),
@@ -100,6 +101,7 @@ export function createIssueService(opts: {
   const cleanup = async (repo: string, issue: number) => {
     const key = issueKey(config.owner, repo, issue);
     if (await hasLivePipeline(repo, issue)) return log("cleanup skipped: pipeline still running", { key });
+
     await worktrees.remove(repo, issue);
     log("worktree removed", { key });
   };
@@ -107,6 +109,7 @@ export function createIssueService(opts: {
   const recordPrState = async (repo: string, issue: number, branch: string, prState: PrState) => {
     const { key, conversationId, state } = await lookup(repo, issue);
     if (state?.branch !== branch) return log("pr state ignored: not the issue's agent branch", { key, branch });
+
     const conversation = conversationId && (await harness.conversation(conversationId, context));
     if (conversation) {
       await conversation.commit(async (tx) => {
@@ -114,6 +117,7 @@ export function createIssueService(opts: {
       }, context);
       log("pull request state recorded", { key, prState });
     }
+
     if (prState !== "open") await cleanup(repo, issue);
   };
 
@@ -138,11 +142,13 @@ export function createIssueService(opts: {
   ) => {
     const { repo, issue, requestId } = input;
     const key = issueKey(config.owner, repo, issue);
+
     const [{ title }] = await Promise.all([
       github.getIssue(repo, issue),
       upsertStatus(deps, { repo, issue, statusOn }, WORKING_STATUS),
     ]);
     const worktreePath = worktrees.worktreePath(repo, issue);
+
     const conversation = conversationId
       ? await harness.conversation(conversationId, context)
       : await harness.createConversation(
@@ -186,6 +192,7 @@ export function createIssueService(opts: {
         updatedAt: now,
       });
     }, context);
+
     log("pipeline started", { key, requestId });
   };
 
@@ -202,8 +209,10 @@ export function createIssueService(opts: {
       const notes = await tx.doc(IssueNotes, conversation.id);
       const existing = notes.items.find((item) => item.id === note.id);
       if (!existing) notes.items.push({ ...note, at: new Date().toISOString(), deliveredAt: null });
+
       const state = await tx.doc(IssueState, conversation.id);
       if (pr && !existing) Object.assign(state, { prNumber: pr.number, reviewer: pr.reviewer });
+
       const task = state.pipelineTaskId == null ? undefined : await tx.task(state.pipelineTaskId as TaskId);
       return { live: task !== undefined && task.state.status !== "terminal", pending: !existing?.deliveredAt };
     }, context);
@@ -217,6 +226,7 @@ export function createIssueService(opts: {
     const { conversationId } = await lookup(repo, issue);
     const conversation = conversationId === undefined ? undefined : await harness.conversation(conversationId, context);
     if (!conversation) return undefined;
+
     const history = new ConversationTranscript(
       (query, limit, context) => conversation.entries(query, limit, undefined, context),
       { pageSize: HISTORY_PAGE },
@@ -228,6 +238,7 @@ export function createIssueService(opts: {
       history.merge(call.value);
       listener();
     });
+
     const unobserve = observeChanges(
       harness,
       (change) =>
@@ -241,11 +252,13 @@ export function createIssueService(opts: {
       async items(withLive = true) {
         // Notes first, so a note delivered between the two reads shows once rather than not at all.
         const notes = await harness.snapshot(IssueNotes, conversation.id, context);
+
         let view = history.merge(watch.value);
         for (let missing; (missing = view.items.find((item) => item.kind !== "entry"));) {
           await (missing.kind === "earlier" ? history.loadEarlier(context) : history.fillGap(missing, context));
           view = history.merge(watch.value);
         }
+
         const inbox = view.docs[InboxDoc.definition.kind] as InboxState | undefined;
         const queued = [
           ...(inbox?.items ?? []).flatMap((item) =>
@@ -253,11 +266,13 @@ export function createIssueService(opts: {
           ),
           ...(notes?.items ?? []).filter((note) => !note.deliveredAt),
         ].filter((message) => message !== undefined);
+
         return toTranscript(
           view.items.flatMap((item) => (item.kind === "entry" ? [item.entry] : [])),
           { queued, ...(withLive && { live: view.docs[LiveDoc.definition.kind] as LiveState | undefined }) },
         );
       },
+
       stop() {
         unobserve();
         void watch.stop();
@@ -276,6 +291,7 @@ export function createIssueService(opts: {
         if (state?.pipelineTaskId != null && (await isLive(state.pipelineTaskId))) {
           return log("start ignored: pipeline already running", { key, requestId });
         }
+
         await launch(repoConfig, conversationId, { repo, issue, requestId, instructions, trigger: "comment" });
       }),
 
@@ -290,6 +306,7 @@ export function createIssueService(opts: {
         if (live) return "steered";
         // A retry of a message that was already delivered has nothing left to start.
         if (!pending) return "started";
+
         const input = { repo, issue, requestId: `web-${id}`, instructions: "", trigger: "web" } as const;
         await launch(repoConfig, conversation.id, input);
         return "started";
@@ -300,10 +317,12 @@ export function createIssueService(opts: {
         const { repo, pr: number, id } = action;
         const repoConfig = findRepo(config, repo);
         if (!repoConfig) return log("feedback ignored: repository is not configured", { repo, pr: number });
+
         const pr = await github.getPr(repo, number);
         const target = agentPrIssue({ ref: pr.headRef, fromFork: pr.fromFork });
         if (pr.state !== "open" || "reason" in target)
           return log("feedback ignored: not an open agent pull request", { repo, pr: number, id });
+
         const { key, conversationId, state } = await lookup(repo, target.issue);
         const conversation = conversationId && (await harness.conversation(conversationId, context));
         if (!conversation) return log("feedback ignored: issue has no conversation", { key, pr: number, id });
@@ -311,6 +330,7 @@ export function createIssueService(opts: {
           return log("feedback ignored: not the issue's agent branch", { key, pr: number, branch: pr.headRef });
 
         await github.react(repo, action.nodeId);
+
         const review =
           action.source.type === "review"
             ? await github.getReviewFeedback(repo, number, action.source.reviewId)
@@ -322,6 +342,7 @@ export function createIssueService(opts: {
         );
         if (live) return log("feedback steered into the live run", { key, id });
         if (!pending) return log("feedback ignored: already delivered", { key, id });
+
         const input = { repo, issue: target.issue, requestId: id, instructions: "", trigger: "pr" } as const;
         await launch(repoConfig, conversation.id, input, number);
       }),
@@ -338,10 +359,12 @@ export function createIssueService(opts: {
           issue = target.issue;
           branch = pr.headRef;
         }
+
         const { key, state } = await lookup(action.repo, issue);
         if (branch !== undefined && state?.branch !== branch)
           return log("stop ignored: not the issue's agent branch", { key, branch });
         if (state?.pipelineTaskId == null) return log("stop ignored: no pipeline for issue", { key });
+
         const outcome = await harness.abortTask(state.pipelineTaskId as TaskId, context);
         log("pipeline abort requested", { key, outcome });
       }),
@@ -352,6 +375,7 @@ export function createIssueService(opts: {
       for await (const { state } of runs()) {
         const prNumber = prNumberOf(state);
         if (prNumber == null || isSettled(state) || !findRepo(config, state.repo)) continue;
+
         const { repo, issue, branch } = state;
         try {
           const pr = await github.getPr(repo, prNumber);
@@ -360,6 +384,7 @@ export function createIssueService(opts: {
           log("sweep failed for pull request", { key: issueKey(config.owner, repo, issue), error: messageOf(error) });
         }
       }
+
       for (const { name: repo } of config.repos) {
         for (const issue of await worktrees.issues(repo)) {
           try {
@@ -373,6 +398,7 @@ export function createIssueService(opts: {
             log("sweep failed for issue", { key: issueKey(config.owner, repo, issue), error: messageOf(error) });
           }
         }
+
         await worktrees.prune(repo);
       }
     },
@@ -382,6 +408,7 @@ export function createIssueService(opts: {
       for await (const { id, state } of runs()) {
         const agent = await harness.snapshot(AgentDoc, id, context);
         const prState = storedPrState(state);
+
         states.push({
           repo: state.repo,
           issue: state.issue,

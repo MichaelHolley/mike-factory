@@ -112,6 +112,7 @@ export function createWorld(opts: {
   const names = [REPO, ...(opts.extraRepos ?? [])];
   const remotes = Object.fromEntries(names.map((name) => [name, seedRemote(opts.dir, name)]));
   const remote = remotes[REPO]!;
+
   const repo: RepoConfig = {
     name: REPO,
     defaultBranch: "main",
@@ -123,11 +124,13 @@ export function createWorld(opts: {
     ...opts.repo,
   };
   const config: AppConfig = { owner: OWNER, allowedSenderId: 1, repos: names.map((name) => ({ ...repo, name })) };
+
   const fake =
     opts.githubFile && existsSync(opts.githubFile)
       ? FakeGitHub.fromJSON(JSON.parse(readFileSync(opts.githubFile, "utf8")) as FakeGitHubState)
       : new FakeGitHub();
   const github = opts.githubFile ? persisted(fake, opts.githubFile) : fake;
+
   const worktrees = createWorktrees({
     env: new NodeExecutionEnv({ cwd: opts.dir }),
     dataDir: join(opts.dir, "data"),
@@ -135,11 +138,13 @@ export function createWorld(opts: {
     owner: OWNER,
     remoteUrl: (name) => remotes[name]!,
   });
+
   const faux = fauxProvider({
     models: ["faux-1", "faux-2"].map((id) => ({ id, cost: { input: 10, output: 10, cacheRead: 0, cacheWrite: 0 } })),
   });
   const models = createModels();
   models.setProvider(faux.provider);
+
   const logs: World["logs"] = [];
   const deps: AgentDeps = {
     config,
@@ -150,6 +155,7 @@ export function createWorld(opts: {
     maxConcurrent: opts.maxConcurrent,
     skills: opts.skills,
   };
+
   return { dir: opts.dir, remote, remotes, github: fake, config, repo, faux, models, deps, logs };
 }
 

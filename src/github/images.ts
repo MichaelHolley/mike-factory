@@ -21,10 +21,12 @@ const colorTableBytes = (flags: number) => (flags & 0x80 ? 3 << ((flags & 7) + 1
 function gifSize(bytes: Buffer): Size | undefined {
   let size = { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) };
   let offset = 13 + colorTableBytes(bytes[10]!);
+
   const skipSubBlocks = () => {
     while (offset < bytes.length && bytes[offset] !== 0) offset += bytes[offset]! + 1;
     offset++;
   };
+
   while (offset < bytes.length && bytes[offset] !== 0x3b) {
     if (bytes[offset] === 0x21) {
       offset += 2;
@@ -47,6 +49,7 @@ function webpSize(bytes: Buffer, start: number, end: number): Size | undefined {
     const body = offset + 8;
     const next = body + bytes.readUInt32LE(offset + 4);
     if (next > end) return undefined;
+
     let found: Size | undefined;
     if (type === "VP8X" || type === "ANMF") {
       const at = type === "VP8X" ? body + 4 : body + 6;
@@ -63,6 +66,7 @@ function webpSize(bytes: Buffer, start: number, end: number): Size | undefined {
       found = { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 };
     }
     if (found) size = size ? larger(size, found) : found;
+
     offset = next + (next % 2);
   }
   return size;
@@ -136,6 +140,7 @@ export async function downloadIssueImage(
   try {
     const token = await authenticate();
     let url = value;
+
     for (let redirects = 0; ; redirects++) {
       const response = await fetch(url, {
         redirect: "manual",
@@ -146,21 +151,27 @@ export async function downloadIssueImage(
           ...(redirects === 0 && { authorization: `Bearer ${token}` }),
         },
       });
+
       try {
         if ([301, 302, 303, 307, 308].includes(response.status)) {
           const location = response.headers.get("location");
           if (!location || redirects >= MAX_REDIRECTS) return { ok: false, reason: "too many or invalid redirects" };
+
           const next = new URL(location, url).href;
           if (!isImageRedirectUrl(next)) return { ok: false, reason: "redirect is not an allowed GitHub image URL" };
+
           url = next;
           continue;
         }
+
         if (!response.ok) return { ok: false, reason: `download returned HTTP ${response.status}` };
+
         const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
         if (!IMAGE_MIME_TYPES.has(contentType)) return { ok: false, reason: "unsupported image MIME type" };
         if (Number(response.headers.get("content-length")) > MAX_ISSUE_IMAGE_BYTES)
           return { ok: false, reason: "image exceeds the 10 MiB size limit" };
         if (!response.body) return { ok: false, reason: "empty image" };
+
         const chunks: Uint8Array[] = [];
         let size = 0;
         for await (const chunk of response.body) {
@@ -168,11 +179,13 @@ export async function downloadIssueImage(
           if (size > MAX_ISSUE_IMAGE_BYTES) return { ok: false, reason: "image exceeds the 10 MiB size limit" };
           chunks.push(chunk);
         }
+
         const bytes = Buffer.concat(chunks, size);
         const header = imageHeader(bytes);
         if (!header) return { ok: false, reason: "not a PNG, JPEG, GIF or WebP image" };
         if (header.width * header.height > MAX_IMAGE_PIXELS)
           return { ok: false, reason: "image exceeds the 50 megapixel limit" };
+
         return { ok: true, image: { mimeType: header.mimeType, data: bytes.toString("base64") } };
       } finally {
         if (!response.body?.locked) await response.body?.cancel();

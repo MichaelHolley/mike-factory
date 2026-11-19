@@ -67,6 +67,7 @@ export function createServer({
     if (!live) return c.text("not found", 404);
 
     c.header("X-Accel-Buffering", "no");
+
     const response = streamSSE(
       c,
       async (stream) => {
@@ -75,19 +76,24 @@ export function createServer({
           stream.abort();
           wake();
         };
+
         stream.onAbort(end);
         // On Node, `onAbort` misses clients that leave before the response body is read.
         c.req.raw.signal.addEventListener("abort", end);
         shutdownSignal?.addEventListener("abort", end);
+
         const ping = setInterval(() => void stream.write(": ping\n\n"), PING_MS);
         let sent: string[] | undefined;
+
         try {
           while (!ended()) {
             changed = false;
             const loadedAt = Date.now();
             const items = (await live.items()).map((item) => JSON.stringify(item));
+
             let from = 0;
             while (sent && from < items.length && items[from] === sent[from]) from++;
+
             if (!sent || from < Math.max(items.length, sent.length)) {
               await stream.writeSSE({
                 data: `{"from":${from},"items":[${items.slice(from).join(",")}]}`,
@@ -95,6 +101,7 @@ export function createServer({
               });
             }
             sent = items;
+
             if (!changed && !ended()) await new Promise<void>((resolve) => (wake = resolve));
             if (ended()) break;
             await stream.sleep(Math.max(0, loadedAt + THROTTLE_MS - Date.now()));
@@ -108,6 +115,7 @@ export function createServer({
       },
       async (error) => log("live stream failed", { path: c.req.path, error: error.message }),
     );
+
     // A kept-alive socket left over after shutdown aborts the stream would hold `server.close()` until its keep-alive timeout.
     response.headers.set("Connection", "close");
     return response;
@@ -117,6 +125,7 @@ export function createServer({
     app.post("/webhooks/github", async (c) => {
       const rawBody = await c.req.text();
       const deliveryId = c.req.header("x-github-delivery") ?? "";
+
       let action;
       try {
         action = await verifyWebhook({
@@ -146,16 +155,21 @@ export function createServer({
     const repo = c.req.param("repo");
     const issue = Number(c.req.param("issue"));
     if (!Number.isInteger(issue)) return c.text("not found", 404);
+
     // Browsers can't send JSON cross-site without a CORS preflight, which this server never allows.
     if (!/^application\/json\b/i.test(c.req.header("content-type") ?? ""))
       return c.text("expected application/json", 415);
+
     const body = (await c.req.json().catch(() => undefined)) as { id?: unknown; text?: unknown } | undefined;
     const { id, text } = body ?? {};
+
     if (typeof id !== "string" || !UUID.test(id)) return c.text("id must be a UUID", 400);
     if (typeof text !== "string" || !text.trim() || text.length > MAX_MESSAGE_CHARS)
       return c.text(`text must be 1 to ${MAX_MESSAGE_CHARS} characters`, 400);
+
     const result = await service.message({ repo, issue, id, text: text.trim() });
     log("message received", { repo, issue, id, result });
+
     if (result === "not_found") return c.text("not found", 404);
     return c.json({ result }, 202);
   });
@@ -180,6 +194,7 @@ export function createServer({
     if (!transcript) return c.text("not found", 404);
     if (c.req.query("download") === "1") {
       const repo = c.req.param("repo").replace(/[^a-zA-Z0-9._-]/g, "_");
+
       c.header("Content-Disposition", `attachment; filename="${repo}-issue-${issue}-conversation.json"`);
       c.header("Cache-Control", "no-store");
       return c.body(JSON.stringify(transcript, null, 2), 200, { "Content-Type": "application/json; charset=UTF-8" });
@@ -193,6 +208,7 @@ export function createServer({
   }
 
   app.notFound((c) => c.text("not found", 404));
+
   app.onError((error, c) => {
     log("request failed", { path: c.req.path, error: error.message });
     return c.text("internal error", 500);

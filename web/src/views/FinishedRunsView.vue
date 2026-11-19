@@ -47,6 +47,7 @@ const repoOptions = computed<FilterOption<string>[]>(() => [
     .sort()
     .map((name) => ({ value: name, label: name })),
 ]);
+
 const OUTCOMES: [IssuePhase, string][] = [
   ["merged", "Merged"],
   ["closed", "Closed"],
@@ -141,16 +142,19 @@ watch([repo, outcome, started], reset);
               </DatePickerTrigger>
             </span>
           </div>
+
           <DatePickerContent align="end">
             <div class="flex items-center justify-between">
               <CalendarPrevious><ChevronLeft aria-hidden="true" /></CalendarPrevious>
               <CalendarHeading />
               <CalendarNext><ChevronRight aria-hidden="true" /></CalendarNext>
             </div>
+
             <CalendarGrid>
               <CalendarWeekdays v-slot="{ index }"><CalendarWeekday :index /></CalendarWeekdays>
               <CalendarWeeks v-slot="{ cell }"><CalendarDay :value="cell.date" /></CalendarWeeks>
             </CalendarGrid>
+
             <div class="flex gap-1 border-t border-line pt-2">
               <DatePickerPreset v-for="preset in presets" :key="preset.label" :value="preset.value">
                 {{ preset.label }}

@@ -29,8 +29,10 @@ export function parsePrivateKey(raw: string): string {
     .trim()
     .replace(/^(["'])([\s\S]*)\1$/, "$2")
     .trim();
+
   if (!value.includes("-----BEGIN")) value = Buffer.from(value, "base64").toString("utf8").trim();
   value = value.replaceAll("\\n", "\n");
+
   try {
     createPrivateKey(value);
   } catch {
@@ -41,6 +43,7 @@ export function parsePrivateKey(raw: string): string {
       `GITHUB_PRIVATE_KEY is not a valid PEM private key (${value.split("\n").length} lines, ${value.length} chars, ${start})`,
     );
   }
+
   return value;
 }
 

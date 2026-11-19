@@ -30,6 +30,7 @@ export async function openAgentHarness(
 ): Promise<{ harness: Harness; service: IssueService }> {
   const log = opts.deps.log ?? (() => {});
   const holder: { harness?: Harness } = {};
+
   const { registry, pipeline } = createAgentRegistry(opts.deps, {
     crashAt: opts.crashAt,
     abortTask: (id) => {
@@ -51,7 +52,9 @@ export async function openAgentHarness(
     context,
   );
   holder.harness = harness;
+
   const service = createIssueService({ harness, storage: opts.storage, pipeline, deps: opts.deps, context });
+
   harness.resume();
   return { harness, service };
 }

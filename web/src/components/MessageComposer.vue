@@ -30,6 +30,7 @@ async function send() {
   if (!canSend.value) return;
   sending.value = true;
   error.value = null;
+
   try {
     const url = `/status/${encodeURIComponent(props.repo)}/${encodeURIComponent(props.issue)}/messages`;
     const response = await fetch(url, {
@@ -38,6 +39,7 @@ async function send() {
       body: JSON.stringify({ id, text: text.value }),
     });
     if (!response.ok) throw new Error((await response.text()) || `HTTP ${response.status}`);
+
     text.value = "";
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
@@ -63,20 +65,25 @@ async function send() {
         :disabled="sending"
         placeholder="Message the agent…"
       />
+
       <p v-if="error" class="px-4 pb-3 text-sm text-bad wrap-anywhere" role="alert">Couldn't send: {{ error }}</p>
+
       <div class="flex flex-wrap items-center justify-between gap-3 px-4 pb-3">
         <FieldLabel class="sr-only">
           {{ finished ? "Continue this run with a follow-up" : "Steer the agent while it works" }}
         </FieldLabel>
+
         <div role="status" aria-atomic="true">
           <span class="sr-only">Current pipeline phase: </span>
           <PhaseBadge :phase="phase" />
         </div>
+
         <FieldDescription class="sr-only items-center gap-1 text-xs text-muted sm:not-sr-only sm:ml-auto sm:flex">
           <span class="sr-only">Send with Command or Control plus Enter</span>
           <Command class="size-3" aria-hidden="true" /><span aria-hidden="true">/ Ctrl +</span
           ><CornerDownLeft class="size-3" aria-hidden="true" />
         </FieldDescription>
+
         <Button
           type="submit"
           :disabled="!canSend"
