@@ -25,7 +25,7 @@ RUN pnpm install --frozen-lockfile --prod --filter mike-factory
 
 FROM base AS runtime
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates openssh-server openssh-client ripgrep \
+ && apt-get install -y --no-install-recommends git ca-certificates openssh-server openssh-client ripgrep tinyproxy-bin \
  && rm -rf /var/lib/apt/lists/* /etc/ssh/ssh_host_* \
  && useradd --uid 10001 --create-home --shell /bin/bash agent \
  && mkdir /data /mirrors /ssh \
@@ -43,7 +43,7 @@ COPY --from=web /app/web/dist ./web/dist
 COPY package.json ./
 COPY config ./config
 COPY .agents/skills ./.agents/skills
-COPY docker/sshd_config docker/runner.sh ./
+COPY docker/sshd_config docker/runner.sh docker/tinyproxy.conf docker/egress-allowlist ./
 USER agent
 VOLUME ["/data"]
 EXPOSE 3000

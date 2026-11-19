@@ -1,0 +1,2 @@
+# Hosts the runner may reach through the egress proxy, one per line; `*.example.com` matches its subdomains.
+registry.npmjs.org

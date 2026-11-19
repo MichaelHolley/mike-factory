@@ -60,7 +60,7 @@ services:
     environment: { RUNNER_HOST: runner, MIRRORS_DIR: /mirrors }
     volumes: [state:/data, mirrors:/mirrors, ssh:/ssh]
     depends_on: [runner]
-    networks: [proxy, default]
+    networks: [proxy, sandbox, default]
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
@@ -76,13 +76,19 @@ services:
     command: ["/app/runner.sh"]
     cap_drop: [NET_RAW]
     volumes: [work:/data, mirrors:/mirrors:ro, ssh:/ssh:ro]
-    networks: [default]
+    environment: { HTTP_PROXY: http://egress:8888, HTTPS_PROXY: http://egress:8888, NO_PROXY: "localhost,127.0.0.1" }
+    networks: [sandbox]
+  egress:
+    image: <user>/mike-factory:latest
+    command: ["tinyproxy", "-d", "-c", "/app/tinyproxy.conf"]
+    networks: [sandbox, default]
 volumes: { state: {}, mirrors: {}, work: {}, ssh: {} }
-networks: { proxy: { external: true } }
+networks: { proxy: { external: true }, sandbox: { internal: true } }
 ```
 
 - Compose fills `${PROXY_SECRET}` in the labels from its own environment (a `.env` beside the compose file, or Portainer's stack variables), not from `env_file`.
-- The runner stays off the `proxy` network: it reaches the internet, but not the proxy or what it fronts.
+- The runner sits only on the internal `sandbox` network: it reaches the server and `egress`, but not Traefik or the internet. `egress` forwards only to the hosts in `docker/egress-allowlist`, `registry.npmjs.org` by default.
+- To allow more hosts, add a line per host to `docker/egress-allowlist` and rebuild the image, or mount your own file at `/app/egress-allowlist` on `egress`.
 
 - The server trusts the runner's host key, kept on `work`, on first connect. If `work` is recreated, the server refuses to start until you delete `ssh/known_hosts` from `state`.
 - To switch a single-container deployment, finish or stop open runs first. Its volume becomes `state` and keeps `agent.sqlite`; its `repos/`, `worktrees/` and `pnpm-store/` are unused afterwards.
