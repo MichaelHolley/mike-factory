@@ -1264,6 +1264,34 @@ describe("issue pipeline", () => {
     const phases = (await service.status()).map(({ issue, phase }) => `${issue}:${phase}`).sort();
     expect(phases).toEqual(["1:merged", "2:review"]);
   });
+
+  it("settles runs whose PR merged or closed without a webhook, even without a worktree", async () => {
+    const world = createWorld({ dir });
+    autopilot(world.faux);
+    const { harness, service } = await launch(world, [1, 2, 3, 4]);
+    for (const issue of [1, 2, 3, 4]) {
+      await service.start(startAction(issue, `comment-${issue}`));
+      await pipelineResult(harness, issue);
+    }
+    const prOf = (issue: number) => world.github.prs.find((pr) => pr.head.startsWith(`mike/${issue}-`))!;
+    prOf(1).state = "merged";
+    await world.deps.worktrees.remove(REPO, 1);
+    prOf(2).state = "closed";
+    prOf(4).state = "merged";
+    const getPr = world.github.getPr.bind(world.github);
+    vi.spyOn(world.github, "getPr").mockImplementation(async (repo, number) => {
+      if (number === prOf(4).number) throw new Error("502 Bad Gateway");
+      return getPr(repo, number);
+    });
+
+    await service.sweep();
+    await service.sweep();
+
+    const phases = (await service.status()).map(({ issue, phase }) => `${issue}:${phase}`).sort();
+    expect(phases).toEqual(["1:merged", "2:closed", "3:review", "4:review"]);
+    expect(await world.deps.worktrees.issues(REPO)).toEqual([3, 4]);
+    expect(world.logs.filter(({ msg }) => msg === "sweep failed for pull request")).toHaveLength(2);
+  });
 });
 
 /** Highest number of pipelines that held a slot at the same time, from the slot logs. */

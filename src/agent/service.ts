@@ -17,7 +17,7 @@ import {
 import { findRepo, type RepoConfig } from "../config.ts";
 import { agentPrIssue, issueKey, type IssueService, type ReviewFeedback } from "../contracts.ts";
 import type { IssuePhase, PrState, RunStatus } from "../runStatus.ts";
-import { asConversationId, HUMAN_ENTRY, IssueIndex, IssueNotes, IssueState } from "./docs.ts";
+import { asConversationId, HUMAN_ENTRY, IssueIndex, IssueNotes, IssueState, type IssueStateValue } from "./docs.ts";
 import type { AgentDeps } from "./harness.ts";
 import { createMutex } from "./mutex.ts";
 import { upsertStatus, WORKING_STATUS, type IssuePipeline, type PipelineInput } from "./tasks/issuePipeline.ts";
@@ -52,6 +52,8 @@ function observeChanges(harness: Harness, matches: (change: CommitChange) => boo
   });
   return () => observation.detach();
 }
+
+const prStateOf = (state: IssueStateValue) => state.prState ?? (state.prMerged ? "merged" : null);
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -108,6 +110,18 @@ export function createIssueService(opts: {
     }
     if (prState !== "open") await cleanup(repo, issue);
   };
+
+  async function* runs() {
+    let cursor: Cursor | undefined;
+    do {
+      const page = await storage.scanConversations({}, 100, cursor, context);
+      for (const { id } of page.items) {
+        const state = await harness.snapshot(IssueState, id as ConversationId, context);
+        if (state?.repo) yield { id: id as ConversationId, state };
+      }
+      cursor = page.next;
+    } while (cursor);
+  }
 
   /** Starts a pipeline on the issue's conversation, creating the conversation on the first run. */
   const launch = async (
@@ -329,18 +343,22 @@ export function createIssueService(opts: {
     prState: ({ repo, issue, branch, state }) => mutex.run(() => recordPrState(repo, issue, branch, state)),
 
     async sweep() {
+      for await (const { state } of runs()) {
+        const settled = prStateOf(state) === "merged" || prStateOf(state) === "closed";
+        if (state.phase !== "done" || state.prNumber == null || settled || !findRepo(config, state.repo)) continue;
+        const { repo, issue, branch, prNumber } = state;
+        try {
+          const pr = await github.getPr(repo, prNumber);
+          if (pr.state !== "open") await mutex.run(() => recordPrState(repo, issue, branch, pr.state));
+        } catch (error) {
+          log("sweep failed for pull request", { key: issueKey(config.owner, repo, issue), error: messageOf(error) });
+        }
+      }
       for (const { name: repo } of config.repos) {
         for (const issue of await worktrees.issues(repo)) {
           try {
-            const { state } = await lookup(repo, issue);
-            if (state?.prState === "open" && state.prNumber != null) {
-              const pr = await github.getPr(repo, state.prNumber);
-              if (pr.state !== "open") {
-                await mutex.run(() => recordPrState(repo, issue, state.branch, pr.state));
-                continue;
-              }
-            }
             if ((await github.getIssue(repo, issue)).state !== "closed") continue;
+            const { state } = await lookup(repo, issue);
             if (state?.branch && (await github.findOpenPr(repo, state.branch))) continue;
             await mutex.run(() => cleanup(repo, issue));
           } catch (error) {
@@ -353,36 +371,27 @@ export function createIssueService(opts: {
 
     async status() {
       const states: RunStatus[] = [];
-      let cursor: Cursor | undefined;
-      do {
-        const page = await storage.scanConversations({}, 100, cursor, context);
-        for (const { id } of page.items) {
-          const [state, agent] = await Promise.all([
-            harness.snapshot(IssueState, id as ConversationId, context),
-            harness.snapshot(AgentDoc, id as ConversationId, context),
-          ]);
-          if (!state?.repo) continue;
-          const prState = state.prState ?? (state.prMerged ? "merged" : null);
-          states.push({
-            repo: state.repo,
-            issue: state.issue,
-            issueUrl: `https://github.com/${config.owner}/${state.repo}/issues/${state.issue}`,
-            title: state.title ?? null,
-            branch: state.branch,
-            phase: state.phase === "done" ? DONE_PHASE[prState ?? "unknown"] : state.phase,
-            attempts: state.attempts,
-            costUsd: state.costUsd,
-            model: agent?.model?.modelId ?? null,
-            thinkingLevel: agent?.thinkingLevel ?? null,
-            prUrl: state.prUrl,
-            prState,
-            lastError: state.lastError,
-            startedAt: state.startedAt ?? null,
-            updatedAt: state.updatedAt ?? null,
-          });
-        }
-        cursor = page.next;
-      } while (cursor);
+      for await (const { id, state } of runs()) {
+        const agent = await harness.snapshot(AgentDoc, id, context);
+        const prState = prStateOf(state);
+        states.push({
+          repo: state.repo,
+          issue: state.issue,
+          issueUrl: `https://github.com/${config.owner}/${state.repo}/issues/${state.issue}`,
+          title: state.title ?? null,
+          branch: state.branch,
+          phase: state.phase === "done" ? DONE_PHASE[prState ?? "unknown"] : state.phase,
+          attempts: state.attempts,
+          costUsd: state.costUsd,
+          model: agent?.model?.modelId ?? null,
+          thinkingLevel: agent?.thinkingLevel ?? null,
+          prUrl: state.prUrl,
+          prState,
+          lastError: state.lastError,
+          startedAt: state.startedAt ?? null,
+          updatedAt: state.updatedAt ?? null,
+        });
+      }
       return states;
     },
 
