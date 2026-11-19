@@ -53,7 +53,9 @@ function observeChanges(harness: Harness, matches: (change: CommitChange) => boo
   return () => observation.detach();
 }
 
-const prStateOf = (state: IssueStateValue) => state.prState ?? (state.prMerged ? "merged" : null);
+const storedPrState = (state: IssueStateValue) => state.prState ?? (state.prMerged ? "merged" : null);
+
+const isSettled = (state: IssueStateValue) => storedPrState(state) === "merged" || storedPrState(state) === "closed";
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -344,8 +346,7 @@ export function createIssueService(opts: {
 
     async sweep() {
       for await (const { state } of runs()) {
-        const settled = prStateOf(state) === "merged" || prStateOf(state) === "closed";
-        if (state.prNumber == null || settled || !findRepo(config, state.repo)) continue;
+        if (state.prNumber == null || isSettled(state) || !findRepo(config, state.repo)) continue;
         const { repo, issue, branch, prNumber } = state;
         try {
           const pr = await github.getPr(repo, prNumber);
@@ -357,9 +358,11 @@ export function createIssueService(opts: {
       for (const { name: repo } of config.repos) {
         for (const issue of await worktrees.issues(repo)) {
           try {
-            if ((await github.getIssue(repo, issue)).state !== "closed") continue;
             const { state } = await lookup(repo, issue);
-            if (state?.branch && (await github.findOpenPr(repo, state.branch))) continue;
+            if (!state || !isSettled(state)) {
+              if ((await github.getIssue(repo, issue)).state !== "closed") continue;
+              if (state?.branch && (await github.findOpenPr(repo, state.branch))) continue;
+            }
             await mutex.run(() => cleanup(repo, issue));
           } catch (error) {
             log("sweep failed for issue", { key: issueKey(config.owner, repo, issue), error: messageOf(error) });
@@ -373,7 +376,7 @@ export function createIssueService(opts: {
       const states: RunStatus[] = [];
       for await (const { id, state } of runs()) {
         const agent = await harness.snapshot(AgentDoc, id, context);
-        const prState = prStateOf(state);
+        const prState = storedPrState(state);
         states.push({
           repo: state.repo,
           issue: state.issue,

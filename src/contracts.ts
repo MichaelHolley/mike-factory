@@ -215,8 +215,8 @@ export interface IssueService {
    */
   prState(action: Extract<WebhookAction, { kind: "pr-state" }>): Promise<void>;
   /**
-   * Records agent PRs that merged or closed without a webhook, removes worktrees and branches of closed issues, then
-   * prunes every repo.
+   * Records agent PRs that merged or closed without a webhook, removes worktrees and branches of runs whose PR merged
+   * or closed and of closed issues, then prunes every repo.
    */
   sweep(): Promise<void>;
   status(): Promise<RunStatus[]>;
