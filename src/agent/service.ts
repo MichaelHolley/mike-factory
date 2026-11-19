@@ -16,7 +16,7 @@ import {
 } from "@earendil-works/pi-durable";
 import { findRepo, type RepoConfig } from "../config.ts";
 import { agentPrIssue, issueKey, type IssueService, type ReviewFeedback } from "../contracts.ts";
-import type { RunStatus } from "../runStatus.ts";
+import type { IssuePhase, PrState, RunStatus } from "../runStatus.ts";
 import { asConversationId, HUMAN_ENTRY, IssueIndex, IssueNotes, IssueState } from "./docs.ts";
 import type { AgentDeps } from "./harness.ts";
 import { createMutex } from "./mutex.ts";
@@ -34,6 +34,14 @@ const INSTRUCTIONS = [
 ].join("\n");
 
 const HISTORY_PAGE = 200;
+
+/** The public phase of a `done` run, by its PR's state; unknown for runs published before PR states were stored. */
+const DONE_PHASE: Record<PrState | "unknown", IssuePhase> = {
+  open: "review",
+  merged: "merged",
+  closed: "closed",
+  unknown: "done",
+};
 
 function observeChanges(harness: Harness, matches: (change: CommitChange) => boolean, listener: () => void) {
   const observation = harness.observeCommits({
@@ -305,18 +313,18 @@ export function createIssueService(opts: {
         log("pipeline abort requested", { key, outcome });
       }),
 
-    cleanup: ({ repo, issue, branch, merged }) =>
+    prState: ({ repo, issue, branch, state: prState }) =>
       mutex.run(async () => {
         const { key, conversationId, state } = await lookup(repo, issue);
-        if (state?.branch !== branch) return log("cleanup ignored: not the issue's agent branch", { key, branch });
-        const conversation = merged && conversationId && (await harness.conversation(conversationId, context));
+        if (state?.branch !== branch) return log("pr state ignored: not the issue's agent branch", { key, branch });
+        const conversation = conversationId && (await harness.conversation(conversationId, context));
         if (conversation) {
           await conversation.commit(async (tx) => {
-            (await tx.doc(IssueState, conversation.id)).prMerged = true;
+            (await tx.doc(IssueState, conversation.id)).prState = prState;
           }, context);
-          log("pull request merged", { key });
+          log("pull request state recorded", { key, prState });
         }
-        await cleanup(repo, issue);
+        if (prState !== "open") await cleanup(repo, issue);
       }),
 
     async sweep() {
@@ -346,19 +354,20 @@ export function createIssueService(opts: {
             harness.snapshot(AgentDoc, id as ConversationId, context),
           ]);
           if (!state?.repo) continue;
+          const prState = state.prState ?? (state.prMerged ? "merged" : null);
           states.push({
             repo: state.repo,
             issue: state.issue,
             issueUrl: `https://github.com/${config.owner}/${state.repo}/issues/${state.issue}`,
             title: state.title ?? null,
             branch: state.branch,
-            phase: state.phase,
+            phase: state.phase === "done" ? DONE_PHASE[prState ?? "unknown"] : state.phase,
             attempts: state.attempts,
             costUsd: state.costUsd,
             model: agent?.model?.modelId ?? null,
             thinkingLevel: agent?.thinkingLevel ?? null,
             prUrl: state.prUrl,
-            prMerged: state.prMerged ?? false,
+            prState,
             lastError: state.lastError,
             startedAt: state.startedAt ?? null,
             updatedAt: state.updatedAt ?? null,

@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { branchName, branchSlug, type IssueService } from "../contracts.ts";
-import type { RunStatus, TranscriptItem } from "../runStatus.ts";
+import type { PrState, RunStatus, TranscriptItem } from "../runStatus.ts";
 import { createServer } from "../server.ts";
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
@@ -24,7 +24,7 @@ function run(
     model: "gpt-6.1-sol",
     thinkingLevel: "high",
     prUrl: null,
-    prMerged: false,
+    prState: null,
     lastError: null,
     startedAt: ago(30),
     updatedAt: ago(1),
@@ -139,19 +139,22 @@ function liveTail(tick: number): TranscriptItem[] {
   return [answer, { ...tool, result: { text: LIVE_OUTPUT.join("\n"), isError: false } }];
 }
 
-const FINISHED: RunStatus["phase"][] = ["done", "failed", "aborted"];
+const IDLE: RunStatus["phase"][] = ["review", "merged", "closed", "done", "failed", "aborted"];
 
 /** Enough older finished runs across repos and weeks to scroll through. */
 function history(): RunStatus[] {
   const repos = ["mike-factory", "web-shop", "docs-site"];
   return Array.from({ length: 90 }, (_, i) => {
     const finished = 30 * 60 + i * 9 * 60;
-    let phase: RunStatus["phase"] = "done";
+    const prState: PrState = i % 3 === 0 ? "closed" : "merged";
+    let phase: RunStatus["phase"] = prState;
+    if (i % 13 === 4) phase = "done";
     if (i % 7 === 3) phase = "failed";
     if (i % 11 === 5) phase = "aborted";
+    const published = phase === prState;
     return run(repos[i % repos.length]!, 100 + i, `Historic change number ${i + 1}`, phase, {
-      prUrl: phase === "done" ? `https://github.com/example/pull/${200 + i}` : null,
-      prMerged: phase === "done" && i % 3 !== 0,
+      prUrl: published ? `https://github.com/example/pull/${200 + i}` : null,
+      prState: published ? prState : null,
       startedAt: ago(finished + 20 + (i % 5) * 15),
       updatedAt: ago(finished),
     });
@@ -176,9 +179,23 @@ function createMockService(): IssueService {
       updatedAt: null,
       costUsd: 0,
     }),
-    run("web-shop", 9, "Show delivery estimates on the product page", "done", {
+    run("mike-factory", 29, "Show the queue position on queued runs", "review", {
+      prUrl: "https://github.com/example/mike-factory/pull/33",
+      prState: "open",
+      startedAt: ago(300),
+      updatedAt: ago(260),
+      costUsd: 0.94,
+    }),
+    run("docs-site", 4, "Document the runner container setup", "review", {
+      prUrl: "https://github.com/example/docs-site/pull/5",
+      prState: "open",
+      startedAt: ago(90),
+      updatedAt: ago(70),
+      costUsd: 0.37,
+    }),
+    run("web-shop", 9, "Show delivery estimates on the product page", "merged", {
       prUrl: "https://github.com/example/web-shop/pull/14",
-      prMerged: true,
+      prState: "merged",
       startedAt: ago(180),
       updatedAt: ago(150),
       costUsd: 2.31,
@@ -213,7 +230,8 @@ function createMockService(): IssueService {
     "revise",
     "publish",
     "report",
-    "done",
+    "review",
+    "merged",
     "failed",
     "aborted",
   ];
@@ -242,7 +260,7 @@ function createMockService(): IssueService {
     start: async () => {},
     stop: async () => {},
     feedback: async () => {},
-    cleanup: async () => {},
+    prState: async () => {},
     sweep: async () => {},
     status: async () => runs,
     transcript: async (repo, issue) => items(key(repo, issue)),
@@ -264,7 +282,7 @@ function createMockService(): IssueService {
       const target = runs.find((r) => key(r.repo, r.issue) === k);
       if (!conversation || !target) return "not_found";
 
-      const result = FINISHED.includes(target.phase) ? "started" : "steered";
+      const result = IDLE.includes(target.phase) ? "started" : "steered";
       const item: TranscriptItem = { kind: "human", text, pending: true };
       conversation.push(item);
       notify(transcriptListeners.get(k));

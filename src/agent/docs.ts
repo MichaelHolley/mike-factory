@@ -1,9 +1,9 @@
 import { defineDoc, defineDocFamily, type ConversationId } from "@earendil-works/pi-durable";
 import type { ReviewFeedback } from "../contracts.ts";
-import type { IssuePhase } from "../runStatus.ts";
+import type { PipelinePhase, PrState } from "../runStatus.ts";
 import type { RunStart } from "./extensions/guards.ts";
 
-export type { IssuePhase };
+export type { PipelinePhase };
 
 export type IssueIndexValue = { conversationId: number | null };
 
@@ -22,9 +22,11 @@ export type IssueStateValue = {
   title?: string | null;
   branch: string;
   worktreePath: string;
-  phase: IssuePhase;
+  phase: PipelinePhase;
   attempts: number;
   prUrl: string | null;
+  prState?: PrState | null;
+  /** Legacy: read for runs stored before `prState`, never written. */
   prMerged?: boolean;
   costUsd: number;
   lastError: string | null;
@@ -65,7 +67,7 @@ export const IssueState = defineDoc<IssueStateValue>({
     phase: "prepare",
     attempts: 0,
     prUrl: null,
-    prMerged: false,
+    prState: null,
     costUsd: 0,
     lastError: null,
     pipelineTaskId: null,

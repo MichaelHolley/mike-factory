@@ -1,4 +1,4 @@
-import type { RunStatus, TranscriptItem } from "./runStatus.ts";
+import type { PrState, RunStatus, TranscriptItem } from "./runStatus.ts";
 import type { RepoConfig } from "./config.ts";
 
 export const branchName = (issue: number, slug: string) => `mike/${issue}-${slug}`;
@@ -167,8 +167,8 @@ export type WebhookAction =
   /** `requestId` is `comment-<id>` of the triggering comment, so a redelivered webhook maps to the same run. */
   | { kind: "start"; repo: string; issue: number; requestId: string; instructions: string }
   | { kind: "stop"; repo: string; issue: number; requestId: string }
-  /** An agent PR was merged or closed. */
-  | { kind: "cleanup"; repo: string; issue: number; branch: string; merged: boolean }
+  /** An agent PR was merged, closed or reopened. */
+  | { kind: "pr-state"; repo: string; issue: number; branch: string; state: PrState }
   /**
    * Owner feedback on an agent PR. `id` is `review-<reviewId>` for a review and its inline comments, so one review is
    * one trigger, or `pr-comment-<id>` for a conversation comment. `nodeId` is the triggering object, for the reaction.
@@ -210,10 +210,10 @@ export interface IssueService {
     text: string;
   }): Promise<"steered" | "started" | "not_found">;
   /**
-   * Records a merged PR on the run, then removes the issue's worktree and local branch unless a pipeline is still
-   * running for it.
+   * Records the PR's state on the run. Once the PR isn't open, removes the issue's worktree and local branch unless a
+   * pipeline is still running for it.
    */
-  cleanup(action: Extract<WebhookAction, { kind: "cleanup" }>): Promise<void>;
+  prState(action: Extract<WebhookAction, { kind: "pr-state" }>): Promise<void>;
   /** Removes worktrees and branches of closed issues, then prunes every repo. */
   sweep(): Promise<void>;
   status(): Promise<RunStatus[]>;

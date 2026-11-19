@@ -8,7 +8,7 @@ import RunRow from "../components/RunRow.vue";
 import { useLazyList } from "../composables/useLazyList.ts";
 import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
-import { isFinished } from "../phase.ts";
+import { isFinished, isIdle } from "../phase.ts";
 
 const { runs, error, loaded } = useRuns();
 const now = useNow();
@@ -19,8 +19,14 @@ const runKey = (run: { repo: string; issue: number }) => `${run.repo}#${run.issu
 // Oldest start first so live rows keep their place as updates stream in; queued runs go last.
 const live = computed(() =>
   runs.value
-    .filter((run) => !isFinished(run.phase))
+    .filter((run) => !isIdle(run.phase))
     .sort((a, b) => (time(a.startedAt) ?? Infinity) - (time(b.startedAt) ?? Infinity)),
+);
+
+const inReview = computed(() =>
+  runs.value
+    .filter((run) => run.phase === "review")
+    .sort((a, b) => (time(a.updatedAt) ?? 0) - (time(b.updatedAt) ?? 0)),
 );
 
 const RECENT_MS = 24 * 60 * 60 * 1000;
@@ -54,6 +60,15 @@ const hasFinished = computed(() => runs.value.some((run) => isFinished(run.phase
       <EmptyState v-else :icon="Coffee" class="rounded-md border border-line bg-surface">
         Nothing running. Comment <code>/mike</code> on an issue in a configured repo to start a run.
       </EmptyState>
+    </section>
+
+    <section v-if="inReview.length" class="mt-10" aria-labelledby="review-heading">
+      <h2 id="review-heading" class="mb-3 flex items-baseline gap-2 text-lg">
+        In review <span class="font-medium text-muted tabular-nums">{{ inReview.length }}</span>
+      </h2>
+      <ul aria-labelledby="review-heading" class="@container overflow-hidden rounded-md border border-line bg-surface">
+        <RunRow v-for="run in inReview" :key="runKey(run)" :run :now compact />
+      </ul>
     </section>
 
     <section v-if="hasFinished" class="mt-10" aria-labelledby="recent-heading">

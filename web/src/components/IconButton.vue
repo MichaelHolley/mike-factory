@@ -8,6 +8,7 @@ const TONES = {
   default: "text-muted hover:bg-ink/6 hover:text-ink",
   chrome: "text-chrome-ink/80 hover:bg-chrome-ink/10 hover:text-chrome-ink",
   merged: "text-merged hover:bg-merged/10",
+  closed: "text-halt hover:bg-halt/10",
 };
 
 defineProps<{ icon: Component; label: string; href?: string; tone?: keyof typeof TONES }>();

@@ -138,7 +138,7 @@ export function createServer({
       else if (action.kind === "start") await service.start(action);
       else if (action.kind === "stop" || action.kind === "pr-stop") await service.stop(action);
       else if (action.kind === "feedback") await service.feedback(action);
-      else await service.cleanup(action);
+      else await service.prState(action);
       return c.body(null, 202);
     });
 
