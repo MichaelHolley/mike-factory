@@ -27,6 +27,11 @@ Self-hosted agent that turns a `/mike` comment on a GitHub issue into a pull req
 - Style the web UI with Tailwind utilities and the theme tokens in `web/src/style.css`, not custom CSS. Avoid arbitrary values like `w-[6px]` or `max-[48rem]:`; use the nearest scale class or breakpoint, even if it isn't pixel-identical.
 - Use distinctive `@lucide/vue` icons to make things recognizable at a glance, and use the same icon for a concept everywhere. For example, a run's PR always uses `GitPullRequest` (`GitMerge` once merged, `GitPullRequestClosed` once closed), and a phase always uses its icon from `stepLook` in `web/src/phase.ts`.
 
+## Charts
+
+- Use `@tanstack/charts` (Vue adapter: `@tanstack/charts/vue`). Don't stick to the bar, line and dot charts already in the app: the library also has heatmaps, beeswarms, regressions, ridgelines, violins, box plots, waffles, difference areas and more. Pick the type that fits the question the chart answers.
+- Its docs for the installed version are in `web/node_modules/@tanstack/charts/docs/`: start with `reference/index.md`.
+
 ## Tests
 
 - Unit tests sit next to the source as `*.test.ts`.
