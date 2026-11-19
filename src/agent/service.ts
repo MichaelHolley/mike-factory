@@ -96,6 +96,19 @@ export function createIssueService(opts: {
     log("worktree removed", { key });
   };
 
+  const recordPrState = async (repo: string, issue: number, branch: string, prState: PrState) => {
+    const { key, conversationId, state } = await lookup(repo, issue);
+    if (state?.branch !== branch) return log("pr state ignored: not the issue's agent branch", { key, branch });
+    const conversation = conversationId && (await harness.conversation(conversationId, context));
+    if (conversation) {
+      await conversation.commit(async (tx) => {
+        (await tx.doc(IssueState, conversation.id)).prState = prState;
+      }, context);
+      log("pull request state recorded", { key, prState });
+    }
+    if (prState !== "open") await cleanup(repo, issue);
+  };
+
   /** Starts a pipeline on the issue's conversation, creating the conversation on the first run. */
   const launch = async (
     repoConfig: RepoConfig,
@@ -313,26 +326,21 @@ export function createIssueService(opts: {
         log("pipeline abort requested", { key, outcome });
       }),
 
-    prState: ({ repo, issue, branch, state: prState }) =>
-      mutex.run(async () => {
-        const { key, conversationId, state } = await lookup(repo, issue);
-        if (state?.branch !== branch) return log("pr state ignored: not the issue's agent branch", { key, branch });
-        const conversation = conversationId && (await harness.conversation(conversationId, context));
-        if (conversation) {
-          await conversation.commit(async (tx) => {
-            (await tx.doc(IssueState, conversation.id)).prState = prState;
-          }, context);
-          log("pull request state recorded", { key, prState });
-        }
-        if (prState !== "open") await cleanup(repo, issue);
-      }),
+    prState: ({ repo, issue, branch, state }) => mutex.run(() => recordPrState(repo, issue, branch, state)),
 
     async sweep() {
       for (const { name: repo } of config.repos) {
         for (const issue of await worktrees.issues(repo)) {
           try {
-            if ((await github.getIssue(repo, issue)).state !== "closed") continue;
             const { state } = await lookup(repo, issue);
+            if (state?.prState === "open" && state.prNumber != null) {
+              const pr = await github.getPr(repo, state.prNumber);
+              if (pr.state !== "open") {
+                await mutex.run(() => recordPrState(repo, issue, state.branch, pr.state));
+                continue;
+              }
+            }
+            if ((await github.getIssue(repo, issue)).state !== "closed") continue;
             if (state?.branch && (await github.findOpenPr(repo, state.branch))) continue;
             await mutex.run(() => cleanup(repo, issue));
           } catch (error) {

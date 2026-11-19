@@ -10,6 +10,7 @@ import {
   type ReviewFeedback,
   type ReviewThread,
 } from "../../src/contracts.ts";
+import type { PrState } from "../../src/runStatus.ts";
 
 export const FAKE_GIT_TOKEN = "fake-installation-token";
 export const FAKE_BOT_IDENTITY: GitIdentity = {
@@ -26,7 +27,7 @@ export interface FakePr extends PullRequestRef {
   base: string;
   title: string;
   body: string;
-  state: "open" | "closed";
+  state: PrState;
 }
 
 export interface FakeComment extends IssueComment {
@@ -138,11 +139,11 @@ export class FakeGitHub implements GitHubClient {
     this.commentList.push({ id: this.nextId++, repo, issue, author, body, createdAt: new Date().toISOString() });
   }
 
-  /** Closes the issue and its open agent PR, as merging a PR with `Closes #n` does. */
+  /** Closes the issue and merges its open agent PR, as merging a PR with `Closes #n` does. */
   closeIssue(repo: string, issue: number): void {
     this.issue(repo, issue).state = "closed";
     for (const pr of this.prList)
-      if (pr.repo === repo && pr.state === "open" && issueOfBranch(pr.head) === issue) pr.state = "closed";
+      if (pr.repo === repo && pr.state === "open" && issueOfBranch(pr.head) === issue) pr.state = "merged";
   }
 
   commentsOn(repo: string, issue: number): FakeComment[] {

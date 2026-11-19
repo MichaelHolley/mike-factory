@@ -64,7 +64,7 @@ export interface PullRequestRef {
 }
 
 export interface PullRequestInfo extends PullRequestRef {
-  state: "open" | "closed";
+  state: PrState;
   headRef: string;
   fromFork: boolean;
 }
@@ -214,7 +214,10 @@ export interface IssueService {
    * pipeline is still running for it.
    */
   prState(action: Extract<WebhookAction, { kind: "pr-state" }>): Promise<void>;
-  /** Removes worktrees and branches of closed issues, then prunes every repo. */
+  /**
+   * Records agent PRs that merged or closed without a webhook, removes worktrees and branches of closed issues, then
+   * prunes every repo.
+   */
   sweep(): Promise<void>;
   status(): Promise<RunStatus[]>;
   /**

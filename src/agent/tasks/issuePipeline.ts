@@ -565,7 +565,8 @@ export function createIssuePipeline(deps: PipelineDeps) {
           { phase: "report", prUrl: pr.url },
           {
             prUrl: pr.url,
-            prState: "open",
+            // A merge the webhook recorded after `findOpenPr` is final, since a merged PR can't reopen.
+            ...((state?.prNumber !== pr.number || state.prState !== "merged") && { prState: "open" }),
             prNumber: pr.number,
             pushedHead: await worktrees.headSha(repo, issue, head),
           },
