@@ -10,6 +10,7 @@ import {
   Cpu,
   Flag,
   GitBranch,
+  GitMerge,
   GitPullRequest,
   RotateCw,
   SearchX,
@@ -99,7 +100,7 @@ const duration = computed(() => {
         <Fact :icon="CircleDot" label="Issue">
           <OutboundLink :href="run.issueUrl">#{{ run.issue }}</OutboundLink>
         </Fact>
-        <Fact :icon="GitPullRequest" label="Pull request">
+        <Fact :icon="run.prMerged ? GitMerge : GitPullRequest" label="Pull request">
           <OutboundLink v-if="run.prUrl" :href="run.prUrl" :class="{ 'text-merged': run.prMerged }">
             #{{ run.prUrl.split("/").pop() }}
           </OutboundLink>
