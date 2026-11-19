@@ -779,6 +779,28 @@ describe("issue pipeline", () => {
       expect(world.github.reviewRequests).toEqual([{ repo: REPO, pr, login: "owner" }]);
     });
 
+    it("settles a failed review round whose PR closed without a webhook", async () => {
+      const world = createWorld({ dir, repo: { checks: ["test ! -f broken.txt"], maxFixAttempts: 1 } });
+      autopilot(world.faux, (messages) =>
+        textOf(messages.at(-1)).includes("<review>") ? commitFile("broken.txt", "x") : undefined,
+      );
+      const { harness, service, pr } = await finishedRun(world);
+      const { reviewId } = world.github.addReview(REPO, pr, {
+        reviewer: "owner",
+        state: "changes_requested",
+        body: "Add broken.txt",
+        comments: [],
+      });
+      await service.feedback(reviewFeedback(pr, reviewId));
+      expect((await pipelineResult(harness, 1)).status).toBe("failed");
+      world.github.prs[0]!.state = "closed";
+
+      await service.sweep();
+
+      expect(await service.status()).toMatchObject([{ phase: "failed", prState: "closed" }]);
+      expect(await world.deps.worktrees.issues(REPO)).toEqual([]);
+    });
+
     it("finishes the round when GitHub rejects the review re-request", async () => {
       const world = createWorld({ dir });
       autopilot(world.faux, (messages) =>

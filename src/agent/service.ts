@@ -345,7 +345,7 @@ export function createIssueService(opts: {
     async sweep() {
       for await (const { state } of runs()) {
         const settled = prStateOf(state) === "merged" || prStateOf(state) === "closed";
-        if (state.phase !== "done" || state.prNumber == null || settled || !findRepo(config, state.repo)) continue;
+        if (state.prNumber == null || settled || !findRepo(config, state.repo)) continue;
         const { repo, issue, branch, prNumber } = state;
         try {
           const pr = await github.getPr(repo, prNumber);
