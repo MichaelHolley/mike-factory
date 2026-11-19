@@ -57,6 +57,10 @@ const storedPrState = (state: IssueStateValue) => state.prState ?? (state.prMerg
 
 const isSettled = (state: IssueStateValue) => storedPrState(state) === "merged" || storedPrState(state) === "closed";
 
+/** Runs published before `prNumber` was stored only have the PR's URL. */
+const prNumberOf = (state: IssueStateValue) =>
+  state.prNumber ?? (state.prUrl ? Number(/\/pull\/(\d+)$/.exec(state.prUrl)?.[1]) || null : null);
+
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export function createIssueService(opts: {
@@ -346,8 +350,9 @@ export function createIssueService(opts: {
 
     async sweep() {
       for await (const { state } of runs()) {
-        if (state.prNumber == null || isSettled(state) || !findRepo(config, state.repo)) continue;
-        const { repo, issue, branch, prNumber } = state;
+        const prNumber = prNumberOf(state);
+        if (prNumber == null || isSettled(state) || !findRepo(config, state.repo)) continue;
+        const { repo, issue, branch } = state;
         try {
           const pr = await github.getPr(repo, prNumber);
           if (pr.state !== "open") await mutex.run(() => recordPrState(repo, issue, branch, pr.state));

@@ -7,7 +7,7 @@ import { ToolResultEntry, MemoryStorage, type Harness } from "@earendil-works/pi
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import type { UserMessage } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { HUMAN_ENTRY } from "../../src/agent/docs.ts";
+import { HUMAN_ENTRY, IssueState } from "../../src/agent/docs.ts";
 import { PNG_IMAGE } from "../fakes/github.ts";
 import { openAgentHarness } from "../../src/agent/harness.ts";
 import type { IssueService } from "../../src/contracts.ts";
@@ -1335,6 +1335,22 @@ describe("issue pipeline", () => {
 
       expect(await phases(service)).toEqual(["1:merged", "2:review"]);
       expect(await world.deps.worktrees.issues(REPO)).toEqual([2]);
+    });
+
+    it("settles a run published before PR numbers were stored, using its PR URL", async () => {
+      const world = createWorld({ dir });
+      const { harness, service, prOf } = await finishedRuns(world, [1]);
+      const conversation = (await harness.conversation((await conversationIdOf(harness, 1))!, ctx))!;
+      await conversation.commit(async (tx) => {
+        const state = await tx.doc(IssueState, conversation.id);
+        state.prNumber = null;
+        state.prState = null;
+      }, ctx);
+      prOf(1).state = "merged";
+
+      await service.sweep();
+
+      expect(await phases(service)).toEqual(["1:merged"]);
     });
 
     it("settles a run whose PR closed without a webhook and removes its worktree", async () => {
