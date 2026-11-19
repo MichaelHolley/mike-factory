@@ -88,18 +88,21 @@ describe("verifyWebhook", () => {
     };
   };
 
-  it.each(["mike/12-add-dark-mode", "agent/issue-12"])("cleans up when an agent PR on %s closes", async (ref) => {
+  it.each(["mike/12-add-dark-mode", "agent/issue-12"])("records a closed agent PR on %s", async (ref) => {
     expect(await run(closedPr({ ref }), { event: "pull_request" })).toEqual({
-      kind: "cleanup",
+      kind: "pr-state",
       repo: "byok-imagen",
       issue: 12,
       branch: ref,
-      merged: false,
+      state: "closed",
     });
   });
 
-  it("marks the cleanup of a merged agent PR as merged", async () => {
-    expect(await run(closedPr({ merged: true }), { event: "pull_request" })).toMatchObject({ merged: true });
+  it.each([
+    ["merged", closedPr({ merged: true }), "merged"],
+    ["reopened", closedPr({ action: "reopened" }), "open"],
+  ])("records a %s agent PR", async (_name, body, state) => {
+    expect(await run(body, { event: "pull_request" })).toMatchObject({ kind: "pr-state", state });
   });
 
   it.each([

@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HUMAN_ENTRY } from "../../src/agent/docs.ts";
 import { PNG_IMAGE } from "../fakes/github.ts";
 import { openAgentHarness } from "../../src/agent/harness.ts";
-import type { TranscriptItem } from "../../src/runStatus.ts";
+import type { PrState, TranscriptItem } from "../../src/runStatus.ts";
 import { NO_CHANGES_STATUS, STATUS_MARKER, WORKING_STATUS } from "../../src/agent/tasks/issuePipeline.ts";
 import {
   autopilot,
@@ -279,13 +279,13 @@ describe("issue pipeline", () => {
       issueUrl: `https://github.com/${world.config.owner}/${REPO}/issues/1`,
       title: "Add hello",
       branch: "mike/1-add-hello",
-      phase: "done",
+      phase: "review",
       attempts: 0,
       costUsd: done!.costUsd,
       model: "faux-1",
       thinkingLevel: "high",
       prUrl: world.github.prs[0]!.url,
-      prMerged: false,
+      prState: "open",
       lastError: null,
       startedAt: done!.startedAt,
       updatedAt: done!.updatedAt,
@@ -1178,32 +1178,42 @@ describe("issue pipeline", () => {
     }
     const states = await service.status();
     expect(states.map(({ repo, issue, phase }) => `${repo}#${issue}:${phase}`).sort()).toEqual([
-      "demo#1:done",
-      "demo#2:done",
-      "demo#3:done",
-      "other#1:done",
+      "demo#1:review",
+      "demo#2:review",
+      "demo#3:review",
+      "other#1:review",
     ]);
   });
 
-  it("removes the worktree and local branch when the PR closes", async () => {
+  it("follows the PR from review to merged, closed and reopened", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux);
     const { harness, service } = await launch(world);
     await service.start(startAction(1, "comment-1"));
     await pipelineResult(harness, 1);
+    const prState = (state: PrState, branch = "mike/1-add-hello") =>
+      service.prState({ kind: "pr-state", repo: REPO, issue: 1, branch, state });
+    const phase = async () => (await service.status())[0]?.phase;
+    expect(await phase()).toBe("review");
 
-    await service.cleanup({ kind: "cleanup", repo: REPO, issue: 1, branch: "mike/1-other-work", merged: true });
+    await prState("merged", "mike/1-other-work");
+    expect(await phase()).toBe("review");
     expect(existsSync(world.deps.worktrees.worktreePath(REPO, 1))).toBe(true);
-    expect((await issueStateOf(harness, 1))?.prMerged).toBe(false);
 
-    await service.cleanup({ kind: "cleanup", repo: REPO, issue: 1, branch: "mike/1-add-hello", merged: true });
-
+    await prState("closed");
+    expect(await phase()).toBe("closed");
     expect(existsSync(world.deps.worktrees.worktreePath(REPO, 1))).toBe(false);
     expect(await world.deps.worktrees.issues(REPO)).toEqual([]);
-    expect((await service.status())[0]?.prMerged).toBe(true);
+
+    await prState("open");
+    expect(await phase()).toBe("review");
+
+    await prState("merged");
+    await prState("merged");
+    expect((await service.status())[0]).toMatchObject({ phase: "merged", prState: "merged" });
   });
 
-  it("opens a follow-up PR after a merge as unmerged", async () => {
+  it("puts a follow-up PR after a merge back in review", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux, (messages) =>
       textOf(messages.at(-1)).includes("also add more") ? commitFile("more.txt", "more") : undefined,
@@ -1213,16 +1223,33 @@ describe("issue pipeline", () => {
     await pipelineResult(harness, 1);
     world.github.prs[0]!.state = "closed";
     git(world.remote, "branch", "-D", "mike/1-add-hello");
-    await service.cleanup({ kind: "cleanup", repo: REPO, issue: 1, branch: "mike/1-add-hello", merged: true });
+    await service.prState({ kind: "pr-state", repo: REPO, issue: 1, branch: "mike/1-add-hello", state: "merged" });
 
     await service.start(startAction(1, "comment-2", "also add more"));
     expect((await pipelineResult(harness, 1)).status).toBe("completed");
 
     expect(world.github.prs).toHaveLength(2);
-    expect((await service.status())[0]).toMatchObject({ prUrl: world.github.prs[1]!.url, prMerged: false });
+    expect((await service.status())[0]).toMatchObject({ prUrl: world.github.prs[1]!.url, phase: "review" });
   });
 
-  it("sweeps only the worktrees of closed issues", async () => {
+  it("keeps a merge recorded while publish still saw the PR open", async () => {
+    const world = createWorld({ dir });
+    autopilot(world.faux, (messages) =>
+      textOf(messages.at(-1)).includes("also add more") ? commitFile("more.txt", "more") : undefined,
+    );
+    const { harness, service } = await launch(world);
+    await service.start(startAction(1, "comment-1"));
+    await pipelineResult(harness, 1);
+    await service.prState({ kind: "pr-state", repo: REPO, issue: 1, branch: "mike/1-add-hello", state: "merged" });
+
+    await service.start(startAction(1, "comment-2", "also add more"));
+    expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+    expect(world.github.prs).toHaveLength(1);
+    expect((await service.status())[0]).toMatchObject({ phase: "merged", prState: "merged" });
+  });
+
+  it("sweeps only the worktrees of closed issues and records PRs merged without a webhook", async () => {
     const world = createWorld({ dir });
     autopilot(world.faux);
     const { harness, service } = await launch(world, [1, 2]);
@@ -1234,6 +1261,8 @@ describe("issue pipeline", () => {
     await service.sweep();
 
     expect(await world.deps.worktrees.issues(REPO)).toEqual([2]);
+    const phases = (await service.status()).map(({ issue, phase }) => `${issue}:${phase}`).sort();
+    expect(phases).toEqual(["1:merged", "2:review"]);
   });
 });
 

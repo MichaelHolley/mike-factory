@@ -7,6 +7,7 @@ import {
   type ReviewFeedback,
   type ReviewThread,
 } from "../contracts.ts";
+import type { PrState } from "../runStatus.ts";
 
 import { downloadIssueImage } from "./images.ts";
 
@@ -15,6 +16,11 @@ const PER_PAGE = 100;
 
 const labelName = (label: string | { name?: string }) => (typeof label === "string" ? label : (label.name ?? ""));
 const markerComment = (marker: string) => `<!-- ${marker} -->`;
+
+function prStateOf(pr: { state: string; merged: boolean }): PrState {
+  if (pr.merged) return "merged";
+  return pr.state === "open" ? "open" : "closed";
+}
 
 export function createGitHubClient(opts: { appId: string; privateKey: string; owner: string }): GitHubClient {
   const app = new App({ appId: opts.appId, privateKey: opts.privateKey });
@@ -180,7 +186,7 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
       return {
         number: data.number,
         url: data.html_url,
-        state: data.state === "open" ? "open" : "closed",
+        state: prStateOf(data),
         headRef: data.head.ref,
         fromFork: data.head.repo?.full_name !== data.base.repo.full_name,
       };

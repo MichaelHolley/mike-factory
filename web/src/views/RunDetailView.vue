@@ -10,8 +10,6 @@ import {
   Cpu,
   Flag,
   GitBranch,
-  GitMerge,
-  GitPullRequest,
   RotateCw,
   SearchX,
   Timer,
@@ -28,7 +26,7 @@ import PhaseTrack from "../components/PhaseTrack.vue";
 import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
 import { formatCost, formatDuration, formatModel, formatTime, timeAgo } from "../format.ts";
-import { isFinished } from "../phase.ts";
+import { isIdle, prLook } from "../phase.ts";
 
 const route = useRoute();
 const { runs, error, loaded } = useRuns();
@@ -37,7 +35,7 @@ const now = useNow();
 const run = computed(() =>
   runs.value.find((r) => r.repo === route.params.repo && String(r.issue) === route.params.issue),
 );
-const finished = computed(() => !!run.value && isFinished(run.value.phase));
+const finished = computed(() => !!run.value && isIdle(run.value.phase));
 const duration = computed(() => {
   const { startedAt, updatedAt } = run.value ?? {};
   if (!startedAt) return null;
@@ -100,8 +98,8 @@ const duration = computed(() => {
         <Fact :icon="CircleDot" label="Issue">
           <OutboundLink :href="run.issueUrl">#{{ run.issue }}</OutboundLink>
         </Fact>
-        <Fact :icon="run.prMerged ? GitMerge : GitPullRequest" label="Pull request">
-          <OutboundLink v-if="run.prUrl" :href="run.prUrl" :class="{ 'text-merged': run.prMerged }">
+        <Fact :icon="prLook(run.prState).icon" label="Pull request">
+          <OutboundLink v-if="run.prUrl" :href="run.prUrl" :class="prLook(run.prState).hue">
             #{{ run.prUrl.split("/").pop() }}
           </OutboundLink>
           <span v-else class="text-muted">Not opened yet</span>

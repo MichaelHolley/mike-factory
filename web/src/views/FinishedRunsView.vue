@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Calendar, ChevronLeft, ChevronRight, GitMerge, ListFilter, X } from "@lucide/vue";
+import { ArrowLeft, Calendar, ChevronLeft, ChevronRight, ListFilter, X } from "@lucide/vue";
 import { Button } from "@ui-sdk/vue/button";
 import {
   CalendarDay,
@@ -27,7 +27,8 @@ import RunRow from "../components/RunRow.vue";
 import { useLazyList } from "../composables/useLazyList.ts";
 import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
-import { filterFinished, localDate, type Outcome } from "../finished.ts";
+import type { IssuePhase } from "../../../src/runStatus.ts";
+import { filterFinished, localDate } from "../finished.ts";
 import { formatDay } from "../format.ts";
 import { isFinished, stepLook } from "../phase.ts";
 
@@ -37,7 +38,7 @@ const runKey = (run: { repo: string; issue: number }) => `${run.repo}#${run.issu
 
 const ALL = "all";
 const repo = ref<string>(ALL);
-const outcome = ref<Outcome | typeof ALL>(ALL);
+const outcome = ref<IssuePhase | typeof ALL>(ALL);
 const started = ref<DatePickerValue>(null);
 
 const repoOptions = computed<FilterOption<string>[]>(() => [
@@ -46,12 +47,16 @@ const repoOptions = computed<FilterOption<string>[]>(() => [
     .sort()
     .map((name) => ({ value: name, label: name })),
 ]);
-const outcomes: FilterOption<Outcome | typeof ALL>[] = [
+const OUTCOMES: [IssuePhase, string][] = [
+  ["merged", "Merged"],
+  ["closed", "Closed"],
+  ["failed", "Failed"],
+  ["aborted", "Aborted"],
+  ["done", "Done"],
+];
+const outcomes: FilterOption<IssuePhase | typeof ALL>[] = [
   { value: ALL, label: "Any outcome", icon: ListFilter, hue: "text-muted" },
-  { value: "merged", label: "Merged", icon: GitMerge, hue: "text-merged" },
-  { value: "done", label: "Done, not merged", ...stepLook.done },
-  { value: "failed", label: "Failed", ...stepLook.failed },
-  { value: "aborted", label: "Aborted", ...stepLook.aborted },
+  ...OUTCOMES.map(([value, label]) => ({ value, label, ...stepLook[value] })),
 ];
 
 const filtered = computed(() =>

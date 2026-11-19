@@ -1,6 +1,7 @@
 import type { RunFailureReason } from "@earendil-works/pi-durable";
 
-export type IssuePhase =
+/** A phase the pipeline stores. */
+export type PipelinePhase =
   | "queued"
   | "prepare"
   | "implement"
@@ -12,6 +13,11 @@ export type IssuePhase =
   | "done"
   | "failed"
   | "aborted";
+
+export type PrState = "open" | "merged" | "closed";
+
+/** A run's public phase: a finished run with a PR is in review until the PR merges or closes. */
+export type IssuePhase = PipelinePhase | "review" | "merged" | "closed";
 
 /** A PR review the owner sent, as the run page shows it. */
 export type ReviewCard = {
@@ -52,7 +58,8 @@ export type RunStatus = {
   model: string | null;
   thinkingLevel: string | null;
   prUrl: string | null;
-  prMerged: boolean;
+  /** Null when unknown, for runs published before PR states were stored. */
+  prState: PrState | null;
   lastError: string | null;
   startedAt: string | null;
   updatedAt: string | null;

@@ -5,10 +5,10 @@ import { Field, FieldDescription, FieldLabel } from "@ui-sdk/vue/field";
 import { Textarea } from "@ui-sdk/vue/textarea";
 import { computed, ref, watch } from "vue";
 import type { IssuePhase } from "../../../src/runStatus.ts";
+import { isIdle } from "../phase.ts";
 import PhaseBadge from "./PhaseBadge.vue";
 
 const MAX_CHARS = 8000;
-const FINISHED: readonly IssuePhase[] = ["done", "failed", "aborted"];
 
 const props = defineProps<{ repo: string; issue: string; phase: IssuePhase }>();
 
@@ -19,7 +19,7 @@ const error = ref<string | null>(null);
 let id = crypto.randomUUID();
 watch(text, () => (id = crypto.randomUUID()));
 
-const finished = computed(() => FINISHED.includes(props.phase));
+const finished = computed(() => isIdle(props.phase));
 const sendLabel = computed(() => {
   if (sending.value) return "Sending message";
   return finished.value ? "Continue run" : "Steer agent";

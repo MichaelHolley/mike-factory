@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { GitMerge, GitPullRequest } from "@lucide/vue";
 import { RouterLink } from "vue-router";
 import type { RunStatus } from "../../../src/runStatus.ts";
 import { timeAgo } from "../format.ts";
-import { stepLook } from "../phase.ts";
+import { prLook, stepLook } from "../phase.ts";
 import IconButton from "./IconButton.vue";
 import PhaseBadge from "./PhaseBadge.vue";
 
@@ -30,9 +29,9 @@ defineProps<{ run: RunStatus; now: number; compact?: boolean }>();
     <IconButton
       v-if="run.prUrl"
       :href="run.prUrl"
-      :icon="run.prMerged ? GitMerge : GitPullRequest"
-      :label="run.prMerged ? 'Open merged pull request' : 'Open pull request'"
-      :tone="run.prMerged ? 'merged' : undefined"
+      :icon="prLook(run.prState).icon"
+      :label="prLook(run.prState).label"
+      :tone="prLook(run.prState).tone"
       target="_blank"
       rel="noopener"
       class="relative z-1 -my-1 justify-self-center"

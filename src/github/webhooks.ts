@@ -118,15 +118,17 @@ export async function verifyWebhook(input: {
 const HANDLED_EVENTS = new Set(["issue_comment", "pull_request", "pull_request_review", "pull_request_review_comment"]);
 
 function pullRequestAction(payload: PullRequestPayload, config: AppConfig): WebhookAction {
-  if (payload.action !== "closed") return ignore(`pull_request action ${payload.action} is not handled`);
+  if (payload.action !== "closed" && payload.action !== "reopened")
+    return ignore(`pull_request action ${payload.action} is not handled`);
   const target = agentPr(payload, config);
   if ("reason" in target) return ignore(target.reason);
+  const closedAs = payload.pull_request?.merged === true ? "merged" : "closed";
   return {
-    kind: "cleanup",
+    kind: "pr-state",
     repo: target.repo,
     issue: target.issue,
     branch: payload.pull_request?.head?.ref ?? "",
-    merged: payload.pull_request?.merged === true,
+    state: payload.action === "reopened" ? "open" : closedAs,
   };
 }
 
