@@ -83,11 +83,13 @@ services:
     command: ["tinyproxy", "-d", "-c", "/app/tinyproxy.conf"]
     networks: [sandbox, default]
 volumes: { state: {}, mirrors: {}, work: {}, ssh: {} }
-networks: { proxy: { external: true }, sandbox: { internal: true } }
+networks:
+  proxy: { external: true }
+  sandbox: { internal: true, driver_opts: { com.docker.network.bridge.gateway_mode_ipv4: isolated } }
 ```
 
 - Compose fills `${PROXY_SECRET}` in the labels from its own environment (a `.env` beside the compose file, or Portainer's stack variables), not from `env_file`.
-- The runner sits only on the internal `sandbox` network: it reaches the server and `egress`, but not Traefik or the internet. `egress` forwards only to the hosts in `docker/egress-allowlist`, `registry.npmjs.org` by default.
+- The runner sits only on the internal `sandbox` network: it reaches the server and `egress`, but not Traefik, the Docker host or the internet; isolating the gateway needs Docker Engine 28 or newer. `egress` forwards only to the hosts in `docker/egress-allowlist`, `registry.npmjs.org` by default.
 - To allow more hosts, add a line per host to `docker/egress-allowlist` and rebuild the image, or mount your own file at `/app/egress-allowlist` on `egress`.
 
 - The server trusts the runner's host key, kept on `work`, on first connect. If `work` is recreated, the server refuses to start until you delete `ssh/known_hosts` from `state`.
