@@ -391,6 +391,8 @@ export function createIssuePipeline(deps: PipelineDeps) {
     repo: string,
     prompt?: { content: UserMessage["content"]; requestId: string },
   ) => {
+    settingsOf(await rt.snapshot(IssueState, rt.conversationId, context));
+
     const conversation = await rt.conversation(rt.conversationId, context);
     if (!conversation) throw new Error("issue conversation is missing");
 

@@ -1234,6 +1234,26 @@ describe("issue pipeline", () => {
     expect(world.faux.state.callCount).toBe(0);
   });
 
+  it("fails a run stored before repo settings existed without calling the model", async () => {
+    const world = createWorld({ dir });
+    autopilot(world.faux);
+    const { harness, service } = await launch(world);
+    const listIssueComments = world.github.listIssueComments.bind(world.github);
+    vi.spyOn(world.github, "listIssueComments").mockImplementation(async (repo, issue) => {
+      const conversation = (await harness.conversation((await conversationIdOf(harness, issue))!, ctx))!;
+      await conversation.commit(async (tx) => {
+        delete (await tx.doc(IssueState, conversation.id)).settings;
+      }, ctx);
+      return listIssueComments(repo, issue);
+    });
+
+    await service.start(startAction(1, "comment-1"));
+
+    expect((await pipelineResult(harness, 1)).status).toBe("failed");
+    expect(world.github.commentsOn(REPO, 1)[0]!.body).toContain("start it again");
+    expect(world.faux.state.callCount).toBe(0);
+  });
+
   it("runs issues of two repos in parallel up to the limit, each PR holding only its own change", async () => {
     const world = createWorld({ dir, extraRepos: [OTHER_REPO], maxConcurrent: 3, repo: { setup: "sleep 0.2" } });
     autopilot(world.faux, (messages) => {
