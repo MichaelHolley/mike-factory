@@ -199,6 +199,11 @@ export class FakeGitHub implements GitHubClient {
     return this.callCounts[method] ?? 0;
   }
 
+  async defaultBranch(_repo: string): Promise<string> {
+    this.called("defaultBranch");
+    return "main";
+  }
+
   async getIssue(repo: string, issue: number): Promise<IssueData> {
     this.called("getIssue");
     const { repo: _repo, ...data } = this.issue(repo, issue);

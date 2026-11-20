@@ -11,7 +11,7 @@ import {
   type RunningTask,
   type TaskRuntime,
 } from "@earendil-works/pi-durable";
-import { findRepo, type AppConfig, type RepoConfig } from "../../config.ts";
+import { parseRepoSettings, REPO_SETTINGS_FILE, type FactoryConfig } from "../../config.ts";
 import {
   branchName,
   type GitHubClient,
@@ -21,9 +21,17 @@ import {
   type Worktrees,
 } from "../../contracts.ts";
 import { type BranchNamer, titleBranchNamer } from "../branchNamer.ts";
-import { HUMAN_ENTRY, IssueNotes, IssueState, ReviewReplies, type IssueStateValue, type Note } from "../docs.ts";
+import {
+  HUMAN_ENTRY,
+  IssueNotes,
+  IssueState,
+  ReviewReplies,
+  type IssueStateValue,
+  type Note,
+  type RunSettings,
+} from "../docs.ts";
 import { lastAssistantText, runBudgetBreach, totalCostUsd } from "../extensions/guards.ts";
-import { closingRef, CONVENTIONAL_TITLE, prBodyLimit } from "../extensions/pull-request.ts";
+import { closingRef, CONVENTIONAL_TITLE, NO_CHECKS_NOTE, prBodyLimit } from "../extensions/pull-request.ts";
 import { createSlots } from "../slots.ts";
 import { loadIssueImages, modelImageLimits } from "./issueImages.ts";
 
@@ -50,7 +58,7 @@ export type PipelineState =
 export type PipelineResult = { prUrl: string | null };
 
 export interface PipelineDeps {
-  config: AppConfig;
+  config: FactoryConfig;
   github: GitHubClient;
   worktrees: Worktrees;
   log?: (msg: string, data?: object) => void;
@@ -234,10 +242,27 @@ export function createIssuePipeline(deps: PipelineDeps) {
   const nameBranch = deps.nameBranch ?? titleBranchNamer;
   const slots = createSlots(deps.maxConcurrent ?? DEFAULT_MAX_CONCURRENT);
 
-  const repoOf = (name: string): RepoConfig => {
-    const repo = findRepo(deps.config, name);
-    if (!repo) throw new PipelineFailure(`repository ${name} is not configured`);
-    return repo;
+  const settingsOf = (state: IssueStateValue | undefined): RunSettings => {
+    if (!state?.settings) throw new PipelineFailure("the run has no repo settings; start it again");
+    return state.settings;
+  };
+
+  /** Read from the trusted mirror's default branch, never the agent's branch, so an agent PR can't change its own run. */
+  const loadSettings = async (rt: Rt, context: Context, repo: string, defaultBranch: string) => {
+    const source = await worktrees.trustedFile(repo, defaultBranch, REPO_SETTINGS_FILE);
+
+    let settings: RunSettings;
+    try {
+      settings = { ...parseRepoSettings(source ?? ""), defaultBranch };
+    } catch (error) {
+      throw new PipelineFailure(messageOf(error));
+    }
+
+    await rt.commit(async (tx) => {
+      (await tx.doc(IssueState, rt.conversationId)).settings = settings;
+      return undefined;
+    }, context);
+    return settings;
   };
 
   /** With `reviseOnNotes`, a note that is still pending at commit time sends the run to `revise` instead. */
@@ -300,12 +325,12 @@ export function createIssuePipeline(deps: PipelineDeps) {
   };
 
   /** Checks run only on a clean tree, so they verify exactly the commits that get pushed. */
-  const firstFailure = async (rt: Rt, context: Context, config: RepoConfig, issue: number) => {
-    const uncommitted = await worktrees.uncommitted(config.name, issue);
+  const firstFailure = async (rt: Rt, context: Context, repo: string, issue: number, checks: readonly string[]) => {
+    const uncommitted = await worktrees.uncommitted(repo, issue);
     if (uncommitted) return { problem: "uncommitted changes remain", output: uncommittedOutput(uncommitted) };
 
-    for (const command of config.checks ?? []) {
-      const result = await run(rt, context, command, worktrees.worktreePath(config.name, issue));
+    for (const command of checks) {
+      const result = await run(rt, context, command, worktrees.worktreePath(repo, issue));
       if (!result.ok) return { problem: `\`${command}\` still fails`, output: `$ ${command}\n${result.output}` };
     }
     return undefined;
@@ -402,15 +427,17 @@ export function createIssuePipeline(deps: PipelineDeps) {
     repo: string,
     issue: number,
     state: IssueStateValue | undefined,
+    settings: RunSettings,
   ) => {
     const subject = state?.prTitle ?? (await worktrees.latestCommitSubject(repo, issue, state?.branch ?? ""));
     const title = CONVENTIONAL_TITLE.test(subject) ? subject : `chore: ${(await github.getIssue(repo, issue)).title}`;
 
     const body = state?.prBody ?? lastAssistantText((await rt.context(rt.conversationId, context)).messages);
 
+    const note = settings.checks.length > 0 ? "" : `${NO_CHECKS_NOTE}\n\n`;
     const limit = prBodyLimit(issue);
     const clipped = body.length > limit ? tail(body, limit - 3) : body;
-    return { title, body: `${clipped ? `${clipped}\n\n` : ""}${closingRef(issue)}` };
+    return { title, body: `${clipped ? `${clipped}\n\n` : ""}${note}${closingRef(issue)}` };
   };
 
   const statusTarget = async (rt: Rt, context: Context, input: PipelineInput) => ({
@@ -480,17 +507,19 @@ export function createIssuePipeline(deps: PipelineDeps) {
 
       prepare: step("prepare", async (task, rt, context) => {
         const { repo, issue } = task.input;
-        const config = repoOf(repo);
 
         const state = await rt.snapshot(IssueState, rt.conversationId, context);
         const branch = state?.branch || (await newBranch(rt, context, repo, issue));
+        const defaultBranch = state?.settings?.defaultBranch ?? (await github.defaultBranch(repo));
 
         const openPr = (await github.findOpenPr(repo, branch)) !== undefined;
-        const worktree = await worktrees.prepare(config, issue, { branch, openPr });
+        const worktree = await worktrees.prepare(repo, issue, { branch, openPr, defaultBranch });
 
-        if (config.setup && (worktree.created || !state?.setupDone)) {
-          const result = await run(rt, context, config.setup, worktree.path);
-          if (!result.ok) throw new PipelineFailure(`setup failed: ${config.setup}`, result.output);
+        const settings = state?.settings ?? (await loadSettings(rt, context, repo, defaultBranch));
+
+        if (settings.setup && (worktree.created || state?.setupRan !== settings.setup)) {
+          const result = await run(rt, context, settings.setup, worktree.path);
+          if (!result.ok) throw new PipelineFailure(`setup failed: ${settings.setup}`, result.output);
         }
 
         await go(
@@ -498,7 +527,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
           context,
           { phase: "implement" },
           {
-            setupDone: true,
+            setupRan: settings.setup,
             worktreePath: worktree.path,
             branch: worktree.branch,
             startHead: state?.pushedHead ?? null,
@@ -538,9 +567,10 @@ export function createIssuePipeline(deps: PipelineDeps) {
       verify: step("verify", async (task, rt, context) => {
         const { repo, issue } = task.input;
         const { attempt } = task.state.checkpoint;
-        const config = repoOf(repo);
 
-        const { startHead, branch = "" } = (await rt.snapshot(IssueState, rt.conversationId, context)) ?? {};
+        const state = await rt.snapshot(IssueState, rt.conversationId, context);
+        const { checks } = settingsOf(state);
+        const { startHead, branch = "" } = state ?? {};
 
         const unchanged =
           startHead != null &&
@@ -548,11 +578,11 @@ export function createIssuePipeline(deps: PipelineDeps) {
           (await worktrees.headSha(repo, issue, branch)) === startHead;
 
         // A round without commits, such as one that only answers review comments, has nothing new to check.
-        const failure = unchanged ? undefined : await firstFailure(rt, context, config, issue);
+        const failure = unchanged ? undefined : await firstFailure(rt, context, repo, issue, checks);
 
         if (!failure) return go(rt, context, { phase: (await hasPendingNotes(rt, context)) ? "revise" : "publish" });
 
-        if (attempt >= config.maxFixAttempts)
+        if (attempt >= deps.config.maxFixAttempts)
           throw new PipelineFailure(`${failure.problem} after ${attempt} fix attempt(s)`, failure.output);
 
         await go(
@@ -565,12 +595,11 @@ export function createIssuePipeline(deps: PipelineDeps) {
 
       fix: step("fix", async (task, rt, context) => {
         const { attempt, output } = task.state.checkpoint;
-        const config = repoOf(task.input.repo);
 
         const revisions = (await rt.snapshot(IssueState, rt.conversationId, context))?.revisions ?? 0;
 
         await converse(rt, context, task.input.repo, {
-          content: fixPrompt(attempt, config.maxFixAttempts, output),
+          content: fixPrompt(attempt, deps.config.maxFixAttempts, output),
           requestId: `${task.input.requestId}:fix-${revisions ? `${revisions}-` : ""}${attempt}`,
         });
 
@@ -595,22 +624,22 @@ export function createIssuePipeline(deps: PipelineDeps) {
 
       publish: step("publish", async (task, rt, context) => {
         const { repo, issue } = task.input;
-        const config = repoOf(repo);
 
         const state = await rt.snapshot(IssueState, rt.conversationId, context);
+        const settings = settingsOf(state);
         const head = state?.branch ?? "";
 
-        if ((await worktrees.commitsAhead(config, issue, head)) === 0)
+        if ((await worktrees.commitsAhead(repo, issue, head, settings.defaultBranch)) === 0)
           throw new PipelineFailure("no changes: the agent produced no commits");
 
-        await worktrees.push(config, head);
+        await worktrees.push(repo, head, settings.defaultBranch);
 
         let pr = await github.findOpenPr(repo, head);
         if (!pr) {
-          const content = await prContent(rt, context, repo, issue, state);
-          pr = await github.createPr(repo, { head, base: config.defaultBranch, ...content });
+          const content = await prContent(rt, context, repo, issue, state, settings);
+          pr = await github.createPr(repo, { head, base: settings.defaultBranch, ...content });
         } else if (state?.prTitle || state?.prBody) {
-          await github.updatePr(repo, pr.number, await prContent(rt, context, repo, issue, state));
+          await github.updatePr(repo, pr.number, await prContent(rt, context, repo, issue, state, settings));
         }
 
         await go(

@@ -41,7 +41,6 @@ COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=web /app/web/dist ./web/dist
 COPY package.json ./
-COPY config ./config
 COPY .agents/skills ./.agents/skills
 COPY docker/sshd_config docker/runner.sh ./
 USER agent

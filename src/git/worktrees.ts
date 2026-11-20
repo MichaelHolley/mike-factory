@@ -1,11 +1,10 @@
 import { execFile } from "node:child_process";
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { type ExecutionEnv, getOrThrow } from "@earendil-works/pi-durable/env";
-import type { RepoConfig } from "../config.ts";
 import { issueOfBranch, legacyBranchName, type Worktrees } from "../contracts.ts";
 
 const execFileAsync = promisify(execFile);
@@ -126,53 +125,55 @@ export function createWorktrees(opts: {
   return {
     worktreePath,
 
-    prepare: (repo: RepoConfig, issue, { branch, openPr }) =>
-      withLock(repo.name, async () => {
-        const path = worktreePath(repo.name, issue);
-        const bare = barePath(repo.name);
+    prepare: (repo, issue, { branch, openPr, defaultBranch }) =>
+      withLock(repo, async () => {
+        const path = worktreePath(repo, issue);
+        const bare = barePath(repo);
 
-        await fetchMirror(repo.name);
-        await ensureRepo(repo.name);
+        await fetchMirror(repo);
+        await ensureRepo(repo);
         if (await exists(path)) return { path, branch, created: false };
 
         await git(bare, ["fetch", "--prune", "origin"]);
         await createDir(dirname(path));
         await git(bare, ["worktree", "prune"]);
 
-        if (await refExists(repo.name, `refs/heads/${branch}`)) {
+        if (await refExists(repo, `refs/heads/${branch}`)) {
           await git(bare, ["worktree", "add", path, branch]);
         } else {
           // A closed PR's branch may survive on the remote, already squash-merged, so only an open one is continued.
-          const base =
-            openPr && (await refExists(repo.name, `refs/remotes/origin/${branch}`)) ? branch : repo.defaultBranch;
+          const base = openPr && (await refExists(repo, `refs/remotes/origin/${branch}`)) ? branch : defaultBranch;
           await git(bare, ["worktree", "add", "-b", branch, path, `origin/${base}`]);
         }
         return { path, branch, created: true };
       }),
+
+    async trustedFile(repo, branch, path) {
+      const mirror = mirrorPath(repo);
+      const ref = `refs/heads/${branch}`;
+
+      if (!(await mirrorGit(mirror, ["ls-tree", "--name-only", ref, "--", path]))) return undefined;
+      return mirrorGit(mirror, ["cat-file", "blob", `${ref}:${path}`]);
+    },
 
     uncommitted: (repo, issue) => git(worktreePath(repo, issue), ["status", "--porcelain", "--untracked-files=all"]),
 
     latestCommitSubject: (repo, issue, branch) => git(worktreePath(repo, issue), ["log", "-1", "--format=%s", branch]),
 
     // Under the repo lock because a mirror fetch with `--prune` would drop the branch before it is pushed.
-    push: (repo, branch) =>
-      withLock(repo.name, async () => {
+    push: (repo, branch, defaultBranch) =>
+      withLock(repo, async () => {
         const ref = `refs/heads/${branch}`;
         const bundle = getOrThrow(await workspace.createTempFile({ prefix: "publish-", suffix: ".bundle" }, ctx));
         const local = await mkdtemp(join(tmpdir(), "publish-"));
 
         try {
-          await git(barePath(repo.name), [
-            "bundle",
-            "create",
-            bundle,
-            `refs/remotes/origin/${repo.defaultBranch}..${ref}`,
-          ]);
+          await git(barePath(repo), ["bundle", "create", bundle, `refs/remotes/origin/${defaultBranch}..${ref}`]);
 
           const localBundle = join(local, "issue.bundle");
           await writeFile(localBundle, getOrThrow(await workspace.readBinaryFile(bundle, ctx)));
 
-          const mirror = mirrorPath(repo.name);
+          const mirror = mirrorPath(repo);
           await mirrorGit(mirror, [
             "-c",
             "fetch.fsckObjects=true",
@@ -181,7 +182,7 @@ export function createWorktrees(opts: {
             localBundle,
             `+${ref}:${ref}`,
           ]);
-          await mirrorGit(mirror, ["push", "origin", `${ref}:${ref}`], await authEnv(repo.name));
+          await mirrorGit(mirror, ["push", "origin", `${ref}:${ref}`], await authEnv(repo));
         } finally {
           await workspace.remove(bundle, { force: true }, ctx);
           await rm(local, { recursive: true, force: true });
@@ -190,12 +191,8 @@ export function createWorktrees(opts: {
 
     headSha: (repo, issue, branch) => git(worktreePath(repo, issue), ["rev-parse", `refs/heads/${branch}`]),
 
-    async commitsAhead(repo, issue, branch) {
-      const count = await git(worktreePath(repo.name, issue), [
-        "rev-list",
-        "--count",
-        `origin/${repo.defaultBranch}..${branch}`,
-      ]);
+    async commitsAhead(repo, issue, branch, defaultBranch) {
+      const count = await git(worktreePath(repo, issue), ["rev-list", "--count", `origin/${defaultBranch}..${branch}`]);
       return Number(count);
     },
 
@@ -217,6 +214,12 @@ export function createWorktrees(opts: {
         for (const branch of branches.split("\n").filter((name) => issueOfBranch(name) === issue))
           await git(bare, ["branch", "-D", branch]);
       }),
+
+    // From the server's mirrors, not the runner's directories, so the runner can't plant repo names.
+    async repos() {
+      const names = await readdir(opts.mirrorDir).catch(() => []);
+      return names.flatMap((name) => (name.endsWith(".git") ? [name.slice(0, -4)] : [])).sort();
+    },
 
     async issues(repo) {
       const numbers = new Set<number>();

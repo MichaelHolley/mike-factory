@@ -1,8 +1,5 @@
 # mike-factory
 
-> [!WARNING]
-> Work in progress, configured for my own GitHub account, repos and VPS. It isn't a drop-in tool, but you're welcome to fork it and adapt it.
-
 A self-hosted coding agent that turns a GitHub issue into a pull request. Comment `/mike` on an issue and it reads the issue, implements the change, runs the repo's checks, and opens a PR.
 
 ## Usage
@@ -21,7 +18,7 @@ Progress appears in a single status comment on the issue, or on the PR for runs 
 - A GitHub App webhook starts a durable run per issue: prepare, implement, verify, publish, report.
 - The agent edits and commits locally; the pipeline runs the repo's checks and pushes only verified commits.
 - Run state lives in SQLite, so a restart resumes where it left off and still opens exactly one PR.
-- Each repo configures its own setup command, checks, model and budgets.
+- Each repo sets its setup command and checks in a `.mike.yaml`; the factory sets the model and budgets.
 - The repo's root `AGENTS.md` (else `CLAUDE.md`, else `README.md`) is part of the agent's system prompt.
 - Skills in `.agents/skills/` are offered to the agent and loaded on demand.
 

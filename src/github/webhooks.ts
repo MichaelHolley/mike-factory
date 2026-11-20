@@ -1,6 +1,9 @@
 import { Webhooks } from "@octokit/webhooks";
-import type { AppConfig } from "../config.ts";
+import type { FactoryConfig } from "../config.ts";
 import { agentPrIssue, type WebhookAction } from "../contracts.ts";
+
+/** Who may trigger runs; the App's installations decide which repos. */
+export type WebhookConfig = Pick<FactoryConfig, "owner" | "allowedSenderIds">;
 
 export class InvalidSignatureError extends Error {
   constructor() {
@@ -65,7 +68,7 @@ export async function verifyWebhook(input: {
   signature: string;
   rawBody: string;
   secret: string;
-  config: AppConfig;
+  config: WebhookConfig;
 }): Promise<WebhookAction> {
   const { event, signature, rawBody, secret, config } = input;
   const valid = signature ? await new Webhooks({ secret }).verify(rawBody, signature).catch(() => false) : false;
@@ -118,7 +121,7 @@ export async function verifyWebhook(input: {
 
 const HANDLED_EVENTS = new Set(["issue_comment", "pull_request", "pull_request_review", "pull_request_review_comment"]);
 
-function pullRequestAction(payload: PullRequestPayload, config: AppConfig): WebhookAction {
+function pullRequestAction(payload: PullRequestPayload, config: WebhookConfig): WebhookAction {
   if (payload.action !== "closed" && payload.action !== "reopened")
     return ignore(`pull_request action ${payload.action} is not handled`);
   const target = agentPr(payload, config);
@@ -133,7 +136,7 @@ function pullRequestAction(payload: PullRequestPayload, config: AppConfig): Webh
   };
 }
 
-function reviewAction(payload: ReviewPayload, config: AppConfig): WebhookAction {
+function reviewAction(payload: ReviewPayload, config: WebhookConfig): WebhookAction {
   if (payload.action !== "submitted") return ignore(`pull_request_review action ${payload.action} is not handled`);
   const review = payload.review;
   const body = review?.body ?? "";
@@ -148,7 +151,7 @@ function reviewAction(payload: ReviewPayload, config: AppConfig): WebhookAction 
   });
 }
 
-function reviewCommentAction(payload: ReviewCommentPayload, config: AppConfig): WebhookAction {
+function reviewCommentAction(payload: ReviewCommentPayload, config: WebhookConfig): WebhookAction {
   if (payload.action !== "created")
     return ignore(`pull_request_review_comment action ${payload.action} is not handled`);
   const comment = payload.comment;
@@ -164,7 +167,7 @@ function reviewCommentAction(payload: ReviewCommentPayload, config: AppConfig): 
 
 function prFeedback(
   payload: ReviewPayload | ReviewCommentPayload,
-  config: AppConfig,
+  config: WebhookConfig,
   command: Command | undefined,
   trigger: { reviewId: number; nodeId: string; instructions: string },
 ): WebhookAction {
@@ -190,10 +193,10 @@ function prFeedback(
   };
 }
 
-/** The configured repo, PR and issue of an agent PR from the same repo, or why the payload is not one. */
+/** The repo, PR and issue of an agent PR from the same repo, or why the payload is not one. */
 function agentPr(
   payload: { pull_request?: PrPayload; repository?: Repository },
-  config: AppConfig,
+  config: WebhookConfig,
 ): { repo: string; pr: number; issue: number } | { reason: string } {
   const head = payload.pull_request?.head;
   const target = agentPrIssue({
@@ -208,16 +211,15 @@ function agentPr(
   return { repo: payload.repository!.name!, pr: payload.pull_request?.number ?? 0, issue: target.issue };
 }
 
-function senderNotAllowed(payload: { sender?: Sender }, config: AppConfig): string | undefined {
-  if (Number(payload.sender?.id) !== config.allowedSenderId) return `sender ${payload.sender?.id} is not allowed`;
+function senderNotAllowed(payload: { sender?: Sender }, config: WebhookConfig): string | undefined {
+  if (!config.allowedSenderIds.includes(Number(payload.sender?.id)))
+    return `sender ${payload.sender?.id} is not allowed`;
   return undefined;
 }
 
-function repoNotAllowed(payload: { repository?: Repository }, config: AppConfig): string | undefined {
+function repoNotAllowed(payload: { repository?: Repository }, config: WebhookConfig): string | undefined {
   const owner = payload.repository?.owner?.login;
-  const repo = payload.repository?.name;
   if (owner?.toLowerCase() !== config.owner.toLowerCase()) return `repository owner ${owner} is not ${config.owner}`;
-  if (!config.repos.some((r) => r.name === repo)) return `repository ${repo} is not in repos.yaml`;
   return undefined;
 }
 

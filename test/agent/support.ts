@@ -17,12 +17,13 @@ import type { TaskId } from "@earendil-works/pi-durable";
 import { asConversationId, IssueIndex, IssueState } from "../../src/agent/docs.ts";
 import type { Skill } from "../../src/agent/extensions/skills.ts";
 import { type AgentDeps } from "../../src/agent/harness.ts";
-import type { AppConfig, RepoConfig } from "../../src/config.ts";
+import { stringify } from "yaml";
+import type { FactoryConfig, RepoSettings } from "../../src/config.ts";
 import { issueKey, type GitHubClient } from "../../src/contracts.ts";
 import { createWorktrees } from "../../src/git/worktrees.ts";
 import { FakeGitHub, type FakeGitHubState } from "../fakes/github.ts";
 
-export const OWNER = "michaelholley";
+export const OWNER = "acme";
 export const REPO = "demo";
 export const OTHER_REPO = "other";
 export const ctx = BACKGROUND_CONTEXT;
@@ -40,7 +41,7 @@ export const git = (cwd: string, ...args: string[]) =>
     },
   }).trim();
 
-function seedRemote(dir: string, repo: string) {
+function seedRemote(dir: string, repo: string, settings: Partial<RepoSettings> | undefined) {
   const remote = join(dir, repo === REPO ? "remote.git" : `${repo}.git`);
   if (existsSync(remote)) return remote;
   const seed = join(dir, `seed-${repo}`);
@@ -48,6 +49,7 @@ function seedRemote(dir: string, repo: string) {
   git(seed, "init", "--initial-branch=main");
   writeFileSync(join(seed, "README.md"), "# demo\n");
   writeFileSync(join(seed, "AGENTS.md"), "Use tabs.\n");
+  if (settings) writeFileSync(join(seed, ".mike.yaml"), stringify(settings));
   git(seed, "add", "-A");
   git(seed, "commit", "-m", "seed");
   git(dir, "clone", "--bare", seed, remote);
@@ -70,6 +72,7 @@ function persisted(github: FakeGitHub, file: string): FakeGitHub {
   });
 }
 const FAKE_CLIENT_METHODS: Record<keyof GitHubClient, true> = {
+  defaultBranch: true,
   getIssue: true,
   listIssueComments: true,
   downloadIssueImage: true,
@@ -92,38 +95,40 @@ export interface World {
   remote: string;
   remotes: Record<string, string>;
   github: FakeGitHub;
-  config: AppConfig;
-  repo: RepoConfig;
+  config: FactoryConfig;
   faux: FauxProviderHandle;
   models: ReturnType<typeof createModels>;
   deps: AgentDeps;
   logs: { msg: string; data?: object }[];
 }
 
-/** `extraRepos` adds more repos with the same settings as `repo`, each with its own remote. */
+/**
+ * `repo` seeds each remote's `.mike.yaml`, none when omitted. `extraRepos` adds more repos with the same settings, each
+ * with its own remote.
+ */
 export function createWorld(opts: {
   dir: string;
-  repo?: Partial<RepoConfig>;
+  repo?: Partial<RepoSettings>;
+  config?: Partial<FactoryConfig>;
   extraRepos?: string[];
   githubFile?: string;
   maxConcurrent?: number;
   skills?: Skill[];
 }): World {
   const names = [REPO, ...(opts.extraRepos ?? [])];
-  const remotes = Object.fromEntries(names.map((name) => [name, seedRemote(opts.dir, name)]));
+  const remotes = Object.fromEntries(names.map((name) => [name, seedRemote(opts.dir, name, opts.repo)]));
   const remote = remotes[REPO]!;
 
-  const repo: RepoConfig = {
-    name: REPO,
-    defaultBranch: "main",
+  const config: FactoryConfig = {
+    owner: OWNER,
+    allowedSenderIds: [1],
     model: { provider: "faux", modelId: "faux-1" },
+    thinkingLevel: "high",
     maxTurns: 60,
     maxCostUsd: 3,
-    thinkingLevel: "high",
     maxFixAttempts: 2,
-    ...opts.repo,
+    ...opts.config,
   };
-  const config: AppConfig = { owner: OWNER, allowedSenderId: 1, repos: names.map((name) => ({ ...repo, name })) };
 
   const fake =
     opts.githubFile && existsSync(opts.githubFile)
@@ -156,7 +161,7 @@ export function createWorld(opts: {
     skills: opts.skills,
   };
 
-  return { dir: opts.dir, remote, remotes, github: fake, config, repo, faux, models, deps, logs };
+  return { dir: opts.dir, remote, remotes, github: fake, config, faux, models, deps, logs };
 }
 
 export function textOf(message: Message | undefined) {

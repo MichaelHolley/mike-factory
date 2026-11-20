@@ -14,7 +14,18 @@ For the status UI, run `pnpm -C web dev` next to the server and open http://loca
 
 ## Configuration
 
-Repos are configured in `config/repos.yaml`: the owner, the allowed sender id, and per repo the `setup` command, ordered `checks`, budgets, and optionally `model` (any OpenRouter model) and `thinkingLevel`. Environment variables are documented in `.env.example`.
+The factory is configured with environment variables, documented in `.env.example`. `OWNER` (the account the App is installed on) and `ALLOWED_SENDER_IDS` (comma-separated GitHub user ids allowed to trigger runs) are required. `MODEL` (any OpenRouter model, default `openai/gpt-6.1-sol`), `THINKING_LEVEL`, `MAX_TURNS`, `MAX_COST_USD` and `MAX_FIX_ATTEMPTS` apply to every repo.
+
+Each target repo sets its own install command and ordered checks in a `.mike.yaml` at its root, read from the default branch on every run:
+
+```yaml
+setup: pnpm install --frozen-lockfile
+checks:
+  - pnpm lint
+  - pnpm test
+```
+
+Without the file, runs have no setup and no checks, and the PR says so.
 
 Branches are named `mike/<issue>-<slug>`, with the slug written from the issue by `BRANCH_MODEL` (default `openai/gpt-6-luna`, any model in the OpenRouter catalog).
 
@@ -22,7 +33,7 @@ To give the agent repo-specific instructions, commit an `AGENTS.md` at the root 
 
 ## GitHub App
 
-Create the app under your account and install it on selected repositories. Every repo must also be listed in `config/repos.yaml`.
+Create the app under your account and install it on selected repositories; installing it opts a repo in.
 
 - Repository permissions: Contents, Issues and Pull requests read/write; Metadata read.
 - Events: **Issue comment**, **Pull request**, **Pull request review** and **Pull request review comment**.
@@ -48,7 +59,6 @@ Run the Docker image behind a reverse proxy; the app listens on port 3000 and ha
 - Set `PROXY_SECRET` (e.g. `openssl rand -hex 32`) and have the proxy set it as the `X-Proxy-Secret` header on every request; the app rejects other requests, so the runner can't call it directly.
 - Don't buffer or compress `text/event-stream` responses; the status page streams live updates.
 - Set `PUBLIC_URL` to the public URL so status comments link to the run page.
-- `config/repos.yaml` is baked into the image; rebuild it, or mount the file and point `REPOS_CONFIG` at it.
 
 Run it as two services: the server, which holds the secrets, and a runner, where the agent's tools and its git commands run over SSH. Give secrets to the server only. With Traefik on an external `proxy` network:
 

@@ -12,7 +12,7 @@ import {
   type UsageState,
 } from "@earendil-works/pi-durable";
 import { posix } from "node:path";
-import { findRepo, type AppConfig, type RepoConfig } from "../../config.ts";
+import type { FactoryConfig } from "../../config.ts";
 import { IssueState } from "../docs.ts";
 
 const GIT_OPTIONS = String.raw`(?:\s+(?:-C|-c|--git-dir|--work-tree)\s+\S+|\s+-\S+)*`;
@@ -83,14 +83,14 @@ export const totalCostUsd = (usage: Readonly<UsageState> | undefined) =>
     ? [...Object.values(usage.models), ...Object.values(usage.tools)].reduce((sum, entry) => sum + entry.cost.total, 0)
     : 0;
 
-export function budgetBreach(
-  repo: Pick<RepoConfig, "maxTurns" | "maxCostUsd">,
-  spent: { turns: number; costUsd: number },
-): string | undefined {
-  if (spent.turns >= repo.maxTurns) return `turn budget exhausted (${spent.turns} of ${repo.maxTurns} turns used)`;
+export type Budgets = Pick<FactoryConfig, "maxTurns" | "maxCostUsd">;
 
-  if (spent.costUsd >= repo.maxCostUsd)
-    return `cost budget exhausted ($${spent.costUsd.toFixed(4)} of $${repo.maxCostUsd})`;
+export function budgetBreach(budgets: Budgets, spent: { turns: number; costUsd: number }): string | undefined {
+  if (spent.turns >= budgets.maxTurns)
+    return `turn budget exhausted (${spent.turns} of ${budgets.maxTurns} turns used)`;
+
+  if (spent.costUsd >= budgets.maxCostUsd)
+    return `cost budget exhausted ($${spent.costUsd.toFixed(4)} of $${budgets.maxCostUsd})`;
   return undefined;
 }
 
@@ -103,20 +103,19 @@ export const spentSince = (messages: readonly Message[], costUsd: number, from: 
   costUsd: Math.max(0, costUsd - (from?.costUsd ?? 0)),
 });
 
-/** Why the current run must stop spending, or undefined while it is within its repo's budgets. */
+/** Why the current run must stop spending, or undefined while it is within its budgets. */
 export async function runBudgetBreach(
   read: DocumentReader,
   conversationId: ConversationId,
   messages: readonly Message[],
   context: Context,
-  config: AppConfig,
+  budgets: Budgets,
 ): Promise<string | undefined> {
   const state = await read.snapshot(IssueState, conversationId, context);
-  const repo = state && findRepo(config, state.repo);
-  if (!repo) return undefined;
+  if (!state?.repo) return undefined;
 
   const costUsd = totalCostUsd(await read.snapshot(UsageDoc, conversationId, context));
-  return budgetBreach(repo, spentSince(messages, costUsd, state.budgetFrom));
+  return budgetBreach(budgets, spentSince(messages, costUsd, state.budgetFrom));
 }
 
 export const lastAssistantText = (messages: readonly Message[]): string => {
@@ -135,7 +134,7 @@ const PATH_TOOLS = new Set(["read", "write", "edit"]);
  * Bash and file-path guards plus turn and cost budgets. A budget breach aborts the generation, so the run's submission
  * settles unanswered and the pipeline reports the breach.
  */
-export function createGuards(opts: { config: AppConfig; abortTask: (id: TaskId) => void }) {
+export function createGuards(opts: { config: Budgets; abortTask: (id: TaskId) => void }) {
   return defineExtension({
     name: "guards",
     hooks: [

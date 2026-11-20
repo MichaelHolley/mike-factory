@@ -2,7 +2,7 @@ import type { Context } from "@earendil-works/chord/context";
 import type { Models } from "@earendil-works/pi-ai";
 import { Harness, type Storage } from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
-import type { AppConfig } from "../config.ts";
+import type { FactoryConfig } from "../config.ts";
 import type { GitHubClient, IssueService, Worktrees } from "../contracts.ts";
 import type { BranchNamer } from "./branchNamer.ts";
 import type { Skill } from "./extensions/skills.ts";
@@ -10,7 +10,7 @@ import { createAgentRegistry } from "./registry.ts";
 import { createIssueService } from "./service.ts";
 
 export interface AgentDeps {
-  config: AppConfig;
+  config: FactoryConfig;
   github: GitHubClient;
   worktrees: Worktrees;
   /** Where the agent's tools run for a conversation whose agent works in `cwd`. */

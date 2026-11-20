@@ -10,7 +10,7 @@ import { createBranchNamer, titleBranchNamer } from "./agent/branchNamer.ts";
 import { openAgentHarness } from "./agent/harness.ts";
 import { loadSkills, SKILLS_DIR } from "./agent/extensions/skills.ts";
 import { DEFAULT_MAX_CONCURRENT } from "./agent/tasks/issuePipeline.ts";
-import { loadConfig, type AppConfig } from "./config.ts";
+import { loadFactoryConfig } from "./config.ts";
 import { createGitHubClient } from "./github/app.ts";
 import { createWorktrees } from "./git/worktrees.ts";
 import { openWorkspace } from "./runner.ts";
@@ -44,13 +44,13 @@ function buildModels(openrouterApiKey: string | undefined, useFaux: boolean) {
 }
 
 async function main() {
-  const config = await loadConfig(process.env.REPOS_CONFIG ?? "config/repos.yaml");
+  const useFaux = process.env.MODEL === "faux";
+  const factoryConfig = loadFactoryConfig(process.env);
   const skills = await loadSkills(SKILLS_DIR);
   const dataDir = process.env.DATA_DIR ?? "/data";
   const mirrorDir = process.env.MIRRORS_DIR ?? join(dataDir, "mirrors");
   const port = Number(process.env.PORT ?? 3000);
   const hostname = process.env.HOST ?? "127.0.0.1";
-  const useFaux = process.env.MODEL === "faux";
   const maxConcurrent = Number(process.env.MAX_CONCURRENT ?? DEFAULT_MAX_CONCURRENT);
   if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1)
     throw new Error("MAX_CONCURRENT must be a positive integer");
@@ -60,7 +60,11 @@ async function main() {
 
   const secrets = takeSecrets();
 
-  const github = createGitHubClient({ appId: secrets.appId, privateKey: secrets.privateKey, owner: config.owner });
+  const github = createGitHubClient({
+    appId: secrets.appId,
+    privateKey: secrets.privateKey,
+    owner: factoryConfig.owner,
+  });
   const runnerHost = process.env.RUNNER_HOST || undefined;
   const workspace = await openWorkspace({ runnerHost, dataDir, gitIdentity: await github.botIdentity() });
 
@@ -71,7 +75,7 @@ async function main() {
     env: workspace.env(dataDir),
     dataDir,
     mirrorDir,
-    owner: config.owner,
+    owner: factoryConfig.owner,
     token: (repo) => github.gitToken(repo),
   });
 
@@ -79,10 +83,11 @@ async function main() {
   const branchModel = useFaux ? undefined : models.getModel("openrouter", branchModelId);
   if (!useFaux && !branchModel) throw new Error(`BRANCH_MODEL ${branchModelId} is not a known OpenRouter model`);
 
+  if (!useFaux && !models.getModel("openrouter", factoryConfig.model.modelId))
+    throw new Error(`MODEL ${factoryConfig.model.modelId} is not a known OpenRouter model`);
+
   const nameBranch = branchModel ? createBranchNamer({ models, model: branchModel, log }) : titleBranchNamer;
-  const effectiveConfig: AppConfig = model
-    ? { ...config, repos: config.repos.map((repo) => ({ ...repo, model })) }
-    : config;
+  const config = model ? { ...factoryConfig, model } : factoryConfig;
 
   await mkdir(dataDir, { recursive: true });
   const storage = await openNodeSqliteStorage(join(dataDir, "agent.sqlite"));
@@ -91,7 +96,7 @@ async function main() {
       storage,
       models,
       deps: {
-        config: effectiveConfig,
+        config,
         github,
         worktrees,
         env: workspace.env,
@@ -120,7 +125,7 @@ async function main() {
   const shutdownController = new AbortController();
   const app = createServer({
     service,
-    webhook: { config: effectiveConfig, secret: secrets.webhookSecret },
+    webhook: { config, secret: secrets.webhookSecret },
     log,
     proxySecret: secrets.proxySecret,
     shutdownSignal: shutdownController.signal,
@@ -129,7 +134,7 @@ async function main() {
   const server = serve({ fetch: app.fetch, port, hostname }, (info) =>
     log("listening", {
       port: info.port,
-      model: useFaux ? "faux" : "openrouter",
+      model: config.model.modelId,
       branchModel: branchModel?.id ?? "issue title",
       skills: skills.map((skill) => skill.name),
     }),

@@ -6,7 +6,6 @@ import { promisify } from "node:util";
 import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { Connection, localDaemon, RemoteExecutionEnv } from "@earendil-works/pi-env";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { RepoConfig } from "../config.ts";
 import { branchName } from "../contracts.ts";
 import { createWorktrees } from "./worktrees.ts";
 
@@ -21,15 +20,7 @@ const exists = (path: string) =>
 const commit = (cwd: string, message: string) =>
   git(cwd, "-c", "user.name=agent", "-c", "user.email=agent@example.com", "commit", "-qam", message);
 
-const repo: RepoConfig = {
-  name: "demo",
-  defaultBranch: "main",
-  model: { provider: "p", modelId: "m" },
-  maxTurns: 1,
-  maxCostUsd: 1,
-  thinkingLevel: "high",
-  maxFixAttempts: 1,
-};
+const repo = "demo";
 
 let root: string;
 let remote: string;
@@ -64,7 +55,7 @@ afterEach(async () => {
 
 describe("createWorktrees", () => {
   it("creates a bare clone and a worktree on the issue branch", async () => {
-    const info = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false });
+    const info = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
     expect(info).toEqual({
       path: join(dataDir, "worktrees", "demo", "issue-1"),
       branch: branch(1),
@@ -77,37 +68,53 @@ describe("createWorktrees", () => {
     expect(await git(bare, "config", "remote.origin.fetch")).toBe("+refs/heads/*:refs/remotes/origin/*");
   });
 
+  it("reads a file from the mirror's default branch, not the agent's branch", async () => {
+    await writeFile(join(seed, ".mike.yaml"), "checks: [pnpm test]\n");
+    await git(seed, "add", ".mike.yaml");
+    await commit(seed, "add settings");
+    await git(seed, "push", remote, "main");
+
+    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
+    await writeFile(join(path, ".mike.yaml"), "checks: []\n");
+    await commit(path, "drop checks");
+    await worktrees.push(repo, branch(1), "main");
+
+    expect(await worktrees.trustedFile(repo, "main", ".mike.yaml")).toBe("checks: [pnpm test]");
+    expect(await worktrees.trustedFile(repo, "main", "missing.yaml")).toBeUndefined();
+    expect(await worktrees.repos()).toEqual(["demo"]);
+  });
+
   it("reuses an existing worktree", async () => {
-    await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false });
+    await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
     await writeFile(join(worktrees.worktreePath("demo", 1), "wip.txt"), "wip");
-    const again = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false });
+    const again = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
     expect(again.created).toBe(false);
     expect(await exists(join(again.path, "wip.txt"))).toBe(true);
   });
 
   it("re-adds the worktree from the existing branch when the path is gone", async () => {
-    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false });
+    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
     await writeFile(join(path, "a.txt"), "a");
     await git(path, "add", "a.txt");
     await commit(path, "add a");
     await rm(path, { recursive: true, force: true });
 
-    const again = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false });
+    const again = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
     expect(again.created).toBe(true);
     expect(await exists(join(path, "a.txt"))).toBe(true);
-    expect(await worktrees.commitsAhead(repo, 1, branch(1))).toBe(1);
+    expect(await worktrees.commitsAhead(repo, 1, branch(1), "main")).toBe(1);
   });
 
   it("starts a new worktree from the remote issue branch only while its PR is open", async () => {
-    await worktrees.prepare(repo, 3, { branch: branch(3), openPr: false });
+    await worktrees.prepare(repo, 3, { branch: branch(3), openPr: false, defaultBranch: "main" });
     const main = await git(seed, "rev-parse", "HEAD");
     await git(seed, "checkout", "-qb", branch(1));
     await writeFile(join(seed, "README.md"), "resumed\n");
     await commit(seed, "resume");
     await git(seed, "push", remote, branch(1), `${branch(1)}:${branch(2)}`);
 
-    const open = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: true });
-    const closed = await worktrees.prepare(repo, 2, { branch: branch(2), openPr: false });
+    const open = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: true, defaultBranch: "main" });
+    const closed = await worktrees.prepare(repo, 2, { branch: branch(2), openPr: false, defaultBranch: "main" });
     expect(await git(open.path, "rev-parse", "HEAD")).toBe(await git(seed, "rev-parse", "HEAD"));
     expect(await git(closed.path, "rev-parse", "HEAD")).toBe(main);
   });
@@ -118,14 +125,14 @@ describe("createWorktrees", () => {
     await git(bare, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*");
     await git(bare, "remote", "set-url", "origin", join(root, "gone.git"));
 
-    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false });
+    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
     expect(await git(path, "rev-parse", "HEAD")).toBe(await git(remote, "rev-parse", "main"));
   });
 
   it("keeps parallel issues in separate trees", async () => {
     const [a, b] = await Promise.all([
-      worktrees.prepare(repo, 1, { branch: branch(1), openPr: false }),
-      worktrees.prepare(repo, 2, { branch: branch(2), openPr: false }),
+      worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" }),
+      worktrees.prepare(repo, 2, { branch: branch(2), openPr: false, defaultBranch: "main" }),
     ]);
     await writeFile(join(a.path, "only-a.txt"), "a");
     expect(await exists(join(b.path, "only-a.txt"))).toBe(false);
@@ -133,7 +140,7 @@ describe("createWorktrees", () => {
   });
 
   it("lists uncommitted changes but not ignored files", async () => {
-    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false });
+    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
     expect(await worktrees.uncommitted("demo", 1)).toBe("");
     await writeFile(join(path, ".gitignore"), "build/\n");
     await git(path, "add", ".gitignore");
@@ -148,8 +155,8 @@ describe("createWorktrees", () => {
   });
 
   it("reads only the latest commit subject on the requested issue branch", async () => {
-    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false });
-    await worktrees.prepare(repo, 2, { branch: branch(2), openPr: false });
+    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
+    await worktrees.prepare(repo, 2, { branch: branch(2), openPr: false, defaultBranch: "main" });
     expect(await worktrees.latestCommitSubject("demo", 1, branch(1))).toBe("seed");
     await writeFile(join(path, "README.md"), "changed\n");
     await commit(path, "feat(demo)!: change greeting\n\nCommit body, not part of the subject.");
@@ -161,12 +168,12 @@ describe("createWorktrees", () => {
   });
 
   it("pushes the issue branch to the remote, twice without error", async () => {
-    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false });
+    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
     await writeFile(join(path, "new.txt"), "x");
     await git(path, "add", "new.txt");
     await commit(path, "feat: new");
-    await worktrees.push(repo, branch(1));
-    await worktrees.push(repo, branch(1));
+    await worktrees.push(repo, branch(1), "main");
+    await worktrees.push(repo, branch(1), "main");
     expect(await git(remote, "rev-parse", `refs/heads/${branch(1)}`)).toBe(await git(path, "rev-parse", "HEAD"));
     expect(await git(remote, "rev-parse", "refs/heads/main")).not.toBe(await git(path, "rev-parse", "HEAD"));
   });
@@ -181,11 +188,15 @@ describe("createWorktrees", () => {
         owner: "o",
         remoteUrl: () => remote,
       });
-      const { path } = await remoteWorktrees.prepare(repo, 1, { branch: branch(1), openPr: false });
+      const { path } = await remoteWorktrees.prepare(repo, 1, {
+        branch: branch(1),
+        openPr: false,
+        defaultBranch: "main",
+      });
       await writeFile(join(path, "new.txt"), "x");
       await git(path, "add", "new.txt");
       await commit(path, "feat: new");
-      await remoteWorktrees.push(repo, branch(1));
+      await remoteWorktrees.push(repo, branch(1), "main");
       expect(await git(remote, "rev-parse", `refs/heads/${branch(1)}`)).toBe(await git(path, "rev-parse", "HEAD"));
     } finally {
       connection.close();
@@ -193,7 +204,7 @@ describe("createWorktrees", () => {
   });
 
   it("publishes without running the agent clone's hooks or fsmonitor with credentials", async () => {
-    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false });
+    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
     const marker = join(root, "planted.log");
     const planted = `#!/bin/sh\nenv >> "${marker}"\n`;
     const bare = join(dataDir, "repos", "demo.git");
@@ -203,13 +214,13 @@ describe("createWorktrees", () => {
     await writeFile(join(path, "README.md"), "changed\n");
     await commit(path, "feat: change");
 
-    await worktrees.push(repo, branch(1));
+    await worktrees.push(repo, branch(1), "main");
     expect(await git(remote, "rev-parse", `refs/heads/${branch(1)}`)).toBe(await git(path, "rev-parse", "HEAD"));
     expect(await readFile(marker, "utf8").catch(() => "")).not.toContain("AUTHORIZATION");
   });
 
   it("refuses to publish malformed objects", async () => {
-    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false });
+    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
     const tree = await git(path, "rev-parse", "HEAD^{tree}");
     const parent = await git(path, "rev-parse", "HEAD");
     const object = join(root, "bad-commit");
@@ -218,7 +229,7 @@ describe("createWorktrees", () => {
     const bad = await git(path, "hash-object", "-t", "commit", "--literally", "-w", object);
     await git(path, "update-ref", `refs/heads/${branch(1)}`, bad);
 
-    await expect(worktrees.push(repo, branch(1))).rejects.toThrow();
+    await expect(worktrees.push(repo, branch(1), "main")).rejects.toThrow();
     await expect(git(remote, "rev-parse", "--verify", `refs/heads/${branch(1)}`)).rejects.toThrow();
   });
 
@@ -237,31 +248,33 @@ describe("createWorktrees", () => {
       owner: "o",
       remoteUrl: () => remote,
     });
-    const { path } = await stuffing.prepare(repo, 1, { branch: branch(1), openPr: false });
+    const { path } = await stuffing.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
     await writeFile(join(path, "README.md"), "changed\n");
     await commit(path, "feat: change");
     await git(path, "tag", "origin/main");
 
-    await stuffing.push(repo, branch(1));
+    await stuffing.push(repo, branch(1), "main");
     expect(await git(join(root, "mirrors", "demo.git"), "tag", "--list")).toBe("");
   });
 
   it("removes worktree and branch, and is idempotent", async () => {
-    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false });
+    const { path } = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
     await worktrees.remove("demo", 1);
     await worktrees.remove("demo", 1);
     await worktrees.remove("never-cloned", 9);
     expect(await exists(path)).toBe(false);
     expect(await git(join(dataDir, "repos", "demo.git"), "branch", "--list", branch(1))).toBe("");
-    expect((await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false })).created).toBe(true);
+    expect(
+      (await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" })).created,
+    ).toBe(true);
   });
 
   it("lists and removes issues by worktree or by either branch naming", async () => {
     expect(await worktrees.issues("demo")).toEqual([]);
-    await worktrees.prepare(repo, 2, { branch: "agent/issue-2", openPr: false });
-    await worktrees.prepare(repo, 1, { branch: "mike/1-x", openPr: false });
-    await worktrees.prepare(repo, 12, { branch: "mike/12-x", openPr: false });
-    const { path } = await worktrees.prepare(repo, 10, { branch: branch(10), openPr: false });
+    await worktrees.prepare(repo, 2, { branch: "agent/issue-2", openPr: false, defaultBranch: "main" });
+    await worktrees.prepare(repo, 1, { branch: "mike/1-x", openPr: false, defaultBranch: "main" });
+    await worktrees.prepare(repo, 12, { branch: "mike/12-x", openPr: false, defaultBranch: "main" });
+    const { path } = await worktrees.prepare(repo, 10, { branch: branch(10), openPr: false, defaultBranch: "main" });
     await rm(path, { recursive: true });
     await worktrees.prune("demo");
     expect(await worktrees.issues("demo")).toEqual([1, 2, 10, 12]);

@@ -1,23 +1,22 @@
 import { defineExtension, section } from "@earendil-works/pi-durable";
-import { findRepo, type AppConfig } from "../../config.ts";
 import { IssueState } from "../docs.ts";
 
 export const MAX_DOC_CHARS = 20_000;
 const CONTEXT_FILES = ["AGENTS.md", "CLAUDE.md", "README.md"];
 const NESTED_HINT = "Subdirectories may have their own AGENTS.md; read it before changing files there.";
 
-export function createRepoContext(config: AppConfig) {
+export function createRepoContext(owner: string) {
   return defineExtension({
     name: "repo-context",
     sections: [
       section("repository", async (input, context) => {
         const state = await input.read.snapshot(IssueState, input.conversationId, context);
-        const repo = state && findRepo(config, state.repo);
-        if (!state || !repo) return undefined;
+        const settings = state?.settings;
+        if (!state || !settings) return undefined;
         return [
-          `Repository: ${config.owner}/${repo.name} (default branch ${repo.defaultBranch}), working on issue #${state.issue} on branch ${state.branch}.`,
-          `Install: ${repo.setup ?? "none"}`,
-          `Checks: ${repo.checks?.join(" && ") || "none"}`,
+          `Repository: ${owner}/${state.repo} (default branch ${settings.defaultBranch}), working on issue #${state.issue} on branch ${state.branch}.`,
+          `Install: ${settings.setup ?? "none"}`,
+          `Checks: ${settings.checks.join(" && ") || "none"}`,
           "The pipeline runs the checks itself after you finish and sends you any failure output.",
         ].join("\n");
       }),
