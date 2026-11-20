@@ -33,7 +33,7 @@ export const stepLook: Record<IssuePhase, { icon: Component; hue: string }> = {
   revise: { icon: MessageSquareReply, hue: "text-you" },
   publish: { icon: GitPullRequestArrow, hue: "text-ship" },
   report: { icon: MessageSquareText, hue: "text-ship" },
-  review: { icon: Eye, hue: "text-you" },
+  review: { icon: Eye, hue: "text-ok" },
   merged: { icon: GitMerge, hue: "text-merged" },
   closed: { icon: GitPullRequestClosed, hue: "text-halt" },
   done: { icon: Check, hue: "text-ok" },
