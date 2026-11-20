@@ -9,7 +9,7 @@ import {
 } from "../contracts.ts";
 import type { PrState } from "../runStatus.ts";
 
-import { downloadIssueImage } from "./images.ts";
+import { downloadIssueImage, downloadIssueText } from "./attachments.ts";
 
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60_000;
 const PER_PAGE = 100;
@@ -41,6 +41,16 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
   };
 
   const octokitFor = async (repo: string) => app.getInstallationOctokit(await installationId(repo));
+
+  const attachmentToken = async (repo: string, signal: AbortSignal) => {
+    const { data } = await app.octokit.request("POST /app/installations/{installation_id}/access_tokens", {
+      installation_id: await installationId(repo),
+      repositories: [repo],
+      permissions: { contents: "read", issues: "read" },
+      request: { signal },
+    });
+    return data.token;
+  };
 
   const listAll = async <T>(fetchPage: (page: number) => Promise<T[]>): Promise<T[]> => {
     const all: T[] = [];
@@ -114,13 +124,9 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
       }));
     },
 
-    async downloadIssueImage(repo, url) {
-      return downloadIssueImage(url, async () => {
-        const octokit = await octokitFor(repo);
-        const { token } = (await octokit.auth({ type: "installation", repositoryNames: [repo] })) as { token: string };
-        return token;
-      });
-    },
+    downloadIssueImage: (repo, url) => downloadIssueImage(url, (signal) => attachmentToken(repo, signal)),
+
+    downloadIssueText: (repo, url) => downloadIssueText(url, (signal) => attachmentToken(repo, signal)),
 
     async upsertComment(repo, issue, marker, body) {
       const octokit = await octokitFor(repo);

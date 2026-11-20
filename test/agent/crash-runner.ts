@@ -1,5 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { UserMessage } from "@earendil-works/pi-ai";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { openAgentHarness } from "../../src/agent/harness.ts";
 import { PNG_IMAGE } from "../fakes/github.ts";
@@ -33,14 +34,17 @@ const runs = review
   ? [{ repo: REPO, issue: 1 }]
   : [...[1, 2, 3].map((issue) => ({ repo: REPO, issue })), { repo: OTHER_REPO, issue: 1 }];
 
+const ATTACHED_TEXT = "Attached notes: greet briefly.";
 if (mode === "first" || mode === "review-first") {
+  const textUrl = "https://github.com/user-attachments/files/1/notes.txt";
   const imageUrl = "https://github.com/user-attachments/assets/reference";
   world.github.addIssueImage(imageUrl, { ok: true, image: PNG_IMAGE });
+  world.github.addIssueText(textUrl, { ok: true, text: ATTACHED_TEXT, truncated: false });
   for (const { repo, issue } of runs)
     world.github.addIssue(repo, {
       number: issue,
       title: "Add hello",
-      body: `Please add hello.txt. ![Reference](${imageUrl})`,
+      body: `Please add hello.txt. ![Reference](${imageUrl}) [notes.txt](${textUrl})`,
     });
   writeFileSync(githubFile, JSON.stringify(world.github.toJSON()));
 }
@@ -73,17 +77,20 @@ if (mode === "first") {
   await service.message({ repo: REPO, issue: 1, id: "7d2f8c1e-5b3a-4c6d-9e8f-0a1b2c3d4e5f", text: "Keep it short." });
 }
 const outcomes = await Promise.all(runs.map(({ repo, issue }) => pipelineResult(harness, issue, repo)));
-const imageMessages = await Promise.all(
+type Part = Exclude<UserMessage["content"], string>[number];
+const userMessages = await Promise.all(
   runs.map(async ({ repo, issue }) => {
     const conversation = (await harness.conversation((await conversationIdOf(harness, issue, repo))!, ctx))!;
-    return (await conversation.context(ctx)).messages.filter(
-      (message) =>
-        message.role === "user" &&
-        Array.isArray(message.content) &&
-        message.content.some((part) => part.type === "image"),
-    ).length;
+    return (await conversation.context(ctx)).messages.flatMap((message): Part[][] => {
+      if (message.role !== "user") return [];
+      return [typeof message.content === "string" ? [{ type: "text", text: message.content }] : message.content];
+    });
   }),
 );
-console.log(JSON.stringify({ outcomes: outcomes.map((outcome) => outcome.status), imageMessages }));
+const count = (has: (part: Part) => boolean) =>
+  userMessages.map((messages) => messages.filter((parts) => parts.some(has)).length);
+const imageMessages = count((part) => part.type === "image");
+const textMessages = count((part) => part.type === "text" && part.text.includes(ATTACHED_TEXT));
+console.log(JSON.stringify({ outcomes: outcomes.map((outcome) => outcome.status), imageMessages, textMessages }));
 await harness.close(ctx);
 process.exit(0);

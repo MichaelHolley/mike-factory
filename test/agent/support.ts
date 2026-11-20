@@ -73,6 +73,7 @@ const FAKE_CLIENT_METHODS: Record<keyof GitHubClient, true> = {
   getIssue: true,
   listIssueComments: true,
   downloadIssueImage: true,
+  downloadIssueText: true,
   upsertComment: true,
   findOpenPr: true,
   createPr: true,

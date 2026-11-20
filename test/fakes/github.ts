@@ -5,6 +5,7 @@ import {
   type IssueComment,
   type IssueData,
   type IssueImageDownload,
+  type IssueTextDownload,
   type PullRequestInfo,
   type PullRequestRef,
   type ReviewFeedback,
@@ -70,6 +71,7 @@ export const PNG_IMAGE = {
 export interface FakeGitHubState {
   issues: FakeIssue[];
   images: [string, IssueImageDownload][];
+  texts: [string, IssueTextDownload][];
   comments: FakeComment[];
   prs: FakePr[];
   reviews: FakeReview[];
@@ -83,6 +85,7 @@ export interface FakeGitHubState {
 export class FakeGitHub implements GitHubClient {
   private issues = new Map<string, FakeIssue>();
   private images = new Map<string, IssueImageDownload>();
+  private texts = new Map<string, IssueTextDownload>();
   private commentList: FakeComment[] = [];
   private prList: FakePr[] = [];
   private reviewList: FakeReview[] = [];
@@ -96,6 +99,7 @@ export class FakeGitHub implements GitHubClient {
     const fake = new FakeGitHub();
     for (const issue of state.issues) fake.issues.set(fake.key(issue.repo, issue.number), issue);
     fake.images = new Map(state.images);
+    fake.texts = new Map(state.texts);
     fake.commentList = state.comments;
     fake.prList = state.prs;
     fake.reviewList = state.reviews;
@@ -111,6 +115,7 @@ export class FakeGitHub implements GitHubClient {
     return {
       issues: [...this.issues.values()],
       images: [...this.images],
+      texts: [...this.texts],
       comments: this.commentList,
       prs: this.prList,
       reviews: this.reviewList,
@@ -133,6 +138,15 @@ export class FakeGitHub implements GitHubClient {
   async downloadIssueImage(_repo: string, url: string): Promise<IssueImageDownload> {
     this.called("downloadIssueImage");
     return this.images.get(url) ?? { ok: false, reason: "download returned HTTP 404" };
+  }
+
+  addIssueText(url: string, result: IssueTextDownload): void {
+    this.texts.set(url, result);
+  }
+
+  async downloadIssueText(_repo: string, url: string): Promise<IssueTextDownload> {
+    this.called("downloadIssueText");
+    return this.texts.get(url) ?? { ok: false, reason: "download returned HTTP 404" };
   }
 
   addComment(repo: string, issue: number, author: string, body: string): void {

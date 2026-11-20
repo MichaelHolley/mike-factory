@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createGitHubClient } from "./app.ts";
-import { MAX_ISSUE_IMAGE_BYTES } from "./images.ts";
+import { MAX_ISSUE_IMAGE_BYTES, MAX_ISSUE_TEXT_BYTES } from "./attachments.ts";
 
 const privateKey = generateKeyPairSync("rsa", { modulusLength: 2048 })
   .privateKey.export({ type: "pkcs8", format: "pem" })
@@ -51,7 +51,10 @@ describe("GitHub issue image downloads", () => {
         }),
       );
       const auth = requests.mock.calls.find(([input]) => String(input).endsWith("/access_tokens"));
-      expect(JSON.parse(auth![1]!.body as string)).toMatchObject({ repositories: ["demo"] });
+      expect(JSON.parse(auth![1]!.body as string)).toEqual({
+        repositories: ["demo"],
+        permissions: { contents: "read", issues: "read" },
+      });
     },
   );
 
@@ -60,7 +63,6 @@ describe("GitHub issue image downloads", () => {
     "http://github.com/user-attachments/assets/x",
     "https://github.com/owner/repo/image.png",
     "https://github.com/user-attachments-evil/x",
-    "https://github.com/user-attachments/files/1/build.log",
     "https://github.com.evil.test/user-attachments/assets/x",
     "https://user-images.githubusercontent.com.evil.test/x",
     "https://github.com@evil.test/user-attachments/assets/x",
@@ -71,6 +73,17 @@ describe("GitHub issue image downloads", () => {
     "not a url",
   ])("rejects %s before authentication or fetching", async (url) => {
     expect(await client.downloadIssueImage("demo", url)).toMatchObject({ ok: false });
+    expect(await client.downloadIssueText("demo", url)).toMatchObject({ ok: false });
+    expect(requests).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["image", "https://github.com/user-attachments/files/1/build.log"],
+    ["text", attachment],
+    ["text", "https://user-images.githubusercontent.com/123/screenshot.png"],
+  ] as const)("rejects a %s download of %s, which is the other kind", async (kind, url) => {
+    const download = kind === "image" ? client.downloadIssueImage : client.downloadIssueText;
+    expect(await download("demo", url)).toMatchObject({ ok: false });
     expect(requests).not.toHaveBeenCalled();
   });
 
@@ -83,17 +96,19 @@ describe("GitHub issue image downloads", () => {
     expect(imageFetch.mock.calls[1]![1]!.headers).not.toHaveProperty("authorization");
   });
 
-  it.each(["https://evil.test/x", "http://user-images.githubusercontent.com/x", "http://127.0.0.1/x"])(
-    "does not follow a redirect to %s",
-    async (location) => {
-      imageFetch.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location } }));
-      expect(await client.downloadIssueImage("demo", attachment)).toEqual({
-        ok: false,
-        reason: "redirect is not an allowed GitHub image URL",
-      });
-      expect(imageFetch).toHaveBeenCalledTimes(1);
-    },
-  );
+  it.each([
+    "https://evil.test/x",
+    "http://user-images.githubusercontent.com/x",
+    "http://127.0.0.1/x",
+    "https://objects.githubusercontent.com/x",
+  ])("does not follow a redirect to %s", async (location) => {
+    imageFetch.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location } }));
+    expect(await client.downloadIssueImage("demo", attachment)).toEqual({
+      ok: false,
+      reason: "redirect is not an allowed GitHub image URL",
+    });
+    expect(imageFetch).toHaveBeenCalledTimes(1);
+  });
 
   it("bounds redirect chains", async () => {
     imageFetch.mockImplementation(async () => new Response(null, { status: 302, headers: { location: attachment } }));
@@ -282,5 +297,101 @@ describe("GitHub issue image downloads", () => {
     } finally {
       timeout.mockRestore();
     }
+  });
+
+  it("times out a stalled token request", async () => {
+    await client.gitToken("demo");
+    const deadline = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(deadline.signal);
+    requests.mockImplementationOnce(
+      (_input, init) =>
+        new Promise((_, reject) => {
+          init!.signal!.addEventListener("abort", () => reject(new Error("aborted")));
+          deadline.abort();
+        }),
+    );
+    try {
+      expect(await client.downloadIssueImage("demo", attachment)).toEqual({
+        ok: false,
+        reason: "image download timed out",
+      });
+      expect(imageFetch).not.toHaveBeenCalled();
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+});
+
+describe("GitHub issue text downloads", () => {
+  const file = "https://github.com/user-attachments/files/1/build.log";
+  const textResponse = (body: ConstructorParameters<typeof Response>[0], contentType = "text/plain") =>
+    new Response(body, { headers: { "content-type": contentType } });
+
+  it("follows the signed file redirect without forwarding credentials", async () => {
+    const signed =
+      "https://objects.githubusercontent.com/github-production-repository-file-5c1aeb/1/2?X-Amz-Signature=s";
+    imageFetch
+      .mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: signed } }))
+      .mockResolvedValueOnce(textResponse("build failed\n"));
+    expect(await client.downloadIssueText("demo", file)).toEqual({
+      ok: true,
+      text: "build failed\n",
+      truncated: false,
+    });
+    expect(imageFetch.mock.calls[0]![1]!.headers).toMatchObject({ authorization: "Bearer installation-token" });
+    expect(imageFetch.mock.calls[1]![0]).toBe(signed);
+    expect(imageFetch.mock.calls[1]![1]!.headers).not.toHaveProperty("authorization");
+  });
+
+  it.each([
+    "https://private-user-images.githubusercontent.com/x",
+    "https://github.com/user-attachments/files/2/other.log",
+    "https://objects.githubusercontent.com.evil.test/x",
+  ])("does not follow a file redirect to %s", async (location) => {
+    imageFetch.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location } }));
+    expect(await client.downloadIssueText("demo", file)).toEqual({
+      ok: false,
+      reason: "redirect is not an allowed GitHub file URL",
+    });
+  });
+
+  it("reads text from its bytes, whatever the Content-Type", async () => {
+    imageFetch.mockResolvedValueOnce(textResponse('{"ü": 1}', "application/octet-stream"));
+    expect(await client.downloadIssueText("demo", file)).toMatchObject({ ok: true, text: '{"ü": 1}' });
+  });
+
+  it.each([
+    ["NUL bytes", Buffer.from("text\0more")],
+    ["invalid UTF-8", Buffer.from([0x61, 0xff, 0x62])],
+    ["a PNG", png],
+  ])("skips a file with %s, even as text/plain", async (_, bytes) => {
+    imageFetch.mockResolvedValueOnce(textResponse(bytes));
+    expect(await client.downloadIssueText("demo", file)).toEqual({ ok: false, reason: "not a UTF-8 text file" });
+  });
+
+  it("skips an empty file", async () => {
+    imageFetch.mockResolvedValueOnce(textResponse(""));
+    expect(await client.downloadIssueText("demo", file)).toEqual({ ok: false, reason: "empty file" });
+  });
+
+  it("keeps a file of exactly the size limit whole", async () => {
+    imageFetch.mockResolvedValueOnce(textResponse("a".repeat(MAX_ISSUE_TEXT_BYTES)));
+    expect(await client.downloadIssueText("demo", file)).toMatchObject({ ok: true, truncated: false });
+  });
+
+  it("stops reading at the size limit and cuts at a character boundary", async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream({
+      start: (controller) => controller.enqueue(Buffer.from(`${"a".repeat(MAX_ISSUE_TEXT_BYTES - 1)}é`)),
+      pull: (controller) => controller.enqueue(Buffer.from("é".repeat(1024))),
+      cancel,
+    });
+    imageFetch.mockResolvedValueOnce(textResponse(body));
+    expect(await client.downloadIssueText("demo", file)).toEqual({
+      ok: true,
+      text: "a".repeat(MAX_ISSUE_TEXT_BYTES - 1),
+      truncated: true,
+    });
+    expect(cancel).toHaveBeenCalled();
   });
 });
