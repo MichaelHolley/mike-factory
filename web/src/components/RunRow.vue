@@ -17,12 +17,9 @@ defineProps<{ run: RunStatus; now: number; compact?: boolean }>();
     <span class="absolute inset-y-0 left-0 w-0.75 bg-current" :class="stepLook[run.phase].hue" aria-hidden="true" />
     <RouterLink
       :to="`/runs/${run.repo}/${run.issue}`"
-      class="group inline-flex min-w-0 items-baseline gap-2 text-ink no-underline after:absolute after:inset-0 @max-3xl:col-span-full"
+      class="min-w-0 truncate font-semibold text-ink no-underline after:absolute after:inset-0 hover:underline hover:underline-offset-3 @max-3xl:col-span-full"
     >
-      <span class="truncate font-semibold group-hover:underline group-hover:underline-offset-3">{{ run.repo }}</span>
-      <span class="font-medium text-muted tabular-nums group-hover:underline group-hover:underline-offset-3"
-        >#{{ run.issue }}</span
-      >
+      {{ run.repo }} <span class="font-medium text-muted tabular-nums">#{{ run.issue }}</span>
     </RouterLink>
     <span class="truncate @max-3xl:col-span-full" :title="run.title ?? undefined">{{ run.title }}</span>
     <PhaseBadge :phase="run.phase" />

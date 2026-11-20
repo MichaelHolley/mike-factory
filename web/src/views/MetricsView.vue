@@ -156,9 +156,9 @@ const facts = computed(() => {
                     class="min-w-0 flex-1 truncate text-ink no-underline hover:underline"
                     :title="run.title ?? undefined"
                   >
-                    <span class="font-semibold">{{ run.repo }}</span>
-                    <span class="ml-1 text-muted tabular-nums">#{{ run.issue }}</span>
-                    <span v-if="run.title" class="ml-1.5 text-muted">{{ run.title }}</span>
+                    <span class="font-semibold">{{ run.repo }}</span>&#32;<span class="text-muted tabular-nums"
+                      >#{{ run.issue }}</span
+                    ><template v-if="run.title">&#32;<span class="text-muted">{{ run.title }}</span></template>
                   </RouterLink>
                   <span class="font-medium tabular-nums">{{ formatCost(run.costUsd) }}</span>
                 </li>
