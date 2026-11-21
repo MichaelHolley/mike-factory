@@ -27,7 +27,8 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
   const { owner } = opts;
 
   const installationIds = new Map<string, Promise<number>>();
-  const tokens = new Map<string, { token: string; expiresAt: number }>();
+  const gitTokens = new Map<string, { token: string; expiresAt: number }>();
+  const attachmentTokens = new Map<string, { token: string; expiresAt: number }>();
   let identity: Promise<GitIdentity> | undefined;
 
   const installationId = (repo: string) => {
@@ -42,15 +43,27 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
 
   const octokitFor = async (repo: string) => app.getInstallationOctokit(await installationId(repo));
 
-  const attachmentToken = async (repo: string, signal: AbortSignal) => {
+  const cachedToken = async (
+    cache: Map<string, { token: string; expiresAt: number }>,
+    repo: string,
+    permissions: Record<string, "read" | "write">,
+    signal?: AbortSignal,
+  ) => {
+    const cached = cache.get(repo);
+    if (cached && cached.expiresAt - Date.now() > TOKEN_REFRESH_MARGIN_MS) return cached.token;
+
     const { data } = await app.octokit.request("POST /app/installations/{installation_id}/access_tokens", {
       installation_id: await installationId(repo),
       repositories: [repo],
-      permissions: { contents: "read", issues: "read" },
+      permissions,
       request: { signal },
     });
+    cache.set(repo, { token: data.token, expiresAt: Date.parse(data.expires_at) });
     return data.token;
   };
+
+  const attachmentToken = (repo: string, signal: AbortSignal) =>
+    cachedToken(attachmentTokens, repo, { contents: "read", issues: "read" }, signal);
 
   const listAll = async <T>(fetchPage: (page: number) => Promise<T[]>): Promise<T[]> => {
     const all: T[] = [];
@@ -325,18 +338,7 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
       });
     },
 
-    async gitToken(repo) {
-      const cached = tokens.get(repo);
-      if (cached && cached.expiresAt - Date.now() > TOKEN_REFRESH_MARGIN_MS) return cached.token;
-
-      const { data } = await app.octokit.request("POST /app/installations/{installation_id}/access_tokens", {
-        installation_id: await installationId(repo),
-        repositories: [repo],
-        permissions: { contents: "write" },
-      });
-      tokens.set(repo, { token: data.token, expiresAt: Date.parse(data.expires_at) });
-      return data.token;
-    },
+    gitToken: (repo) => cachedToken(gitTokens, repo, { contents: "write" }),
 
     botIdentity() {
       identity ??= (async () => {

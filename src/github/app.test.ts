@@ -58,6 +58,17 @@ describe("GitHub issue image downloads", () => {
     },
   );
 
+  it("reuses one read-only token across downloads, apart from the git token", async () => {
+    await client.downloadIssueImage("demo", attachment);
+    await client.downloadIssueImage("demo", attachment);
+    await client.gitToken("demo");
+    const mints = requests.mock.calls.filter(([input]) => String(input).endsWith("/access_tokens"));
+    expect(mints.map(([, init]) => JSON.parse(init!.body as string).permissions)).toEqual([
+      { contents: "read", issues: "read" },
+      { contents: "write" },
+    ]);
+  });
+
   it.each([
     "https://example.com/image.png",
     "http://github.com/user-attachments/assets/x",
