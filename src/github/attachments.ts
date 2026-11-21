@@ -1,7 +1,9 @@
-import type { IssueImageDownload } from "../contracts.ts";
+import { isUtf8 } from "node:buffer";
+import type { IssueImageDownload, IssueTextDownload } from "../contracts.ts";
 
 // GitHub's upload limit for images; the pipeline scales them down to the model's limits.
 export const MAX_ISSUE_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_ISSUE_TEXT_BYTES = 100 * 1024;
 const DOWNLOAD_TIMEOUT_MS = 15_000;
 const MAX_REDIRECTS = 3;
 const IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
@@ -127,18 +129,61 @@ export const isIssueImageUrl = (value: string): boolean => {
   );
 };
 
-const isImageRedirectUrl = (value: string) =>
-  isIssueImageUrl(value) || secureUrl(value)?.hostname === "private-user-images.githubusercontent.com";
+export const isIssueFileUrl = (value: string): boolean => {
+  const url = secureUrl(value);
+  return !!url && url.hostname === "github.com" && url.pathname.startsWith("/user-attachments/files/");
+};
+
+/** The first `max` bytes, cut back to the last complete UTF-8 character. */
+export const truncateUtf8 = (bytes: Buffer, max: number): Buffer => {
+  if (bytes.length <= max) return bytes;
+
+  let end = max;
+  while (end > Math.max(0, max - 3) && (bytes[end]! & 0xc0) === 0x80) end--;
+  return bytes.subarray(0, end);
+};
+
+interface AttachmentKind {
+  name: "image" | "file";
+  accept: string;
+  isAllowedRedirect: (url: string) => boolean;
+  maxBytes: number;
+  /** Keeps the first `maxBytes` of a larger download instead of skipping it. */
+  truncate: boolean;
+  contentTypes?: Set<string>;
+}
+
+const IMAGE: AttachmentKind = {
+  name: "image",
+  accept: [...IMAGE_MIME_TYPES].join(", "),
+  isAllowedRedirect: (url) =>
+    isIssueImageUrl(url) || secureUrl(url)?.hostname === "private-user-images.githubusercontent.com",
+  maxBytes: MAX_ISSUE_IMAGE_BYTES,
+  truncate: false,
+  contentTypes: IMAGE_MIME_TYPES,
+};
+
+// Checked against a live attachment: GitHub redirects file links to signed URLs on this host.
+const FILE: AttachmentKind = {
+  name: "file",
+  accept: "*/*",
+  isAllowedRedirect: (url) => secureUrl(url)?.hostname === "objects.githubusercontent.com",
+  maxBytes: MAX_ISSUE_TEXT_BYTES,
+  truncate: true,
+};
+
+type Downloaded = { ok: true; bytes: Buffer; truncated: boolean } | { ok: false; reason: string };
 
 /** Runs on the server. Redirects are checked manually and never receive the installation token. */
-export async function downloadIssueImage(
+async function download(
   value: string,
-  authenticate: () => Promise<string>,
-): Promise<IssueImageDownload> {
-  if (!isIssueImageUrl(value)) return { ok: false, reason: "not an allowed GitHub attachment URL" };
+  authenticate: (signal: AbortSignal) => Promise<string>,
+  kind: AttachmentKind,
+): Promise<Downloaded> {
+  const limit = `${kind.name} exceeds the ${kind.maxBytes / (1024 * 1024)} MiB size limit`;
   const signal = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS);
   try {
-    const token = await authenticate();
+    const token = await authenticate(signal);
     let url = value;
 
     for (let redirects = 0; ; redirects++) {
@@ -146,7 +191,7 @@ export async function downloadIssueImage(
         redirect: "manual",
         signal,
         headers: {
-          accept: [...IMAGE_MIME_TYPES].join(", "),
+          accept: kind.accept,
           "user-agent": "mike-factory",
           ...(redirects === 0 && { authorization: `Bearer ${token}` }),
         },
@@ -158,7 +203,8 @@ export async function downloadIssueImage(
           if (!location || redirects >= MAX_REDIRECTS) return { ok: false, reason: "too many or invalid redirects" };
 
           const next = new URL(location, url).href;
-          if (!isImageRedirectUrl(next)) return { ok: false, reason: "redirect is not an allowed GitHub image URL" };
+          if (!kind.isAllowedRedirect(next))
+            return { ok: false, reason: `redirect is not an allowed GitHub ${kind.name} URL` };
 
           url = next;
           continue;
@@ -167,32 +213,63 @@ export async function downloadIssueImage(
         if (!response.ok) return { ok: false, reason: `download returned HTTP ${response.status}` };
 
         const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-        if (!IMAGE_MIME_TYPES.has(contentType)) return { ok: false, reason: "unsupported image MIME type" };
-        if (Number(response.headers.get("content-length")) > MAX_ISSUE_IMAGE_BYTES)
-          return { ok: false, reason: "image exceeds the 10 MiB size limit" };
-        if (!response.body) return { ok: false, reason: "empty image" };
+        if (kind.contentTypes && !kind.contentTypes.has(contentType))
+          return { ok: false, reason: `unsupported ${kind.name} MIME type` };
+        if (!kind.truncate && Number(response.headers.get("content-length")) > kind.maxBytes)
+          return { ok: false, reason: limit };
+        if (!response.body) return { ok: false, reason: `empty ${kind.name}` };
 
         const chunks: Uint8Array[] = [];
         let size = 0;
         for await (const chunk of response.body) {
           size += chunk.byteLength;
-          if (size > MAX_ISSUE_IMAGE_BYTES) return { ok: false, reason: "image exceeds the 10 MiB size limit" };
           chunks.push(chunk);
+          if (size <= kind.maxBytes) continue;
+          if (!kind.truncate) return { ok: false, reason: limit };
+          break;
         }
 
-        const bytes = Buffer.concat(chunks, size);
-        const header = imageHeader(bytes);
-        if (!header) return { ok: false, reason: "not a PNG, JPEG, GIF or WebP image" };
-        if (header.width * header.height > MAX_IMAGE_PIXELS)
-          return { ok: false, reason: "image exceeds the 50 megapixel limit" };
-
-        return { ok: true, image: { mimeType: header.mimeType, data: bytes.toString("base64") } };
+        if (size === 0) return { ok: false, reason: `empty ${kind.name}` };
+        return { ok: true, bytes: Buffer.concat(chunks, size), truncated: size > kind.maxBytes };
       } finally {
         if (!response.body?.locked) await response.body?.cancel();
       }
     }
   } catch {
     // Authentication and fetch errors can contain credentials or signed URLs. Never put them in a prompt or log.
-    return { ok: false, reason: signal.aborted ? "image download timed out" : "image download failed" };
+    return { ok: false, reason: signal.aborted ? `${kind.name} download timed out` : `${kind.name} download failed` };
   }
+}
+
+export async function downloadIssueImage(
+  value: string,
+  authenticate: (signal: AbortSignal) => Promise<string>,
+): Promise<IssueImageDownload> {
+  if (!isIssueImageUrl(value)) return { ok: false, reason: "not an allowed GitHub attachment URL" };
+
+  const result = await download(value, authenticate, IMAGE);
+  if (!result.ok) return result;
+
+  const header = imageHeader(result.bytes);
+  if (!header) return { ok: false, reason: "not a PNG, JPEG, GIF or WebP image" };
+  if (header.width * header.height > MAX_IMAGE_PIXELS)
+    return { ok: false, reason: "image exceeds the 50 megapixel limit" };
+
+  return { ok: true, image: { mimeType: header.mimeType, data: result.bytes.toString("base64") } };
+}
+
+/** Text means valid UTF-8 without NUL bytes; Content-Type and file names are never trusted to say so. */
+export async function downloadIssueText(
+  value: string,
+  authenticate: (signal: AbortSignal) => Promise<string>,
+): Promise<IssueTextDownload> {
+  if (!isIssueFileUrl(value)) return { ok: false, reason: "not an allowed GitHub attachment URL" };
+
+  const result = await download(value, authenticate, FILE);
+  if (!result.ok) return result;
+
+  const bytes = truncateUtf8(result.bytes, MAX_ISSUE_TEXT_BYTES);
+  if (bytes.includes(0) || !isUtf8(bytes)) return { ok: false, reason: "not a UTF-8 text file" };
+
+  return { ok: true, text: bytes.toString("utf8"), truncated: result.truncated };
 }

@@ -1,7 +1,14 @@
 import { DEFAULT_IMAGE_LIMITS } from "@earendil-works/pi-durable/tools";
 import { describe, expect, it } from "vitest";
 import { FakeGitHub, PNG_IMAGE } from "../../../test/fakes/github.ts";
-import { issueImageUrls, loadIssueImages, MAX_ISSUE_IMAGES } from "./issueImages.ts";
+import {
+  issueImageUrls,
+  loadIssueImages,
+  loadIssueTexts,
+  MAX_ISSUE_IMAGES,
+  MAX_ISSUE_TEXT_TOTAL_BYTES,
+  MAX_ISSUE_TEXTS,
+} from "./issueAttachments.ts";
 
 const attachment = "https://github.com/user-attachments/assets/screenshot";
 
@@ -94,5 +101,58 @@ describe("issue image sources", () => {
       images: [],
       notes: [`${attachment}: skipped (image cannot be decoded or scaled to fit).`],
     });
+  });
+});
+
+describe("issue text attachments", () => {
+  const file = "https://github.com/user-attachments/files/1/build.log";
+
+  it("deduplicates files across the issue and comments, ignores images and notes skipped files", async () => {
+    const github = new FakeGitHub();
+    github.addIssueText(file, { ok: true, text: "log", truncated: false });
+    github.addIssueText(`${file}/big`, { ok: true, text: "head", truncated: true });
+    github.addIssueText(`${file}/binary`, { ok: false, reason: "not a UTF-8 text file" });
+    const result = await loadIssueTexts(github, "demo", [
+      `[build.log](${file}) ![](${attachment})`,
+      `${file} ${file}/big ${file}/binary`,
+    ]);
+    expect(result).toEqual({
+      texts: [
+        { url: file, text: "log", truncated: false },
+        { url: `${file}/big`, text: "head", truncated: true },
+      ],
+      notes: [
+        `${file}: attached as text below.`,
+        `${file}/big: attached as text below, truncated to its first 4 bytes.`,
+        `${file}/binary: skipped (not a UTF-8 text file).`,
+      ],
+    });
+    expect(github.callCount("downloadIssueText")).toBe(3);
+  });
+
+  it("bounds download attempts, including failures", async () => {
+    const github = new FakeGitHub();
+    const urls = Array.from({ length: MAX_ISSUE_TEXTS + 1 }, (_, i) => `${file}/${i}`);
+    const result = await loadIssueTexts(github, "demo", [urls.join("\n")]);
+    expect(github.callCount("downloadIssueText")).toBe(MAX_ISSUE_TEXTS);
+    expect(result.notes.at(-1)).toBe(`${urls.at(-1)}: skipped (limit of ${MAX_ISSUE_TEXTS} file downloads).`);
+  });
+
+  it("cuts texts to the total size limit at a character boundary, then skips the rest", async () => {
+    const github = new FakeGitHub();
+    const first = "a".repeat(MAX_ISSUE_TEXT_TOTAL_BYTES - 1);
+    github.addIssueText(`${file}/0`, { ok: true, text: first, truncated: false });
+    github.addIssueText(`${file}/1`, { ok: true, text: "é", truncated: false });
+    github.addIssueText(`${file}/2`, { ok: true, text: "aé", truncated: false });
+    const result = await loadIssueTexts(github, "demo", [`${file}/0 ${file}/1 ${file}/2 ${file}/3`]);
+    expect(result.texts.map(({ text, truncated }) => [text, truncated])).toEqual([
+      [first, false],
+      ["a", true],
+    ]);
+    expect(result.notes.slice(1)).toEqual([
+      `${file}/1: skipped (total text limit of 256 KiB reached).`,
+      `${file}/2: attached as text below, truncated to its first 1 bytes.`,
+      `${file}/3: skipped (total text limit of 256 KiB reached).`,
+    ]);
   });
 });
