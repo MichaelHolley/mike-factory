@@ -14,7 +14,6 @@ import {
   type Storage,
   type TaskId,
 } from "@earendil-works/pi-durable";
-import { findRepo, type RepoConfig } from "../config.ts";
 import { agentPrIssue, issueKey, type IssueService, type ReviewFeedback } from "../contracts.ts";
 import type { IssuePhase, PrState, RunStatus } from "../runStatus.ts";
 import { asConversationId, HUMAN_ENTRY, IssueIndex, IssueNotes, IssueState, type IssueStateValue } from "./docs.ts";
@@ -135,7 +134,6 @@ export function createIssueService(opts: {
 
   /** Starts a pipeline on the issue's conversation, creating the conversation on the first run. */
   const launch = async (
-    repoConfig: RepoConfig,
     conversationId: ConversationId | undefined,
     input: PipelineInput,
     statusOn: number | null = null,
@@ -155,8 +153,8 @@ export function createIssueService(opts: {
           {
             ownership: { kind: "ownerless" },
             agent: {
-              model: repoConfig.model,
-              thinkingLevel: repoConfig.thinkingLevel,
+              model: config.model,
+              thinkingLevel: config.thinkingLevel,
               cwd: worktreePath,
               instructions: INSTRUCTIONS,
             },
@@ -168,7 +166,7 @@ export function createIssueService(opts: {
         );
     if (!conversation) throw new Error(`conversation ${conversationId} for ${key} is missing`);
     if (conversationId) {
-      await conversation.configure({ model: repoConfig.model, thinkingLevel: repoConfig.thinkingLevel }, context);
+      await conversation.configure({ model: config.model, thinkingLevel: config.thinkingLevel }, context);
     }
 
     const now = new Date().toISOString();
@@ -185,6 +183,7 @@ export function createIssueService(opts: {
         lastError: null,
         prTitle: null,
         prBody: null,
+        settings: null,
         pipelineTaskId: taskId,
         requestId,
         statusOn,
@@ -283,24 +282,20 @@ export function createIssueService(opts: {
   return {
     start: ({ repo, issue, requestId, instructions }) =>
       mutex.run(async () => {
-        const repoConfig = findRepo(config, repo);
-        if (!repoConfig) return log("start ignored: repository is not configured", { repo, issue });
-
         const { key, conversationId, state } = await lookup(repo, issue);
         if (state?.requestId === requestId) return log("start ignored: request already handled", { key, requestId });
         if (state?.pipelineTaskId != null && (await isLive(state.pipelineTaskId))) {
           return log("start ignored: pipeline already running", { key, requestId });
         }
 
-        await launch(repoConfig, conversationId, { repo, issue, requestId, instructions, trigger: "comment" });
+        await launch(conversationId, { repo, issue, requestId, instructions, trigger: "comment" });
       }),
 
     message: ({ repo, issue, id, text }) =>
       mutex.run(async () => {
-        const repoConfig = findRepo(config, repo);
-        const { conversationId } = repoConfig ? await lookup(repo, issue) : {};
+        const { conversationId } = await lookup(repo, issue);
         const conversation = conversationId && (await harness.conversation(conversationId, context));
-        if (!repoConfig || !conversation) return "not_found";
+        if (!conversation) return "not_found";
 
         const { live, pending } = await addNote(conversation, { id, text });
         if (live) return "steered";
@@ -308,15 +303,13 @@ export function createIssueService(opts: {
         if (!pending) return "started";
 
         const input = { repo, issue, requestId: `web-${id}`, instructions: "", trigger: "web" } as const;
-        await launch(repoConfig, conversation.id, input);
+        await launch(conversation.id, input);
         return "started";
       }),
 
     feedback: (action) =>
       mutex.run(async () => {
         const { repo, pr: number, id } = action;
-        const repoConfig = findRepo(config, repo);
-        if (!repoConfig) return log("feedback ignored: repository is not configured", { repo, pr: number });
 
         const pr = await github.getPr(repo, number);
         const target = agentPrIssue({ ref: pr.headRef, fromFork: pr.fromFork });
@@ -344,7 +337,7 @@ export function createIssueService(opts: {
         if (!pending) return log("feedback ignored: already delivered", { key, id });
 
         const input = { repo, issue: target.issue, requestId: id, instructions: "", trigger: "pr" } as const;
-        await launch(repoConfig, conversation.id, input, number);
+        await launch(conversation.id, input, number);
       }),
 
     stop: (action) =>
@@ -374,7 +367,7 @@ export function createIssueService(opts: {
     async sweep() {
       for await (const { state } of runs()) {
         const prNumber = prNumberOf(state);
-        if (prNumber == null || isSettled(state) || !findRepo(config, state.repo)) continue;
+        if (prNumber == null || isSettled(state)) continue;
 
         const { repo, issue, branch } = state;
         try {
@@ -385,7 +378,7 @@ export function createIssueService(opts: {
         }
       }
 
-      for (const { name: repo } of config.repos) {
+      for (const repo of await worktrees.repos()) {
         for (const issue of await worktrees.issues(repo)) {
           try {
             const { state } = await lookup(repo, issue);

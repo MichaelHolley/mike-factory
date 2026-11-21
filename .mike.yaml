@@ -1,0 +1,6 @@
+setup: pnpm install --frozen-lockfile
+checks:
+  - pnpm lint
+  - pnpm format:check
+  - pnpm typecheck
+  - pnpm test

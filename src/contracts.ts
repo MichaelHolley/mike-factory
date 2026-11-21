@@ -1,5 +1,4 @@
 import type { PrState, RunStatus, TranscriptItem } from "./runStatus.ts";
-import type { RepoConfig } from "./config.ts";
 
 export const branchName = (issue: number, slug: string) => `mike/${issue}-${slug}`;
 /** Branch of conversations started before branches were named by the model. */
@@ -107,6 +106,8 @@ export interface GitIdentity {
 
 /** GitHub access for one owner; every `repo` is a bare repo name under that owner. */
 export interface GitHubClient {
+  /** The repo's default branch, from its metadata. */
+  defaultBranch(repo: string): Promise<string>;
   getIssue(repo: string, issue: number): Promise<IssueData>;
   listIssueComments(repo: string, issue: number): Promise<IssueComment[]>;
   /**
@@ -148,20 +149,31 @@ export interface WorktreeInfo {
 /** Bare clones under `<dataDir>/repos`, worktrees under `<dataDir>/worktrees/<repo>/issue-<n>`. */
 export interface Worktrees {
   worktreePath(repo: string, issue: number): string;
-  /** Idempotent: create, or reuse the existing path or branch. A new branch starts from its remote copy only with `openPr`. */
-  prepare(repo: RepoConfig, issue: number, opts: { branch: string; openPr: boolean }): Promise<WorktreeInfo>;
+  /**
+   * Idempotent: create, or reuse the existing path or branch. A new branch starts from its remote copy only with `openPr`,
+   * otherwise from `defaultBranch`.
+   */
+  prepare(
+    repo: string,
+    issue: number,
+    opts: { branch: string; openPr: boolean; defaultBranch: string },
+  ): Promise<WorktreeInfo>;
+  /** `path` on `branch` of the trusted mirror as of its last fetch, or undefined when the branch has no such file. */
+  trustedFile(repo: string, branch: string, path: string): Promise<string | undefined>;
   /** `git status --porcelain` of the worktree: uncommitted, non-ignored changes, empty when clean. */
   uncommitted(repo: string, issue: number): Promise<string>;
   /** Pushes `branch` (and only that ref) to origin. Idempotent. */
-  push(repo: RepoConfig, branch: string): Promise<void>;
+  push(repo: string, branch: string, defaultBranch: string): Promise<void>;
   /** Commit the issue branch points at. */
   headSha(repo: string, issue: number, branch: string): Promise<string>;
   /** Number of commits on the issue branch that are not on `origin/<defaultBranch>`. */
-  commitsAhead(repo: RepoConfig, issue: number, branch: string): Promise<number>;
+  commitsAhead(repo: string, issue: number, branch: string, defaultBranch: string): Promise<number>;
   /** Subject of the latest commit on the issue branch. */
   latestCommitSubject(repo: string, issue: number, branch: string): Promise<string>;
   /** Idempotent: removes the worktree and every local branch of the issue, then prunes. */
   remove(repo: string, issue: number): Promise<void>;
+  /** Repos that have a trusted mirror. */
+  repos(): Promise<string[]>;
   /** Issues that still have a local worktree or agent branch. */
   issues(repo: string): Promise<number[]>;
   /** Runs `git worktree prune` on the bare clone, if there is one. */

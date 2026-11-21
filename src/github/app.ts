@@ -112,6 +112,12 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
   };
 
   return {
+    async defaultBranch(repo) {
+      const octokit = await octokitFor(repo);
+      const { data } = await octokit.request("GET /repos/{owner}/{repo}", { owner, repo });
+      return data.default_branch;
+    },
+
     async getIssue(repo, issue): Promise<IssueData> {
       const octokit = await octokitFor(repo);
       const { data } = await octokit.request("GET /repos/{owner}/{repo}/issues/{issue_number}", {

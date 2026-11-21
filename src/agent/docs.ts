@@ -1,9 +1,13 @@
 import { defineDoc, defineDocFamily, type ConversationId } from "@earendil-works/pi-durable";
+import type { RepoSettings } from "../config.ts";
 import type { ReviewFeedback } from "../contracts.ts";
 import type { PipelinePhase, PrState } from "../runStatus.ts";
 import type { RunStart } from "./extensions/guards.ts";
 
 export type { PipelinePhase };
+
+/** What a run uses of its repo, read once at `prepare`, so a crash rerun or a later default-branch change can't mix settings. */
+export type RunSettings = RepoSettings & { defaultBranch: string };
 
 export type IssueIndexValue = { conversationId: number | null };
 
@@ -32,7 +36,10 @@ export type IssueStateValue = {
   lastError: string | null;
   pipelineTaskId: number | null;
   requestId: string | null;
-  setupDone: boolean;
+  /** Null until the run's `prepare` has read them. */
+  settings?: RunSettings | null;
+  /** The setup command that last succeeded in the worktree, so a changed one runs again. */
+  setupRan?: string | null;
   /** `revise` rounds of the current run; keeps fix request IDs unique once a revision restarts the attempts. */
   revisions?: number;
   prTitle?: string | null;
@@ -72,7 +79,8 @@ export const IssueState = defineDoc<IssueStateValue>({
     lastError: null,
     pipelineTaskId: null,
     requestId: null,
-    setupDone: false,
+    settings: null,
+    setupRan: null,
     prTitle: null,
     prBody: null,
     startedAt: null,

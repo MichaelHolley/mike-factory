@@ -3,27 +3,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AppConfig } from "./config.ts";
 import type { IssueService } from "./contracts.ts";
 import type { IssuePhase, RunStatus } from "./runStatus.ts";
+import type { WebhookConfig } from "./github/webhooks.ts";
 import { createServer } from "./server.ts";
 
 const secret = "test-secret";
-const config: AppConfig = {
-  owner: "michaelholley",
-  allowedSenderId: 42,
-  repos: [
-    {
-      name: "byok-imagen",
-      defaultBranch: "main",
-      model: { provider: "openrouter", modelId: "openai/gpt-6.1-sol" },
-      maxTurns: 10,
-      maxCostUsd: 1,
-      thinkingLevel: "high",
-      maxFixAttempts: 2,
-    },
-  ],
-};
+const config: WebhookConfig = { owner: "acme", allowedSenderIds: [42] };
 
 function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui"), proxySecret?: string) {
   const listeners = new Set<() => void>();
@@ -59,7 +45,7 @@ function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui"), proxySecret?: 
       action: "created",
       comment: { id: 5, body: "/mike" },
       issue: { number: 12 },
-      repository: { name: "byok-imagen", owner: { login: "michaelholley" } },
+      repository: { name: "widgets", owner: { login: "acme" } },
       sender: { id: senderId },
     });
     return app.request("/webhooks/github", {
@@ -104,7 +90,7 @@ describe("webhook server", () => {
     expect((await post(42)).status).toBe(202);
     expect(service.start).toHaveBeenCalledWith({
       kind: "start",
-      repo: "byok-imagen",
+      repo: "widgets",
       issue: 12,
       requestId: "comment-5",
       instructions: "",
@@ -121,24 +107,24 @@ describe("webhook server", () => {
 
   it("serves a run's conversation, and 404s when there is none", async () => {
     const { app, service } = setup();
-    expect((await app.request("/status/byok-imagen/12/conversation")).status).toBe(404);
-    expect((await app.request("/status/byok-imagen/abc/conversation")).status).toBe(404);
+    expect((await app.request("/status/widgets/12/conversation")).status).toBe(404);
+    expect((await app.request("/status/widgets/abc/conversation")).status).toBe(404);
 
     vi.mocked(service.transcript).mockResolvedValue([{ kind: "assistant", text: "Done." }]);
-    const response = await app.request("/status/byok-imagen/12/conversation");
+    const response = await app.request("/status/widgets/12/conversation");
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual([{ kind: "assistant", text: "Done." }]);
-    expect(service.transcript).toHaveBeenLastCalledWith("byok-imagen", 12);
+    expect(service.transcript).toHaveBeenLastCalledWith("widgets", 12);
   });
 
   it("serves the conversation as a JSON attachment with ?download=1", async () => {
     const { app, service } = setup();
     const transcript = [{ kind: "assistant" as const, text: "Done." }];
     vi.mocked(service.transcript).mockResolvedValue(transcript);
-    const response = await app.request("/status/byok-imagen/12/conversation?download=1");
+    const response = await app.request("/status/widgets/12/conversation?download=1");
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Disposition")).toBe(
-      'attachment; filename="byok-imagen-issue-12-conversation.json"',
+      'attachment; filename="widgets-issue-12-conversation.json"',
     );
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(await response.text()).toBe(JSON.stringify(transcript, null, 2));
@@ -147,7 +133,7 @@ describe("webhook server", () => {
   it("streams the full run list first, then only the changed tail", async () => {
     const { app, service, notify, listeners, shutdown } = setup();
     const run = (issue: number, phase: IssuePhase): RunStatus => ({
-      repo: "byok-imagen",
+      repo: "widgets",
       issue,
       issueUrl: "",
       title: null,
@@ -196,23 +182,23 @@ describe("webhook server", () => {
 
   it("streams a run's conversation, and 404s when there is none", async () => {
     const { app, service, subscribe, shutdown } = setup();
-    expect((await app.request("/status/byok-imagen/12/conversation/stream")).status).toBe(404);
-    expect((await app.request("/status/byok-imagen/abc/conversation/stream")).status).toBe(404);
+    expect((await app.request("/status/widgets/12/conversation/stream")).status).toBe(404);
+    expect((await app.request("/status/widgets/abc/conversation/stream")).status).toBe(404);
 
     vi.mocked(service.watchTranscript).mockImplementation(async (_repo, _issue, listener) => ({
       items: async () => [{ kind: "assistant", text: "Done." }],
       stop: subscribe(listener),
     }));
-    const response = await app.request("/status/byok-imagen/12/conversation/stream");
+    const response = await app.request("/status/widgets/12/conversation/stream");
     expect(response.status).toBe(200);
     expect(await sseEvents(response).next()).toEqual({ from: 0, items: [{ kind: "assistant", text: "Done." }] });
-    expect(service.watchTranscript).toHaveBeenCalledWith("byok-imagen", 12, expect.any(Function));
+    expect(service.watchTranscript).toHaveBeenCalledWith("widgets", 12, expect.any(Function));
     shutdown.abort();
   });
 
   describe("POST /status/:repo/:issue/messages", () => {
     const id = "6f1c2a3b-4d5e-4f60-8a9b-0c1d2e3f4a5b";
-    const send = (app: ReturnType<typeof setup>["app"], body: unknown, path = "/status/byok-imagen/12/messages") =>
+    const send = (app: ReturnType<typeof setup>["app"], body: unknown, path = "/status/widgets/12/messages") =>
       app.request(path, {
         method: "POST",
         body: JSON.stringify(body),
@@ -233,7 +219,7 @@ describe("webhook server", () => {
 
     it("rejects a body that isn't sent as JSON with 415", async () => {
       const { app, service } = setup();
-      const response = await app.request("/status/byok-imagen/12/messages", {
+      const response = await app.request("/status/widgets/12/messages", {
         method: "POST",
         body: JSON.stringify({ id, text: "hi" }),
         headers: { "content-type": "text/plain" },
@@ -247,7 +233,7 @@ describe("webhook server", () => {
       const response = await send(app, { id, text: "  Use tabs  " });
       expect(response.status).toBe(202);
       expect(await response.json()).toEqual({ result: "steered" });
-      expect(service.message).toHaveBeenCalledWith({ repo: "byok-imagen", issue: 12, id, text: "Use tabs" });
+      expect(service.message).toHaveBeenCalledWith({ repo: "widgets", issue: 12, id, text: "Use tabs" });
       expect(JSON.stringify(log.mock.calls)).not.toContain("Use tabs");
 
       vi.mocked(service.message).mockResolvedValue("not_found");

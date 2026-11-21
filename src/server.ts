@@ -4,14 +4,13 @@ import { fileURLToPath } from "node:url";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
-import type { AppConfig } from "./config.ts";
 import type { IssueService } from "./contracts.ts";
-import { InvalidSignatureError, verifyWebhook } from "./github/webhooks.ts";
+import { InvalidSignatureError, verifyWebhook, type WebhookConfig } from "./github/webhooks.ts";
 
 export interface ServerDeps {
   service: IssueService;
   /** Serves `/webhooks/github`; without it the server has no GitHub integration. */
-  webhook?: { config: AppConfig; secret: string };
+  webhook?: { config: WebhookConfig; secret: string };
   log: (msg: string, data?: object) => void;
   /** When set, every request except the webhook must carry it in `X-Proxy-Secret`, which the reverse proxy adds. */
   proxySecret?: string;

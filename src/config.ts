@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { parse } from "yaml";
 
@@ -7,11 +6,10 @@ export interface ModelChoice {
   modelId: string;
 }
 
-export interface RepoConfig {
-  name: string;
-  defaultBranch: string;
-  setup?: string;
-  checks?: string[];
+/** The factory's settings, from env vars; a repo can't change them. */
+export interface FactoryConfig {
+  owner: string;
+  allowedSenderIds: number[];
   model: ModelChoice;
   thinkingLevel: ModelThinkingLevel;
   maxTurns: number;
@@ -19,43 +17,104 @@ export interface RepoConfig {
   maxFixAttempts: number;
 }
 
-export interface AppConfig {
-  owner: string;
-  allowedSenderId: number;
-  repos: RepoConfig[];
-}
-
-type RepoDefaults = Pick<RepoConfig, "model" | "thinkingLevel" | "maxTurns" | "maxCostUsd" | "maxFixAttempts">;
-
-const BUILTIN_DEFAULTS: RepoDefaults = {
-  model: { provider: "openrouter", modelId: "openai/gpt-6.1-sol" },
-  thinkingLevel: "high",
-  maxTurns: 60,
-  maxCostUsd: 3,
-  maxFixAttempts: 2,
+/** A target repo's own settings, from `.mike.yaml` on its default branch. */
+export type RepoSettings = {
+  setup: string | null;
+  checks: string[];
 };
 
-export function parseConfig(source: string): AppConfig {
-  const raw = parse(source) as {
-    owner?: unknown;
-    allowedSenderId?: unknown;
-    defaults?: Partial<RepoDefaults>;
-    repos?: Array<Partial<RepoConfig> & { name?: unknown }>;
+export const REPO_SETTINGS_FILE = ".mike.yaml";
+
+export const DEFAULT_MODEL_ID = "openai/gpt-6.1-sol";
+
+const THINKING_LEVELS = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const satisfies readonly ModelThinkingLevel[];
+
+type Env = Record<string, string | undefined>;
+
+const required = (env: Env, name: string) => {
+  const value = env[name]?.trim();
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+};
+
+const positiveNumber = (env: Env, name: string, fallback: number, integer: boolean) => {
+  const raw = env[name]?.trim();
+  if (!raw) return fallback;
+
+  const value = Number(raw);
+  if (!(value > 0) || (integer && !Number.isInteger(value)))
+    throw new Error(`${name} must be a positive ${integer ? "integer" : "number"}`);
+  return value;
+};
+
+const maxFixAttempts = (env: Env) => {
+  const raw = env.MAX_FIX_ATTEMPTS?.trim();
+  if (!raw) return 2;
+
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0) throw new Error("MAX_FIX_ATTEMPTS must be a non-negative integer");
+  return value;
+};
+
+const senderIds = (env: Env) => {
+  const ids = required(env, "ALLOWED_SENDER_IDS")
+    .split(",")
+    .map((id) => id.trim());
+
+  if (ids.some((id) => !/^\d+$/.test(id)))
+    throw new Error("ALLOWED_SENDER_IDS must be comma-separated numeric GitHub user ids");
+  return ids.map(Number);
+};
+
+const thinkingLevel = (env: Env): ModelThinkingLevel => {
+  const value = env.THINKING_LEVEL?.trim() || "high";
+  const level = THINKING_LEVELS.find((candidate) => candidate === value);
+  if (!level) throw new Error(`THINKING_LEVEL must be one of ${THINKING_LEVELS.join(", ")}`);
+  return level;
+};
+
+/** Reads the factory's settings from `env`, throwing on a missing required or invalid value. */
+export function loadFactoryConfig(env: Env): FactoryConfig {
+  return {
+    owner: required(env, "OWNER"),
+    allowedSenderIds: senderIds(env),
+    model: { provider: "openrouter", modelId: env.MODEL?.trim() || DEFAULT_MODEL_ID },
+    thinkingLevel: thinkingLevel(env),
+    maxTurns: positiveNumber(env, "MAX_TURNS", 60, true),
+    maxCostUsd: positiveNumber(env, "MAX_COST_USD", 3, false),
+    maxFixAttempts: maxFixAttempts(env),
   };
-  if (typeof raw?.owner !== "string") throw new Error("repos.yaml: owner must be a string");
-  if (typeof raw.allowedSenderId !== "number") throw new Error("repos.yaml: allowedSenderId must be a number");
-  const defaults = { ...BUILTIN_DEFAULTS, ...raw.defaults };
-  const repos = (raw.repos ?? []).map((repo): RepoConfig => {
-    if (typeof repo.name !== "string") throw new Error("repos.yaml: every repo needs a name");
-    return { defaultBranch: "main", ...defaults, ...repo, name: repo.name };
-  });
-  return { owner: raw.owner, allowedSenderId: raw.allowedSenderId, repos };
 }
 
-export async function loadConfig(path: string): Promise<AppConfig> {
-  return parseConfig(await readFile(path, "utf8"));
-}
+/** Parses `.mike.yaml`; an unknown key or a wrong type throws, naming the key. */
+export function parseRepoSettings(source: string): RepoSettings {
+  let raw: unknown;
+  try {
+    raw = parse(source);
+  } catch (error) {
+    throw new Error(`${REPO_SETTINGS_FILE} is not valid YAML: ${error instanceof Error ? error.message : error}`);
+  }
 
-export function findRepo(config: AppConfig, name: string): RepoConfig | undefined {
-  return config.repos.find((repo) => repo.name === name);
+  if (raw == null) return { setup: null, checks: [] };
+  if (typeof raw !== "object" || Array.isArray(raw)) throw new Error(`${REPO_SETTINGS_FILE} must be a mapping`);
+
+  const { setup = null, checks = [], ...rest } = raw as Record<string, unknown>;
+
+  const unknown = Object.keys(rest)[0];
+  if (unknown !== undefined) throw new Error(`${REPO_SETTINGS_FILE}: unknown key ${unknown}`);
+
+  if (setup !== null && typeof setup !== "string") throw new Error(`${REPO_SETTINGS_FILE}: setup must be a string`);
+
+  if (!Array.isArray(checks) || checks.some((check) => typeof check !== "string"))
+    throw new Error(`${REPO_SETTINGS_FILE}: checks must be a list of strings`);
+
+  return { setup: setup || null, checks };
 }

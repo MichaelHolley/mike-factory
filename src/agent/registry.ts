@@ -13,7 +13,7 @@ export function createAgentRegistry(deps: AgentDeps, opts: { crashAt?: string; a
   const pipeline = createIssuePipeline({ ...deps, crashAt: opts.crashAt });
   const registry = createRegistry();
   registry.install(CodingTools);
-  registry.install(createRepoContext(deps.config));
+  registry.install(createRepoContext(deps.config.owner));
   registry.install(createSkills(deps.skills ?? []));
   registry.install(createGithubTools(deps.github));
   registry.install(createPullRequestTools());

@@ -1,5 +1,6 @@
 import { obj, str } from "@earendil-works/pi-schema";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
+import { REPO_SETTINGS_FILE } from "../../config.ts";
 import { IssueState } from "../docs.ts";
 import { text } from "./text.ts";
 
@@ -8,8 +9,11 @@ const MAX_PR_BODY_CHARS = 3_000;
 
 export const closingRef = (issue: number) => `Closes #${issue}`;
 
-/** Room left for the body once the closing reference and its blank line are appended. */
-export const prBodyLimit = (issue: number) => MAX_PR_BODY_CHARS - closingRef(issue).length - 2;
+export const NO_CHECKS_NOTE = `No checks configured (\`${REPO_SETTINGS_FILE}\`).`;
+
+/** Room left for the body once the closing reference, the no-checks note and their blank lines are appended. */
+export const prBodyLimit = (issue: number) =>
+  MAX_PR_BODY_CHARS - closingRef(issue).length - 2 - NO_CHECKS_NOTE.length - 2;
 
 export function createPullRequestTools() {
   return defineExtension({
