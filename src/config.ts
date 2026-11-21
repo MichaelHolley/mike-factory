@@ -25,7 +25,7 @@ export type RepoSettings = {
 
 export const REPO_SETTINGS_FILE = ".mike.yaml";
 
-export const DEFAULT_MODEL_ID = "openai/gpt-6.1-sol";
+export const DEFAULT_MODEL_ID = "openai/gpt-6.2-sol";
 
 const THINKING_LEVELS = [
   "off",

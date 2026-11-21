@@ -8,11 +8,18 @@ describe("loadFactoryConfig", () => {
     expect(loadFactoryConfig(base)).toEqual({
       owner: "acme",
       allowedSenderIds: [1, 2],
-      model: { provider: "openrouter", modelId: "openai/gpt-6.1-sol" },
+      model: { provider: "openrouter", modelId: "openai/gpt-6.2-sol" },
       thinkingLevel: "high",
       maxTurns: 60,
       maxCostUsd: 3,
       maxFixAttempts: 2,
+    });
+  });
+
+  it.each(["", "   "])("uses the default model when MODEL is %j", (model) => {
+    expect(loadFactoryConfig({ ...base, MODEL: model }).model).toEqual({
+      provider: "openrouter",
+      modelId: "openai/gpt-6.2-sol",
     });
   });
 

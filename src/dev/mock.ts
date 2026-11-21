@@ -21,7 +21,7 @@ function run(
     phase,
     attempts: 1,
     costUsd: 0.42,
-    model: "gpt-6.1-sol",
+    model: "gpt-6.2-sol",
     thinkingLevel: "high",
     prUrl: null,
     prState: null,
@@ -176,7 +176,7 @@ function history(): RunStatus[] {
 
     return run(repos[i % repos.length]!, 100 + i, `Historic change number ${i + 1}`, phase, {
       costUsd: 0.15 + ((i * 37) % 100) / 40 + (i % 17 === 2 ? 4 : 0),
-      model: i % 4 === 1 ? "gpt-6.1-terra" : "gpt-6.1-sol",
+      model: i % 4 === 1 ? "gpt-6.1-terra" : "gpt-6.2-sol",
       attempts: i % 5 === 1 ? 2 : 0,
       lastError: phase === "failed" ? FAILURES[i % FAILURES.length]! : null,
       prUrl: published ? `https://github.com/example/pull/${200 + i}` : null,
