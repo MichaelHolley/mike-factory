@@ -2,6 +2,7 @@ import { obj, str } from "@earendil-works/pi-schema";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
 import { REPO_SETTINGS_FILE } from "../../config.ts";
 import { IssueState } from "../docs.ts";
+import { runUrl } from "../runUrl.ts";
 import { text } from "./text.ts";
 
 export const CONVENTIONAL_TITLE = /^[a-z]+(\([^)]+\))?!?: \S.*$/;
@@ -11,11 +12,11 @@ export const closingRef = (issue: number) => `Closes #${issue}`;
 
 export const NO_CHECKS_NOTE = `No checks configured (\`${REPO_SETTINGS_FILE}\`).`;
 
-/** Room left for the body once the closing reference, the no-checks note and their blank lines are appended. */
-export const prBodyLimit = (issue: number) =>
-  MAX_PR_BODY_CHARS - closingRef(issue).length - 2 - NO_CHECKS_NOTE.length - 2;
+/** Room left after reserving the closing reference, no-checks note, optional run link and blank lines. */
+export const prBodyLimit = (issue: number, link?: string) =>
+  MAX_PR_BODY_CHARS - closingRef(issue).length - 2 - NO_CHECKS_NOTE.length - 2 - (link ? link.length + 2 : 0);
 
-export function createPullRequestTools() {
+export function createPullRequestTools(publicUrl?: string) {
   return defineExtension({
     name: "pull-request",
     tools: [
@@ -44,7 +45,7 @@ export function createPullRequestTools() {
               isError: true,
             };
           }
-          const limit = prBodyLimit(state.issue);
+          const limit = prBodyLimit(state.issue, runUrl(publicUrl, state.repo, state.issue));
           if (body.length > limit) {
             return {
               output: text(`Rejected: the body has ${body.length} characters; keep it under ${limit}.`),
