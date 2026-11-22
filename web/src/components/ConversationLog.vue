@@ -99,9 +99,9 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
 </script>
 
 <template>
-  <section class="mt-8">
+  <section>
     <header class="mb-3 flex items-center justify-between gap-4">
-      <h2 class="text-lg">Conversation</h2>
+      <h2 class="text-base">Conversation</h2>
       <IconButton
         v-if="loaded && !error"
         :icon="Download"

@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Activity, CalendarClock, CircleDot, Cpu, ExternalLink, Flag, GitBranch, RotateCw, Timer } from "@lucide/vue";
+import {
+  Activity,
+  CalendarClock,
+  CircleDollarSign,
+  CircleDot,
+  Cpu,
+  ExternalLink,
+  Flag,
+  GitBranch,
+  RotateCw,
+  Timer,
+} from "@lucide/vue";
 import type { RunStatus } from "../../../src/runStatus.ts";
 import { formatCost, formatDuration, formatModel, formatTime, timeAgo } from "../format.ts";
 import { isIdle, prLook } from "../phase.ts";
@@ -20,110 +31,95 @@ const duration = computed(() => {
   return formatDuration(end - Date.parse(startedAt));
 });
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const LINK = "group flex min-w-0 items-center gap-2 font-medium text-ink no-underline";
+const ROW = "flex items-center justify-between gap-4";
+const TERM = "flex flex-none items-center gap-1.5 text-muted [&_svg]:size-3.5 [&_svg]:flex-none";
 </script>
 
 <template>
-  <section aria-label="Run details" class="overflow-hidden rounded-md border border-line bg-surface">
-    <div class="flex items-center gap-x-8 gap-y-5 px-6 py-5 max-md:flex-col max-md:items-stretch max-md:px-5">
-      <div class="flex min-w-0 flex-1 items-center gap-3 max-sm:flex-col max-sm:items-start">
-        <a
-          :href="run.issueUrl"
-          target="_blank"
-          rel="noopener"
-          class="group flex flex-none items-center gap-2 text-ink no-underline"
-        >
-          <CircleDot class="size-4.5 flex-none text-setup" aria-hidden="true" />
-          <span class="text-lg font-semibold tabular-nums group-hover:underline group-hover:underline-offset-3"
-            >Issue #{{ run.issue }}</span
-          >
-          <ExternalLink class="size-3.5 flex-none text-muted" aria-hidden="true" />
-        </a>
-
-        <div
-          class="flex min-w-0 flex-1 items-center gap-2 max-sm:ml-2 max-sm:w-full max-sm:border-l-2 max-sm:border-idle max-sm:py-1 max-sm:pl-5"
-        >
-          <span class="h-0.5 w-4 flex-none bg-idle max-sm:hidden" aria-hidden="true" />
-          <div class="flex min-w-0 items-center gap-1.5 rounded-full border border-line py-0.5 pr-1 pl-3 text-muted">
-            <GitBranch class="size-3.5 flex-none" aria-hidden="true" />
-            <span class="sr-only">Branch</span>
-            <code class="truncate text-ink" :title="run.branch">{{ run.branch }}</code>
-            <CopyButton :text="run.branch" label="Copy branch name" />
-          </div>
-          <span
-            class="h-0 min-w-4 flex-1 border-t-2 border-idle max-sm:hidden"
-            :class="{ 'border-dashed': !run.prUrl }"
-            aria-hidden="true"
-          />
-        </div>
-
-        <a
-          v-if="run.prUrl"
-          :href="run.prUrl"
-          target="_blank"
-          rel="noopener"
-          class="group flex flex-none items-baseline gap-2 text-ink no-underline"
-        >
-          <component :is="pr.icon" class="size-4.5 flex-none self-center" :class="pr.hue" aria-hidden="true" />
-          <span class="text-lg font-semibold tabular-nums group-hover:underline group-hover:underline-offset-3"
-            >PR #{{ prNumber }}</span
-          >
-          <ExternalLink class="size-3.5 flex-none text-muted" aria-hidden="true" />
-        </a>
-        <div v-else class="flex flex-none items-center gap-2 text-muted">
-          <component :is="pr.icon" class="size-4.5 flex-none opacity-60" aria-hidden="true" />
-          <span>{{ finished ? "No PR" : "PR not opened yet" }}</span>
-        </div>
-      </div>
-
-      <div
-        class="flex-none border-line md:border-l md:pl-8 max-md:flex max-md:items-baseline max-md:justify-between max-md:border-t max-md:pt-4"
-      >
-        <p class="text-sm text-muted">Cost</p>
-        <p class="text-3xl leading-tight font-semibold tabular-nums">{{ formatCost(run.costUsd) }}</p>
-      </div>
-    </div>
-
-    <ul
-      class="m-0 flex list-none flex-wrap gap-x-6 gap-y-1.5 border-t border-line bg-bg/50 px-6 py-2.5 text-sm text-muted max-md:px-5 [&_li]:flex [&_li]:items-center [&_li]:gap-1.5 [&_svg]:size-3.5 [&_svg]:flex-none"
-    >
+  <section
+    aria-label="Run details"
+    class="grid grid-cols-1 divide-line rounded-lg border border-line bg-surface text-sm max-sm:divide-y sm:max-lg:grid-cols-2 sm:max-lg:divide-x lg:divide-y"
+  >
+    <ul class="flex flex-col gap-1.5 px-3.5 py-3">
       <li>
-        <Cpu aria-hidden="true" />
-        <span class="sr-only">Model</span>
-        <span class="text-ink">{{ formatModel(run) }}</span>
+        <a :href="run.issueUrl" target="_blank" rel="noopener" :class="LINK">
+          <CircleDot class="size-3.5 flex-none text-muted" aria-hidden="true" />
+          <span class="tabular-nums group-hover:underline group-hover:underline-offset-3">Issue #{{ run.issue }}</span>
+          <ExternalLink class="size-3 flex-none text-muted" aria-hidden="true" />
+        </a>
       </li>
+
+      <li class="flex min-w-0 items-center gap-2">
+        <GitBranch class="size-3.5 flex-none text-muted" aria-hidden="true" />
+        <span class="sr-only">Branch</span>
+        <code class="min-w-0 truncate text-xs" :title="run.branch">{{ run.branch }}</code>
+        <CopyButton :text="run.branch" label="Copy branch name" class="-my-1" />
+      </li>
+
       <li>
-        <RotateCw aria-hidden="true" />
-        {{ plural(run.attempts, "attempt") }}
-      </li>
-      <template v-if="run.startedAt">
-        <li>
-          <CalendarClock aria-hidden="true" />
-          Started
-          <time :datetime="run.startedAt" :title="new Date(run.startedAt).toLocaleString()">
-            {{ formatTime(run.startedAt, now) }}
-          </time>
-        </li>
-        <li v-if="finished && run.updatedAt">
-          <Flag aria-hidden="true" />
-          Ended
-          <time :datetime="run.updatedAt" :title="new Date(run.updatedAt).toLocaleString()">
-            {{ formatTime(run.updatedAt, now) }}
-          </time>
-        </li>
-        <li v-else :title="run.updatedAt ? new Date(run.updatedAt).toLocaleString() : undefined">
-          <Activity aria-hidden="true" />
-          Active {{ timeAgo(run.updatedAt, now) }}
-        </li>
-        <li>
-          <Timer aria-hidden="true" />
-          {{ finished ? "Took" : "Running for" }} {{ duration }}
-        </li>
-      </template>
-      <li v-else>
-        <CalendarClock aria-hidden="true" />
-        Waiting in the queue
+        <a v-if="run.prUrl" :href="run.prUrl" target="_blank" rel="noopener" :class="LINK">
+          <component :is="pr.icon" class="size-3.5 flex-none" :class="pr.hue" aria-hidden="true" />
+          <span class="tabular-nums group-hover:underline group-hover:underline-offset-3">PR #{{ prNumber }}</span>
+          <ExternalLink class="size-3 flex-none text-muted" aria-hidden="true" />
+        </a>
+        <span v-else class="flex items-center gap-2 text-muted">
+          <component :is="pr.icon" class="size-3.5 flex-none opacity-60" aria-hidden="true" />
+          {{ finished ? "No PR" : "PR not opened yet" }}
+        </span>
       </li>
     </ul>
+
+    <dl class="flex flex-col gap-1.5 px-3.5 py-3">
+      <div :class="ROW">
+        <dt :class="TERM"><CircleDollarSign aria-hidden="true" />Cost</dt>
+        <dd class="font-semibold tabular-nums">{{ formatCost(run.costUsd) }}</dd>
+      </div>
+
+      <div :class="ROW">
+        <dt :class="TERM"><Cpu aria-hidden="true" />Model</dt>
+        <dd class="truncate" :title="formatModel(run)">{{ formatModel(run) }}</dd>
+      </div>
+
+      <div :class="ROW">
+        <dt :class="TERM"><RotateCw aria-hidden="true" />Attempts</dt>
+        <dd class="tabular-nums">{{ run.attempts }}</dd>
+      </div>
+
+      <template v-if="run.startedAt">
+        <div :class="ROW">
+          <dt :class="TERM"><CalendarClock aria-hidden="true" />Started</dt>
+          <dd>
+            <time :datetime="run.startedAt" :title="new Date(run.startedAt).toLocaleString()">
+              {{ formatTime(run.startedAt, now) }}
+            </time>
+          </dd>
+        </div>
+
+        <div v-if="finished && run.updatedAt" :class="ROW">
+          <dt :class="TERM"><Flag aria-hidden="true" />Ended</dt>
+          <dd>
+            <time :datetime="run.updatedAt" :title="new Date(run.updatedAt).toLocaleString()">
+              {{ formatTime(run.updatedAt, now) }}
+            </time>
+          </dd>
+        </div>
+        <div v-else :class="ROW">
+          <dt :class="TERM"><Activity aria-hidden="true" />Last active</dt>
+          <dd :title="run.updatedAt ? new Date(run.updatedAt).toLocaleString() : undefined">
+            {{ timeAgo(run.updatedAt, now) }}
+          </dd>
+        </div>
+
+        <div :class="ROW">
+          <dt :class="TERM"><Timer aria-hidden="true" />{{ finished ? "Took" : "Running for" }}</dt>
+          <dd class="tabular-nums">{{ duration }}</dd>
+        </div>
+      </template>
+      <div v-else :class="ROW">
+        <dt :class="TERM"><CalendarClock aria-hidden="true" />Started</dt>
+        <dd class="text-muted">Waiting in the queue</dd>
+      </div>
+    </dl>
   </section>
 </template>

@@ -58,7 +58,7 @@ const facts = computed(() => {
     },
     {
       icon: FlaskConical,
-      hue: "text-check",
+      hue: "text-muted",
       label: "Passed checks first try",
       value: formatShare(firstPassRate),
       note: fixAttemptsPerPr === null ? "Of runs with a PR" : `${fixAttemptsPerPr.toFixed(1)} fixes per PR on average`,
@@ -79,7 +79,7 @@ const facts = computed(() => {
   <ErrorBanner v-if="error" class="mb-6" retrying>Couldn't load runs: {{ error }}. Reconnecting…</ErrorBanner>
 
   <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
-    <h1 class="text-4xl">Metrics</h1>
+    <h1 class="text-2xl">Metrics</h1>
     <SegmentedControl v-model:value="range" aria-label="Time range" class="bg-surface">
       <SegmentedControlIndicator class="bg-bg" />
       <SegmentedControlItem v-for="option in RANGES" :key="option" :value="option">
@@ -89,7 +89,7 @@ const facts = computed(() => {
   </div>
 
   <template v-if="loaded">
-    <p class="mb-8 max-w-3xl text-2xl leading-snug text-balance sm:text-3xl">
+    <p class="mb-6 max-w-3xl text-lg leading-snug text-balance sm:text-xl">
       <template v-for="(sentence, i) in summary" :key="i">
         <template v-for="(part, j) in sentence" :key="j">
           <strong v-if="part.figure" class="font-semibold tabular-nums">{{ part.text }}</strong>
@@ -101,7 +101,7 @@ const facts = computed(() => {
 
     <template v-if="metrics.runs">
       <dl
-        class="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-line bg-line sm:grid-cols-3 lg:grid-cols-5"
+        class="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-3 lg:grid-cols-5"
       >
         <div
           v-for="fact in facts"
@@ -117,7 +117,7 @@ const facts = computed(() => {
         </div>
       </dl>
 
-      <div class="mt-10 grid gap-x-8 gap-y-10 lg:grid-cols-2">
+      <div class="mt-6 grid gap-6 lg:grid-cols-2">
         <MetricPanel title="Outcomes" question="Where did the runs end up? One square per run.">
           <OutcomeChart :outcomes="metrics.outcomes" />
         </MetricPanel>
@@ -156,9 +156,9 @@ const facts = computed(() => {
                     class="min-w-0 flex-1 truncate text-ink no-underline hover:underline"
                     :title="run.title ?? undefined"
                   >
-                    <span class="font-semibold">{{ run.repo }}</span>&#32;<span class="text-muted tabular-nums"
-                      >#{{ run.issue }}</span
-                    ><template v-if="run.title">&#32;<span class="text-muted">{{ run.title }}</span></template>
+                    <span class="font-semibold">{{ run.repo }}</span>
+                    <span class="ml-1 text-muted tabular-nums">#{{ run.issue }}</span>
+                    <span v-if="run.title" class="ml-1.5 text-muted">{{ run.title }}</span>
                   </RouterLink>
                   <span class="font-medium tabular-nums">{{ formatCost(run.costUsd) }}</span>
                 </li>

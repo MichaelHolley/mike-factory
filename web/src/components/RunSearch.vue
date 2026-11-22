@@ -10,7 +10,7 @@ import {
   AutocompleteList,
   createAutocompleteController,
 } from "@ui-sdk/vue/autocomplete";
-import { computed, nextTick, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import type { RunStatus } from "../../../src/runStatus.ts";
 import { useRuns } from "../composables/useRuns.ts";
@@ -57,20 +57,30 @@ async function expand() {
   await nextTick();
   search.focus();
 }
+
+function onShortcut(event: KeyboardEvent) {
+  if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+
+  const target = event.target as HTMLElement | null;
+  if (target?.closest("input, textarea, select, [contenteditable]")) return;
+
+  event.preventDefault();
+  void expand();
+}
+
+onMounted(() => window.addEventListener("keydown", onShortcut));
+onBeforeUnmount(() => window.removeEventListener("keydown", onShortcut));
 </script>
 
 <template>
-  <IconButton
-    v-if="!expanded"
-    :icon="Search"
-    label="Search runs"
-    tone="chrome"
-    class="ml-auto sm:hidden"
-    @click="expand"
-  />
+  <IconButton v-if="!expanded" :icon="Search" label="Search runs" class="ml-auto sm:hidden" @click="expand" />
   <div
-    class="w-full max-w-md items-center sm:flex"
-    :class="expanded ? 'flex max-sm:absolute max-sm:inset-0 max-sm:max-w-none max-sm:bg-chrome max-sm:px-4' : 'hidden'"
+    class="ml-auto w-full max-w-xs items-center sm:flex"
+    :class="
+      expanded
+        ? 'flex max-sm:absolute max-sm:inset-0 max-sm:z-10 max-sm:max-w-none max-sm:bg-surface max-sm:px-4'
+        : 'hidden'
+    "
   >
     <Autocomplete
       :controller="search"
@@ -83,12 +93,18 @@ async function expand() {
     >
       <AutocompleteLabel class="sr-only">Search runs</AutocompleteLabel>
       <div class="relative flex flex-1 items-center">
-        <Search class="pointer-events-none absolute left-2.5 size-4 text-chrome-ink/60" aria-hidden="true" />
+        <Search class="pointer-events-none absolute left-2.5 size-4 text-muted" aria-hidden="true" />
         <AutocompleteInput
           placeholder="Search runs…"
-          class="border-transparent bg-chrome-ink/10 pl-8 text-chrome-ink placeholder:text-chrome-ink/60"
+          aria-keyshortcuts="/"
+          class="peer bg-bg pr-8 pl-8 placeholder:text-muted"
           @blur="expanded && reset()"
         />
+        <kbd
+          class="pointer-events-none absolute right-2 rounded-sm border border-line px-1.5 font-mono text-xs leading-5 text-muted peer-focus:invisible peer-not-placeholder-shown:invisible max-sm:hidden"
+          aria-hidden="true"
+          >/</kbd
+        >
       </div>
       <AutocompleteContent :side-offset="6" class="p-0">
         <AutocompleteEmpty class="data-empty:px-4 data-empty:py-3">No matching runs</AutocompleteEmpty>
