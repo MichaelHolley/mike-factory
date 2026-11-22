@@ -12,7 +12,7 @@ import { PNG_IMAGE } from "../fakes/github.ts";
 import { openAgentHarness } from "../../src/agent/harness.ts";
 import type { IssueService } from "../../src/contracts.ts";
 import type { PrState, TranscriptItem } from "../../src/runStatus.ts";
-import { NO_CHECKS_NOTE } from "../../src/agent/extensions/pull-request.ts";
+import { NO_CHECKS_NOTE, prBodyLimit } from "../../src/agent/extensions/pull-request.ts";
 import { NO_CHANGES_STATUS, STATUS_MARKER, WORKING_STATUS } from "../../src/agent/tasks/issuePipeline.ts";
 import {
   autopilot,
@@ -193,8 +193,9 @@ describe("issue pipeline", () => {
     expect(textOf(implement)).toContain(`${archive}: skipped (not a UTF-8 text file).`);
   });
 
-  it("opens the PR with the drafted title and body", async () => {
+  it("opens the PR with the drafted title, body and run link", async () => {
     const world = createWorld({ dir });
+    world.deps.publicUrl = "https://factory.example.com";
     const body = "## Summary\nAdd y.\n\n## Testing\nNot run.";
     autopilot(world.faux, (messages) => {
       const last = messages.at(-1);
@@ -206,15 +207,21 @@ describe("issue pipeline", () => {
     expect((await pipelineResult(harness, 1)).status).toBe("completed");
     expect(world.github.prs[0]).toMatchObject({
       title: "feat(x)!: add y",
-      body: `${body}\n\n${NO_CHECKS_NOTE}\n\nCloses #1`,
+      body: `${body}\n\n${NO_CHECKS_NOTE}\n\nCloses #1\n\nhttps://factory.example.com/runs/${REPO}/1`,
     });
   });
 
   it.each([
     { invalid: draftPr("Add y", "Add y."), error: "conventional commit subject" },
     { invalid: draftPr("feat: add y", "x".repeat(3_000)), error: "keep it under" },
-  ])("rejects an invalid draft so the agent can retry ($error)", async ({ invalid, error }) => {
+    {
+      invalid: draftPr("feat: add y", "x".repeat(prBodyLimit(1))),
+      error: "keep it under",
+      publicUrl: "https://factory.example.com",
+    },
+  ])("rejects an invalid draft so the agent can retry ($error)", async ({ invalid, error, publicUrl }) => {
     const world = createWorld({ dir });
+    world.deps.publicUrl = publicUrl;
     autopilot(world.faux, (messages) => {
       const last = messages.at(-1);
       if (last?.role !== "toolResult") return undefined;
@@ -228,7 +235,7 @@ describe("issue pipeline", () => {
     expect((await pipelineResult(harness, 1)).status).toBe("completed");
     expect(world.github.prs[0]).toMatchObject({
       title: "feat: add y",
-      body: `Add y.\n\n${NO_CHECKS_NOTE}\n\nCloses #1`,
+      body: `Add y.\n\n${NO_CHECKS_NOTE}\n\nCloses #1${publicUrl ? `\n\n${publicUrl}/runs/${REPO}/1` : ""}`,
     });
     const transcript = JSON.stringify(await service.transcript(REPO, 1));
     expect(transcript).toContain(error);
@@ -249,19 +256,24 @@ describe("issue pipeline", () => {
     });
   });
 
-  it("caps a fallback body and retains the closing reference", async () => {
-    const world = createWorld({ dir });
-    autopilot(world.faux, (messages) =>
-      messages.at(-1)?.role === "toolResult" ? fauxAssistantMessage("x".repeat(4_000)) : undefined,
-    );
-    const { harness, service } = await launch(world);
+  it.each([undefined, "https://factory.example.com"])(
+    "caps a fallback body and retains the closing reference and optional run link (%s)",
+    async (publicUrl) => {
+      const world = createWorld({ dir });
+      world.deps.publicUrl = publicUrl;
+      autopilot(world.faux, (messages) =>
+        messages.at(-1)?.role === "toolResult" ? fauxAssistantMessage("x".repeat(4_000)) : undefined,
+      );
+      const { harness, service } = await launch(world);
 
-    await service.start(startAction(1, "comment-1"));
-    expect((await pipelineResult(harness, 1)).status).toBe("completed");
-    const body = world.github.prs[0]!.body;
-    expect(body.length).toBeLessThanOrEqual(3_000);
-    expect(body.endsWith("\n\nCloses #1")).toBe(true);
-  });
+      await service.start(startAction(1, "comment-1"));
+      expect((await pipelineResult(harness, 1)).status).toBe("completed");
+      const body = world.github.prs[0]!.body;
+      expect(body.length).toBeLessThanOrEqual(3_000);
+      const link = publicUrl ? `\n\n${publicUrl}/runs/${REPO}/1` : "";
+      expect(body.endsWith(`\n\nCloses #1${link}`)).toBe(true);
+    },
+  );
 
   it("opens the PR with the latest draft after a successful verification fix", async () => {
     const world = createWorld({ dir, repo: { checks: ["test -f fixed.txt"] } });
@@ -538,8 +550,9 @@ describe("issue pipeline", () => {
       expect((await issueStateOf(harness, 1))!.lastError).toContain("turn budget exhausted");
     });
 
-    it("continues a finished run on the same branch and updates its PR", async () => {
+    it("continues a finished run on the same branch and updates its PR, retaining one run link", async () => {
       const world = createWorld({ dir });
+      world.deps.publicUrl = "https://factory.example.com";
       autopilot(world.faux, (messages) => {
         const last = messages.at(-1);
         if (textOf(last).includes("<owner-message>")) return commitFile("more.txt", "more");
@@ -564,7 +577,7 @@ describe("issue pipeline", () => {
       expect(world.github.callCount("updatePr")).toBe(1);
       expect(world.github.prs[0]).toMatchObject({
         title: "feat: add hello and more",
-        body: `Adds more.\n\n${NO_CHECKS_NOTE}\n\nCloses #1`,
+        body: `Adds more.\n\n${NO_CHECKS_NOTE}\n\nCloses #1\n\nhttps://factory.example.com/runs/${REPO}/1`,
       });
       const prompts = (await service.transcript(REPO, 1))!.filter(
         (item) => item.kind === "user" && item.text.startsWith("Implement GitHub issue"),

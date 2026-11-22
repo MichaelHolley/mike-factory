@@ -16,7 +16,7 @@ export function createAgentRegistry(deps: AgentDeps, opts: { crashAt?: string; a
   registry.install(createRepoContext(deps.config.owner));
   registry.install(createSkills(deps.skills ?? []));
   registry.install(createGithubTools(deps.github));
-  registry.install(createPullRequestTools());
+  registry.install(createPullRequestTools(deps.publicUrl));
   registry.install(createReviewTools(deps.github));
   registry.install(createGuards({ config: deps.config, abortTask: opts.abortTask }));
   registry.install(defineExtension({ name: "issue-pipeline", tasks: [pipeline] }));

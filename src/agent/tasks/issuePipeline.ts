@@ -32,6 +32,7 @@ import {
 } from "../docs.ts";
 import { lastAssistantText, runBudgetBreach, totalCostUsd } from "../extensions/guards.ts";
 import { closingRef, CONVENTIONAL_TITLE, NO_CHECKS_NOTE, prBodyLimit } from "../extensions/pull-request.ts";
+import { runUrl } from "../runUrl.ts";
 import { createSlots } from "../slots.ts";
 import { type IssueText, loadIssueImages, loadIssueTexts, modelImageLimits } from "./issueAttachments.ts";
 
@@ -64,7 +65,7 @@ export interface PipelineDeps {
   log?: (msg: string, data?: object) => void;
   /** Pipelines that may run at once across all repos; the rest wait in `queued`. */
   maxConcurrent?: number;
-  /** Base URL of the status page; status comments link to the run when set. */
+  /** Base URL of the status page; status comments and PR bodies link to the run when set. */
   publicUrl?: string;
   /** Phase at whose start the process exits once per pipeline task, to test restart safety. */
   crashAt?: string;
@@ -101,13 +102,16 @@ export const upsertStatus = (
   deps: Pick<PipelineDeps, "github" | "publicUrl">,
   run: { repo: string; issue: number; statusOn?: number | null },
   body: string,
-) =>
-  deps.github.upsertComment(
+) => {
+  const link = runUrl(deps.publicUrl, run.repo, run.issue);
+
+  return deps.github.upsertComment(
     run.repo,
     run.statusOn ?? run.issue,
     STATUS_MARKER,
-    deps.publicUrl ? `${body}\n\n${deps.publicUrl}/runs/${run.repo}/${run.issue}` : body,
+    link ? `${body}\n\n${link}` : body,
   );
+};
 
 export const NO_CHANGES_STATUS = "No code changes, see replies.";
 
@@ -451,9 +455,12 @@ export function createIssuePipeline(deps: PipelineDeps) {
     const body = state?.prBody ?? lastAssistantText((await rt.context(rt.conversationId, context)).messages);
 
     const note = settings.checks.length > 0 ? "" : `${NO_CHECKS_NOTE}\n\n`;
-    const limit = prBodyLimit(issue);
+    const link = runUrl(deps.publicUrl, repo, issue);
+    const limit = prBodyLimit(issue, link);
     const clipped = body.length > limit ? tail(body, limit - 3) : body;
-    return { title, body: `${clipped ? `${clipped}\n\n` : ""}${note}${closingRef(issue)}` };
+    const footer = [closingRef(issue), link].filter(Boolean).join("\n\n");
+
+    return { title, body: `${clipped ? `${clipped}\n\n` : ""}${note}${footer}` };
   };
 
   const statusTarget = async (rt: Rt, context: Context, input: PipelineInput) => ({

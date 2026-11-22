@@ -58,7 +58,7 @@ Run the Docker image behind a reverse proxy; the app listens on port 3000 and ha
 - Put everything except `/webhooks/github` behind proxy auth; GitHub calls the webhook, verified by signature.
 - Set `PROXY_SECRET` (e.g. `openssl rand -hex 32`) and have the proxy set it as the `X-Proxy-Secret` header on every request; the app rejects other requests, so the runner can't call it directly.
 - Don't buffer or compress `text/event-stream` responses; the status page streams live updates.
-- Set `PUBLIC_URL` to the public URL so status comments link to the run page.
+- Set `PUBLIC_URL` to the public URL so status comments and PR descriptions link to the run page.
 
 Run it as two services: the server, which holds the secrets, and a runner, where the agent's tools and its git commands run over SSH. Give secrets to the server only. With Traefik on an external `proxy` network:
 
