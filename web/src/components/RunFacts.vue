@@ -12,12 +12,6 @@ const finished = computed(() => isIdle(props.run.phase));
 const pr = computed(() => prLook(props.run.prState));
 const prNumber = computed(() => props.run.prUrl?.split("/").pop());
 
-const prState = computed(() => {
-  if (props.run.prState === "merged") return "Merged";
-  if (props.run.prState === "closed") return "Closed";
-  return null;
-});
-
 const duration = computed(() => {
   const { startedAt, updatedAt } = props.run;
   if (!startedAt) return null;
@@ -75,7 +69,6 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
             >PR #{{ prNumber }}</span
           >
           <ExternalLink class="size-3.5 flex-none text-muted" aria-hidden="true" />
-          <span v-if="prState" class="text-sm" :class="pr.hue">{{ prState }}</span>
         </a>
         <div v-else class="flex flex-none items-center gap-2 text-muted">
           <component :is="pr.icon" class="size-4.5 flex-none opacity-60" aria-hidden="true" />
