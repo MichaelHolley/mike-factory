@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Calendar, ChevronLeft, ChevronRight, ListFilter, X } from "@lucide/vue";
+import { Calendar, ChevronLeft, ChevronRight, ListFilter, X } from "@lucide/vue";
 import { Button } from "@ui-sdk/vue/button";
 import {
   CalendarDay,
@@ -19,7 +19,6 @@ import {
   type DatePickerValue,
 } from "@ui-sdk/vue/date-picker";
 import { computed, ref, watch } from "vue";
-import { RouterLink } from "vue-router";
 import EmptyState from "../components/EmptyState.vue";
 import ErrorBanner from "../components/ErrorBanner.vue";
 import FilterSelect, { type FilterOption } from "../components/FilterSelect.vue";
@@ -87,10 +86,18 @@ const presets = computed(() => {
 
 const { visible, more, sentinel, reset } = useLazyList(filtered);
 
+const dayOf = (run: { updatedAt: string | null }) => (run.updatedAt ? formatDay(run.updatedAt, now.value) : "Unknown");
+
+const dayCounts = computed(() => {
+  const counts = new Map<string, number>();
+  for (const run of filtered.value) counts.set(dayOf(run), (counts.get(dayOf(run)) ?? 0) + 1);
+  return counts;
+});
+
 const days = computed(() => {
   const groups: { day: string; runs: typeof filtered.value }[] = [];
   for (const run of visible.value) {
-    const day = run.updatedAt ? formatDay(run.updatedAt, now.value) : "Unknown";
+    const day = dayOf(run);
     const last = groups.at(-1);
     if (last?.day === day) last.runs.push(run);
     else groups.push({ day, runs: [run] });
@@ -102,16 +109,11 @@ watch([repo, outcome, started], reset);
 </script>
 
 <template>
-  <RouterLink
-    to="/"
-    class="mb-5 inline-flex items-center gap-1 text-sm font-medium text-muted no-underline hover:text-ink"
-    ><ArrowLeft class="size-4" aria-hidden="true" />All runs</RouterLink
-  >
   <ErrorBanner v-if="error" class="mb-6" retrying>Couldn't load runs: {{ error }}. Reconnecting…</ErrorBanner>
   <template v-if="loaded">
     <div class="mb-6 flex flex-wrap items-end gap-x-6 gap-y-3">
-      <h1 class="mr-auto flex items-baseline gap-3 text-4xl">
-        Finished runs <span class="text-2xl font-medium text-muted tabular-nums">{{ filtered.length }}</span>
+      <h1 class="mr-auto flex items-baseline gap-2 text-2xl">
+        Finished runs <span class="text-base font-medium text-muted tabular-nums">{{ filtered.length }}</span>
       </h1>
 
       <div class="flex flex-wrap items-center gap-2 max-sm:w-full max-sm:*:flex-1">
@@ -165,27 +167,18 @@ watch([repo, outcome, started], reset);
       </div>
     </div>
 
-    <div v-if="filtered.length">
-      <section
-        v-for="group in days"
-        :key="group.day"
-        :aria-label="group.day"
-        class="group/day flex gap-6 max-md:flex-col max-md:gap-2 max-md:not-first-of-type:mt-6"
-      >
-        <h2
-          class="w-28 flex-none text-sm font-semibold text-muted md:sticky md:top-4 md:self-start md:pt-3.5 md:text-right"
-        >
-          {{ group.day }}
+    <div v-if="filtered.length" class="flex flex-col gap-4">
+      <section v-for="group in days" :key="group.day" :aria-label="group.day">
+        <h2 class="sticky top-14 z-10 flex items-baseline gap-2 bg-bg py-2 text-sm font-semibold">
+          {{ group.day }} <span class="font-medium text-muted tabular-nums">{{ dayCounts.get(group.day) }}</span>
         </h2>
-        <ul
-          class="@container min-w-0 flex-1 overflow-hidden border-x border-t border-line bg-surface group-first-of-type/day:rounded-t-md group-last-of-type/day:rounded-b-md group-last-of-type/day:border-b max-md:rounded-md max-md:border-b"
-        >
+        <ul class="@container overflow-hidden rounded-lg border border-line bg-surface">
           <RunRow v-for="run in group.runs" :key="runKey(run)" :run :now compact />
         </ul>
       </section>
-      <div v-if="more" ref="sentinel" class="py-4 text-center text-sm text-muted md:ml-34">Loading older runs…</div>
+      <div v-if="more" ref="sentinel" class="py-4 text-center text-sm text-muted">Loading older runs…</div>
     </div>
-    <div v-else class="rounded-md border border-line bg-surface">
+    <div v-else class="rounded-lg border border-dashed border-line">
       <EmptyState :icon="ListFilter">No finished runs match these filters.</EmptyState>
       <div class="-mt-4 flex justify-center pb-8">
         <Button class="bg-surface" @click="clearFilters">Clear filters</Button>

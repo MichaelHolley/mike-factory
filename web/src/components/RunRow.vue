@@ -1,39 +1,69 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import type { RunStatus } from "../../../src/runStatus.ts";
-import { timeAgo } from "../format.ts";
-import { prLook, stepLook } from "../phase.ts";
+import { formatCost, formatDuration, timeAgo } from "../format.ts";
+import { prLook } from "../phase.ts";
 import IconButton from "./IconButton.vue";
 import PhaseBadge from "./PhaseBadge.vue";
+import StepMeter from "./StepMeter.vue";
 
-defineProps<{ run: RunStatus; now: number; compact?: boolean }>();
+const props = defineProps<{ run: RunStatus; now: number; compact?: boolean }>();
+
+const details = computed(() => {
+  const { startedAt, costUsd } = props.run;
+  if (!startedAt) return "Waiting in the queue";
+  return `Running for ${formatDuration(props.now - Date.parse(startedAt))} · ${formatCost(costUsd)}`;
+});
 </script>
 
 <template>
   <li
-    class="relative grid grid-cols-[minmax(0,16rem)_minmax(0,1fr)_8rem_1.75rem_4.5rem] items-center gap-6 pr-5 pl-6 hover:bg-run/4 not-first:border-t not-first:border-line @max-3xl:grid-cols-[minmax(0,1fr)_auto_auto] @max-3xl:gap-x-4 @max-3xl:gap-y-2"
-    :class="compact ? 'py-2 text-sm' : 'py-4'"
+    class="relative flex items-center gap-x-6 gap-y-1.5 px-5 not-first:border-t not-first:border-line hover:bg-ink/3 @max-2xl:flex-wrap @max-2xl:gap-x-4"
+    :class="compact ? 'py-2.5 text-sm' : 'py-3.5'"
   >
-    <span class="absolute inset-y-0 left-0 w-0.75 bg-current" :class="stepLook[run.phase].hue" aria-hidden="true" />
+    <PhaseBadge :phase="run.phase" class="w-32 flex-none @max-2xl:order-1 @max-2xl:w-auto" />
+
     <RouterLink
       :to="`/runs/${run.repo}/${run.issue}`"
-      class="min-w-0 truncate font-semibold text-ink no-underline after:absolute after:inset-0 hover:underline hover:underline-offset-3 @max-3xl:col-span-full"
+      class="min-w-0 flex-1 text-ink no-underline after:absolute after:inset-0 @max-2xl:basis-full"
     >
-      {{ run.repo }} <span class="font-medium text-muted tabular-nums">#{{ run.issue }}</span>
+      <span v-if="compact" class="block truncate" :title="run.title ?? undefined">
+        <span class="font-medium">{{ run.title ?? `${run.repo} #${run.issue}` }}</span>
+        <span v-if="run.title" class="ml-2 text-muted">
+          {{ run.repo }} <span class="tabular-nums">#{{ run.issue }}</span>
+        </span>
+      </span>
+
+      <template v-else>
+        <span class="block truncate font-medium" :title="run.title ?? undefined">
+          {{ run.title ?? `${run.repo} #${run.issue}` }}
+        </span>
+        <span class="block truncate text-sm text-muted">
+          {{ run.repo }} <span class="tabular-nums">#{{ run.issue }}</span> · {{ details }}
+        </span>
+      </template>
     </RouterLink>
-    <span class="truncate @max-3xl:col-span-full" :title="run.title ?? undefined">{{ run.title }}</span>
-    <PhaseBadge :phase="run.phase" />
-    <IconButton
-      v-if="run.prUrl"
-      :href="run.prUrl"
-      :icon="prLook(run.prState).icon"
-      :label="prLook(run.prState).label"
-      :tone="prLook(run.prState).tone"
-      target="_blank"
-      rel="noopener"
-      class="relative z-1 -my-1 justify-self-center"
-    />
-    <span v-else class="justify-self-center text-muted">-</span>
-    <span class="text-right text-sm whitespace-nowrap text-muted tabular-nums">{{ timeAgo(run.updatedAt, now) }}</span>
+
+    <StepMeter v-if="!compact" :phase="run.phase" class="flex-none @max-2xl:order-1" />
+
+    <span class="flex flex-none items-center gap-6 @max-2xl:order-1 @max-2xl:ml-auto @max-2xl:gap-3">
+      <span class="flex w-7 justify-center @max-2xl:empty:hidden">
+        <IconButton
+          v-if="run.prUrl"
+          :href="run.prUrl"
+          :icon="prLook(run.prState).icon"
+          :label="prLook(run.prState).label"
+          :tone="prLook(run.prState).tone"
+          target="_blank"
+          rel="noopener"
+          class="relative z-1 -my-1"
+        />
+      </span>
+
+      <span class="w-16 text-right text-sm whitespace-nowrap text-muted tabular-nums @max-2xl:w-auto">
+        {{ timeAgo(run.updatedAt, now) }}
+      </span>
+    </span>
   </li>
 </template>

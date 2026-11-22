@@ -21,7 +21,7 @@ watch(() => props.text, measure, { flush: "post" });
 </script>
 
 <template>
-  <div class="rounded-md border border-line bg-surface">
+  <div class="rounded-lg border border-line bg-surface">
     <div
       ref="body"
       class="px-5 py-3.5 font-mono text-sm leading-relaxed wrap-anywhere text-ink/80"
@@ -32,7 +32,7 @@ watch(() => props.text, measure, { flush: "post" });
     <button
       v-if="clipped"
       type="button"
-      class="flex w-full cursor-pointer items-center gap-1.5 rounded-b-md border-t border-line px-5 py-2 text-left text-sm font-medium text-muted hover:bg-ink/4 hover:text-ink"
+      class="flex w-full cursor-pointer items-center gap-1.5 rounded-b-lg border-t border-line px-5 py-2 text-left text-sm font-medium text-muted hover:bg-ink/4 hover:text-ink"
       :aria-expanded="expanded"
       @click="expanded = !expanded"
     >

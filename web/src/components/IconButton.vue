@@ -6,7 +6,6 @@ import type { Component } from "vue";
 defineOptions({ inheritAttrs: false });
 const TONES = {
   default: "text-muted hover:bg-ink/6 hover:text-ink",
-  chrome: "text-chrome-ink/80 hover:bg-chrome-ink/10 hover:text-chrome-ink",
   merged: "text-merged hover:bg-merged/10",
   closed: "text-halt hover:bg-halt/10",
 };
