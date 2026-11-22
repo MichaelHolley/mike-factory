@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Activity, CalendarClock, CircleDot, Cpu, ExternalLink, Flag, GitBranch, RotateCw, Timer } from "@lucide/vue";
+import {
+  Activity,
+  CalendarClock,
+  CircleDollarSign,
+  CircleDot,
+  Cpu,
+  ExternalLink,
+  Flag,
+  GitBranch,
+  RotateCw,
+  Timer,
+} from "@lucide/vue";
 import type { RunStatus } from "../../../src/runStatus.ts";
 import { formatCost, formatDuration, formatModel, formatTime, timeAgo } from "../format.ts";
 import { isIdle, prLook } from "../phase.ts";
@@ -28,43 +39,43 @@ const TERM = "flex flex-none items-center gap-1.5 text-muted [&_svg]:size-3.5 [&
 <template>
   <section
     aria-label="Run details"
-    class="grid grid-cols-1 divide-line rounded-lg border border-line bg-surface text-sm max-sm:divide-y sm:max-lg:grid-cols-3 sm:max-lg:divide-x lg:divide-y"
+    class="grid grid-cols-1 divide-line rounded-lg border border-line bg-surface text-sm max-sm:divide-y sm:max-lg:grid-cols-2 sm:max-lg:divide-x lg:divide-y"
   >
-    <div class="px-4 py-3.5">
-      <p class="text-muted">Cost</p>
-      <p class="text-2xl leading-tight font-semibold tabular-nums">{{ formatCost(run.costUsd) }}</p>
-    </div>
-
-    <ul class="flex flex-col gap-2 px-4 py-3.5">
+    <ul class="flex flex-col gap-1.5 px-3.5 py-3">
       <li>
         <a :href="run.issueUrl" target="_blank" rel="noopener" :class="LINK">
-          <CircleDot class="size-4 flex-none text-muted" aria-hidden="true" />
+          <CircleDot class="size-3.5 flex-none text-muted" aria-hidden="true" />
           <span class="tabular-nums group-hover:underline group-hover:underline-offset-3">Issue #{{ run.issue }}</span>
           <ExternalLink class="size-3 flex-none text-muted" aria-hidden="true" />
         </a>
       </li>
 
       <li class="flex min-w-0 items-center gap-2">
-        <GitBranch class="size-4 flex-none text-muted" aria-hidden="true" />
+        <GitBranch class="size-3.5 flex-none text-muted" aria-hidden="true" />
         <span class="sr-only">Branch</span>
-        <code class="min-w-0 truncate" :title="run.branch">{{ run.branch }}</code>
+        <code class="min-w-0 truncate text-xs" :title="run.branch">{{ run.branch }}</code>
         <CopyButton :text="run.branch" label="Copy branch name" class="-my-1" />
       </li>
 
       <li>
         <a v-if="run.prUrl" :href="run.prUrl" target="_blank" rel="noopener" :class="LINK">
-          <component :is="pr.icon" class="size-4 flex-none" :class="pr.hue" aria-hidden="true" />
+          <component :is="pr.icon" class="size-3.5 flex-none" :class="pr.hue" aria-hidden="true" />
           <span class="tabular-nums group-hover:underline group-hover:underline-offset-3">PR #{{ prNumber }}</span>
           <ExternalLink class="size-3 flex-none text-muted" aria-hidden="true" />
         </a>
         <span v-else class="flex items-center gap-2 text-muted">
-          <component :is="pr.icon" class="size-4 flex-none opacity-60" aria-hidden="true" />
+          <component :is="pr.icon" class="size-3.5 flex-none opacity-60" aria-hidden="true" />
           {{ finished ? "No PR" : "PR not opened yet" }}
         </span>
       </li>
     </ul>
 
-    <dl class="flex flex-col gap-2 px-4 py-3.5">
+    <dl class="flex flex-col gap-1.5 px-3.5 py-3">
+      <div :class="ROW">
+        <dt :class="TERM"><CircleDollarSign aria-hidden="true" />Cost</dt>
+        <dd class="font-semibold tabular-nums">{{ formatCost(run.costUsd) }}</dd>
+      </div>
+
       <div :class="ROW">
         <dt :class="TERM"><Cpu aria-hidden="true" />Model</dt>
         <dd class="truncate" :title="formatModel(run)">{{ formatModel(run) }}</dd>
