@@ -1,15 +1,19 @@
 import { createHmac } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type { IssueService } from "./contracts.ts";
 import type { IssuePhase, RunStatus } from "./runStatus.ts";
 import type { WebhookConfig } from "./github/webhooks.ts";
 import { createServer } from "./server.ts";
+import { createUploads } from "./uploads.ts";
 
 const secret = "test-secret";
 const config: WebhookConfig = { owner: "acme", allowedSenderIds: [42] };
+
+const uploadDirs: string[] = [];
+afterAll(() => uploadDirs.forEach((dir) => rmSync(dir, { recursive: true, force: true })));
 
 function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui"), proxySecret?: string) {
   const listeners = new Set<() => void>();
@@ -32,10 +36,13 @@ function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui"), proxySecret?: 
   };
   const log = vi.fn();
   const shutdown = new AbortController();
+  const uploadDir = mkdtempSync(join(tmpdir(), "uploads-"));
+  uploadDirs.push(uploadDir);
   const app = createServer({
     service,
     webhook: { config, secret },
     log,
+    uploads: createUploads(uploadDir),
     proxySecret,
     uiDir,
     shutdownSignal: shutdown.signal,
@@ -58,7 +65,7 @@ function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui"), proxySecret?: 
       },
     });
   };
-  return { app, service, log, post, notify, listeners, shutdown, subscribe };
+  return { app, service, log, post, notify, listeners, shutdown, subscribe, uploadDir };
 }
 
 /** Reads `data:` events from an SSE response, one per call. */
@@ -199,46 +206,101 @@ describe("webhook server", () => {
 
   describe("POST /status/:repo/:issue/messages", () => {
     const id = "6f1c2a3b-4d5e-4f60-8a9b-0c1d2e3f4a5b";
-    const send = (app: ReturnType<typeof setup>["app"], body: unknown, path = "/status/widgets/12/messages") =>
-      app.request(path, {
-        method: "POST",
-        body: JSON.stringify(body),
-        headers: { "content-type": "application/json" },
-      });
+    const MB = 1_000_000;
+    const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+
+    const form = (fields: { id?: string; text?: string }, files: File[] = []) => {
+      const body = new FormData();
+      for (const [name, value] of Object.entries(fields)) if (value !== undefined) body.append(name, value);
+      for (const file of files) body.append("files", file);
+      return body;
+    };
+    const send = (
+      app: ReturnType<typeof setup>["app"],
+      body: FormData,
+      headers: Record<string, string> = { "x-requested-with": "mike-factory" },
+    ) => app.request("/status/widgets/12/messages", { method: "POST", body, headers });
 
     it.each([
-      { body: { id: "not-a-uuid", text: "hi" } },
-      { body: { id, text: "   " } },
-      { body: { id, text: "x".repeat(8_001) } },
-      { body: { id } },
-      { body: null },
-    ])("rejects $body with 400", async ({ body }) => {
+      { fields: { id: "not-a-uuid", text: "hi" } },
+      { fields: { id, text: "   " } },
+      { fields: { id, text: "x".repeat(8_001) } },
+      { fields: { id } },
+    ])("rejects $fields with 400", async ({ fields }) => {
       const { app, service } = setup();
-      expect((await send(app, body)).status).toBe(400);
+      expect((await send(app, form(fields))).status).toBe(400);
       expect(service.message).not.toHaveBeenCalled();
     });
 
-    it("rejects a body that isn't sent as JSON with 415", async () => {
+    it("rejects a post without X-Requested-With, which a cross-site form can't add", async () => {
       const { app, service } = setup();
-      const response = await app.request("/status/widgets/12/messages", {
-        method: "POST",
-        body: JSON.stringify({ id, text: "hi" }),
-        headers: { "content-type": "text/plain" },
-      });
-      expect(response.status).toBe(415);
+      const response = await send(app, form({ id, text: "hi" }), {});
+      expect(response.status).toBe(403);
       expect(service.message).not.toHaveBeenCalled();
     });
 
     it("passes the message on with 202, and 404s for an unknown run", async () => {
       const { app, service, log } = setup();
-      const response = await send(app, { id, text: "  Use tabs  " });
+      const response = await send(app, form({ id, text: "  Use tabs  " }));
       expect(response.status).toBe(202);
       expect(await response.json()).toEqual({ result: "steered" });
       expect(service.message).toHaveBeenCalledWith({ repo: "widgets", issue: 12, id, text: "Use tabs" });
       expect(JSON.stringify(log.mock.calls)).not.toContain("Use tabs");
 
       vi.mocked(service.message).mockResolvedValue("not_found");
-      expect((await send(app, { id, text: "hi" })).status).toBe(404);
+      expect((await send(app, form({ id, text: "hi" }))).status).toBe(404);
+    });
+
+    it.each([
+      { files: 11, size: 1, status: 400, error: "at most 10 files" },
+      { files: 1, size: 10 * MB + 1, status: 413, error: "f0.bin is larger than 10 MB" },
+      { files: 3, size: 9 * MB, status: 413, error: "total at most 25 MB" },
+    ])("rejects $files files of $size bytes with $status", async ({ files, size, status, error }) => {
+      const { app, service, uploadDir } = setup();
+      const attached = Array.from({ length: files }, (_, i) => new File([new Uint8Array(size)], `f${i}.bin`));
+
+      const response = await send(app, form({ id, text: "hi" }, attached));
+      expect(response.status).toBe(status);
+      expect(await response.text()).toContain(error);
+      expect(service.message).not.toHaveBeenCalled();
+      expect(readdirSync(uploadDir)).toEqual([]);
+    });
+
+    it("stores attachments once per content and serves images inline, everything else as a download", async () => {
+      const { app, service, uploadDir } = setup();
+      const files = [
+        new File([PNG], "../shot.png", { type: "image/png" }),
+        new File(["<script>alert(1)</script>"], "page.html", { type: "text/html" }),
+      ];
+
+      expect((await send(app, form({ id, text: "See these" }, files))).status).toBe(202);
+      expect((await send(app, form({ id, text: "See these" }, files))).status).toBe(202);
+      expect(readdirSync(join(uploadDir, "widgets", "12"))).toHaveLength(2);
+
+      const { attachments } = vi.mocked(service.message).mock.calls[0]![0];
+      expect(attachments).toEqual([
+        { id: expect.stringMatching(/^[0-9a-f]{64}$/), name: "shot.png", type: "image/png", size: PNG.length },
+        { id: expect.stringMatching(/^[0-9a-f]{64}$/), name: "page.html", type: "application/octet-stream", size: 25 },
+      ]);
+
+      const [image, page] = await Promise.all(
+        attachments!.map(({ id, name }) =>
+          app.request(`/status/widgets/12/attachments/${id}/${encodeURIComponent(name)}`),
+        ),
+      );
+      expect(new Uint8Array(await image!.arrayBuffer())).toEqual(PNG);
+      expect(Object.fromEntries(image!.headers)).toMatchObject({
+        "content-type": "image/png",
+        "content-disposition": "inline; filename*=UTF-8''shot.png",
+        "x-content-type-options": "nosniff",
+      });
+      expect(Object.fromEntries(page!.headers)).toMatchObject({
+        "content-type": "application/octet-stream",
+        "content-disposition": "attachment; filename*=UTF-8''page.html",
+        "x-content-type-options": "nosniff",
+      });
+
+      expect((await app.request(`/status/widgets/13/attachments/${attachments![0]!.id}/shot.png`)).status).toBe(404);
     });
   });
 

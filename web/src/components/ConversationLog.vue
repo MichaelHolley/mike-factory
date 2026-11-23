@@ -13,8 +13,10 @@ import {
 } from "@lucide/vue";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@ui-sdk/vue/collapsible";
 import { type Component, computed } from "vue";
-import type { TranscriptItem } from "../../../src/runStatus.ts";
+import type { Attachment, TranscriptItem } from "../../../src/runStatus.ts";
+import { attachmentUrl, isImage } from "../attachments.ts";
 import { useTranscript } from "../composables/useTranscript.ts";
+import AttachmentTile from "./AttachmentTile.vue";
 import EmptyState from "./EmptyState.vue";
 import ErrorBanner from "./ErrorBanner.vue";
 import IconButton from "./IconButton.vue";
@@ -90,6 +92,11 @@ const tone = (call: Call) => {
   return call.result.isError ? "bg-bad" : "bg-muted/55";
 };
 
+const url = (file: Attachment) => attachmentUrl(props.repo, props.issue, file);
+// Images open in a new tab; anything else is served as a download.
+const opens = (file: Attachment) =>
+  isImage(file.type) ? { target: "_blank", rel: "noopener" } : { download: file.name };
+
 const SAY = "col-2 min-w-0 max-sm:col-1";
 const WHO: Record<Message["kind"], string> = { user: "pt-3.5 text-muted", assistant: "", human: "pt-2.5 text-you" };
 const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
@@ -144,6 +151,38 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
               :aria-busy="entry.message.kind === 'assistant' && entry.message.streaming"
               class="leading-relaxed wrap-anywhere"
             />
+            <ul
+              v-if="entry.message.kind === 'human' && entry.message.attachments"
+              aria-label="Attachments"
+              class="mt-2.5 mb-0.5 flex flex-wrap gap-2"
+            >
+              <AttachmentTile
+                v-for="file in entry.message.attachments"
+                :key="file.id"
+                :name="file.name"
+                :size="file.size"
+                :src="isImage(file.type) ? url(file) : undefined"
+              >
+                <template #name>
+                  <a
+                    :href="url(file)"
+                    v-bind="opens(file)"
+                    class="truncate font-medium text-ink no-underline after:absolute after:inset-0 after:rounded-md hover:underline focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-focus"
+                    >{{ file.name }}</a
+                  >
+                </template>
+
+                <IconButton
+                  v-if="isImage(file.type)"
+                  :icon="Download"
+                  :label="`Download ${file.name}`"
+                  :href="url(file)"
+                  :download="file.name"
+                  class="relative"
+                />
+                <Download v-else class="mr-1.5 size-4 flex-none text-muted" aria-hidden="true" />
+              </AttachmentTile>
+            </ul>
             <span
               v-if="entry.message.kind === 'human' && entry.message.pending"
               class="mt-1 flex items-center gap-1 text-xs text-muted italic"

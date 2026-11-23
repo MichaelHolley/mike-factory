@@ -2,16 +2,20 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { Hono, type Context } from "hono";
+import { Hono, type Context, type MiddlewareHandler } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import type { IssueService } from "./contracts.ts";
 import { InvalidSignatureError, verifyWebhook, type WebhookConfig } from "./github/webhooks.ts";
+import { ATTACHMENT_LIMITS } from "./runStatus.ts";
+import { isRepoName, servedType, type Uploads } from "./uploads.ts";
 
 export interface ServerDeps {
   service: IssueService;
   /** Serves `/webhooks/github`; without it the server has no GitHub integration. */
   webhook?: { config: WebhookConfig; secret: string };
   log: (msg: string, data?: object) => void;
+  uploads: Uploads;
   /** When set, every request except the webhook must carry it in `X-Proxy-Secret`, which the reverse proxy adds. */
   proxySecret?: string;
   uiDir?: string;
@@ -22,6 +26,7 @@ export interface ServerDeps {
 const THROTTLE_MS = 500;
 const MAX_MESSAGE_CHARS = 8_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const FORM_OVERHEAD_BYTES = 64 * 1024;
 const PING_MS = 20_000;
 const RETRY_MS = 5_000;
 
@@ -30,10 +35,24 @@ const DEFAULT_UI_DIR = fileURLToPath(new URL("../web/dist", import.meta.url));
 // Hashed so `timingSafeEqual` compares equal lengths without leaking the secret's length.
 const digest = (value: string) => createHash("sha256").update(value).digest();
 
+const megabytes = (bytes: number) => `${bytes / 1_000_000} MB`;
+
+const rfc5987 = (value: string) =>
+  encodeURIComponent(value).replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
+
+// A custom header makes browsers preflight a cross-site request, which this server never allows, so no other site
+// can post a message, not even as a form.
+const REQUESTED_WITH = "mike-factory";
+const sameSiteOnly: MiddlewareHandler = async (c, next) => {
+  if (c.req.header("x-requested-with") !== REQUESTED_WITH) return c.text("missing X-Requested-With", 403);
+  return next();
+};
+
 export function createServer({
   service,
   webhook,
   log,
+  uploads,
   proxySecret,
   uiDir = DEFAULT_UI_DIR,
   shutdownSignal,
@@ -150,27 +169,66 @@ export function createServer({
       return c.body(null, 202);
     });
 
-  app.post("/status/:repo/:issue/messages", async (c) => {
-    const repo = c.req.param("repo");
+  app.post(
+    "/status/:repo/:issue/messages",
+    sameSiteOnly,
+    bodyLimit({
+      maxSize: ATTACHMENT_LIMITS.totalBytes + FORM_OVERHEAD_BYTES,
+      onError: (c) => c.text(`Files can total at most ${megabytes(ATTACHMENT_LIMITS.totalBytes)}`, 413),
+    }),
+    async (c) => {
+      const repo = c.req.param("repo");
+      const issue = Number(c.req.param("issue"));
+      if (!Number.isInteger(issue) || !isRepoName(repo)) return c.text("not found", 404);
+
+      const form = await c.req.formData().catch(() => undefined);
+      const id = form?.get("id");
+      const text = form?.get("text");
+      const files = (form?.getAll("files") ?? []).filter((file) => file instanceof File);
+
+      if (typeof id !== "string" || !UUID.test(id)) return c.text("id must be a UUID", 400);
+      if (typeof text !== "string" || !text.trim() || text.length > MAX_MESSAGE_CHARS)
+        return c.text(`text must be 1 to ${MAX_MESSAGE_CHARS} characters`, 400);
+
+      if (files.length > ATTACHMENT_LIMITS.count)
+        return c.text(`A message can carry at most ${ATTACHMENT_LIMITS.count} files`, 400);
+
+      const tooLarge = files.find((file) => file.size > ATTACHMENT_LIMITS.fileBytes);
+      if (tooLarge) return c.text(`${tooLarge.name} is larger than ${megabytes(ATTACHMENT_LIMITS.fileBytes)}`, 413);
+
+      if (files.reduce((total, file) => total + file.size, 0) > ATTACHMENT_LIMITS.totalBytes)
+        return c.text(`Files can total at most ${megabytes(ATTACHMENT_LIMITS.totalBytes)}`, 413);
+
+      const attachments = await Promise.all(files.map((file) => uploads.save(repo, issue, file)));
+      const result = await service.message({
+        repo,
+        issue,
+        id,
+        text: text.trim(),
+        ...(attachments.length > 0 && { attachments }),
+      });
+      log("message received", { repo, issue, id, result, attachments: attachments.length });
+
+      if (result === "not_found") return c.text("not found", 404);
+      return c.json({ result }, 202);
+    },
+  );
+
+  app.get("/status/:repo/:issue/attachments/:id/:name", async (c) => {
     const issue = Number(c.req.param("issue"));
-    if (!Number.isInteger(issue)) return c.text("not found", 404);
+    const bytes = Number.isInteger(issue) && (await uploads.read(c.req.param("repo"), issue, c.req.param("id")));
+    if (!bytes) return c.text("not found", 404);
 
-    // Browsers can't send JSON cross-site without a CORS preflight, which this server never allows.
-    if (!/^application\/json\b/i.test(c.req.header("content-type") ?? ""))
-      return c.text("expected application/json", 415);
+    const type = servedType(bytes);
+    const disposition = type.startsWith("image/") ? "inline" : "attachment";
 
-    const body = (await c.req.json().catch(() => undefined)) as { id?: unknown; text?: unknown } | undefined;
-    const { id, text } = body ?? {};
-
-    if (typeof id !== "string" || !UUID.test(id)) return c.text("id must be a UUID", 400);
-    if (typeof text !== "string" || !text.trim() || text.length > MAX_MESSAGE_CHARS)
-      return c.text(`text must be 1 to ${MAX_MESSAGE_CHARS} characters`, 400);
-
-    const result = await service.message({ repo, issue, id, text: text.trim() });
-    log("message received", { repo, issue, id, result });
-
-    if (result === "not_found") return c.text("not found", 404);
-    return c.json({ result }, 202);
+    return c.body(new Uint8Array(bytes), 200, {
+      "Content-Type": type,
+      "Content-Disposition": `${disposition}; filename*=UTF-8''${rfc5987(c.req.param("name"))}`,
+      "Content-Security-Policy": "default-src 'none'; sandbox",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "private, max-age=31536000, immutable",
+    });
   });
 
   app.get("/status", async (c) => c.json(await service.status()));

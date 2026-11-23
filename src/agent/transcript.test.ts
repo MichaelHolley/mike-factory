@@ -91,10 +91,12 @@ describe("toTranscript", () => {
     expect(item).toMatchObject({ text: expect.stringContaining("6000 more characters") });
   });
 
-  it("includes each owner message once and marks undelivered messages as pending", () => {
+  it("includes each owner message once with its attachments, and marks undelivered messages as pending", () => {
+    const log = { id: "a".repeat(64), name: "build.log", type: "text/plain", size: 120 };
+    const shot = { id: "b".repeat(64), name: "shot.png", type: "image/png", size: 4_096 };
     const prompt = { role: "user", content: "<owner-message>Use tabs</owner-message>", timestamp: 1 } as Message;
     const entries = entriesOf([
-      { kind: HUMAN_ENTRY, data: { id: "a", text: "Use tabs" }, model: [prompt] },
+      { kind: HUMAN_ENTRY, data: { id: "a", text: "Use tabs", attachments: [log] }, model: [prompt] },
       { role: "assistant", content: [{ type: "text", text: "Switched." }], timestamp: 2 } as unknown as Message,
     ]);
 
@@ -102,13 +104,13 @@ describe("toTranscript", () => {
       toTranscript(entries, {
         queued: [
           { id: "a", text: "Use tabs" },
-          { id: "b", text: "Also docs" },
+          { id: "b", text: "Also docs", attachments: [shot] },
         ],
       }),
     ).toEqual([
-      { kind: "human", text: "Use tabs" },
+      { kind: "human", text: "Use tabs", attachments: [log] },
       { kind: "assistant", text: "Switched." },
-      { kind: "human", text: "Also docs", pending: true },
+      { kind: "human", text: "Also docs", pending: true, attachments: [shot] },
     ]);
   });
 

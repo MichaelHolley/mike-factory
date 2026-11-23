@@ -16,6 +16,7 @@ import { createWorktrees } from "./git/worktrees.ts";
 import { openWorkspace } from "./runner.ts";
 import { createServer } from "./server.ts";
 import { takeSecrets } from "./secrets.ts";
+import { createUploads } from "./uploads.ts";
 
 const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_BRANCH_MODEL = "openai/gpt-6-luna";
@@ -127,6 +128,7 @@ async function main() {
     service,
     webhook: { config, secret: secrets.webhookSecret },
     log,
+    uploads: createUploads(join(dataDir, "uploads")),
     proxySecret: secrets.proxySecret,
     shutdownSignal: shutdownController.signal,
   });

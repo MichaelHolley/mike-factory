@@ -1,4 +1,4 @@
-import type { PrState, RunStatus, TranscriptItem } from "./runStatus.ts";
+import type { Attachment, PrState, RunStatus, TranscriptItem } from "./runStatus.ts";
 
 export const branchName = (issue: number, slug: string) => `mike/${issue}-${slug}`;
 /** Branch of conversations started before branches were named by the model. */
@@ -225,6 +225,7 @@ export interface IssueService {
     issue: number;
     id: string;
     text: string;
+    attachments?: Attachment[];
   }): Promise<"steered" | "started" | "not_found">;
   /**
    * Records the PR's state on the run. Once the PR isn't open, removes the issue's worktree and local branch unless a

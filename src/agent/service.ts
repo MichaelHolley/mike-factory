@@ -15,7 +15,7 @@ import {
   type TaskId,
 } from "@earendil-works/pi-durable";
 import { agentPrIssue, issueKey, type IssueService, type ReviewFeedback } from "../contracts.ts";
-import type { IssuePhase, PrState, RunStatus } from "../runStatus.ts";
+import type { Attachment, IssuePhase, PrState, RunStatus } from "../runStatus.ts";
 import { asConversationId, HUMAN_ENTRY, IssueIndex, IssueNotes, IssueState, type IssueStateValue } from "./docs.ts";
 import type { AgentDeps } from "./harness.ts";
 import { createMutex } from "./mutex.ts";
@@ -202,7 +202,7 @@ export function createIssueService(opts: {
    */
   const addNote = async (
     conversation: Conversation,
-    note: { id: string; text: string; review?: ReviewFeedback },
+    note: { id: string; text: string; review?: ReviewFeedback; attachments?: Attachment[] },
     pr?: { number: number; reviewer: string },
   ) =>
     conversation.commit(async (tx) => {
@@ -292,13 +292,13 @@ export function createIssueService(opts: {
         await launch(conversationId, { repo, issue, requestId, instructions, trigger: "comment" }, { reviewer });
       }),
 
-    message: ({ repo, issue, id, text }) =>
+    message: ({ repo, issue, id, text, attachments }) =>
       mutex.run(async () => {
         const { conversationId } = await lookup(repo, issue);
         const conversation = conversationId && (await harness.conversation(conversationId, context));
         if (!conversation) return "not_found";
 
-        const { live, pending } = await addNote(conversation, { id, text });
+        const { live, pending } = await addNote(conversation, { id, text, ...(attachments && { attachments }) });
         if (live) return "steered";
         // A retry of a message that was already delivered has nothing left to start.
         if (!pending) return "started";

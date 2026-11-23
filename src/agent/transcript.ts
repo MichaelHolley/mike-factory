@@ -2,7 +2,7 @@ import type { JsonValue } from "@earendil-works/chord/json";
 import type { ImageContent, Message, TextContent } from "@earendil-works/pi-ai";
 import type { EntryRecord, LiveState } from "@earendil-works/pi-durable";
 import type { ReviewFeedback } from "../contracts.ts";
-import type { ReviewCard, TranscriptItem } from "../runStatus.ts";
+import type { Attachment, ReviewCard, TranscriptItem } from "../runStatus.ts";
 import { HUMAN_ENTRY } from "./docs.ts";
 
 const MAX_ITEM_CHARS = 4_000;
@@ -29,13 +29,19 @@ const summarize = (args: Record<string, unknown>) => {
   return line.length > SUMMARY_CHARS ? `${line.slice(0, SUMMARY_CHARS)}...` : line;
 };
 
-export type HumanMessage = { id: string; text: string; review?: ReviewFeedback };
+export type HumanMessage = { id: string; text: string; review?: ReviewFeedback; attachments?: Attachment[] };
 
-/** The `{ id, text, review? }` of an owner message entry's data, or undefined for anything else. */
+/** The `{ id, text, review?, attachments? }` of an owner message entry's data, or undefined for anything else. */
 export const humanMessage = (data: JsonValue | undefined): HumanMessage | undefined => {
-  const { id, text, review } = (data ?? {}) as Partial<Record<string, unknown>>;
+  const { id, text, review, attachments } = (data ?? {}) as Partial<Record<string, unknown>>;
   if (typeof id !== "string" || typeof text !== "string") return undefined;
-  return review && typeof review === "object" ? { id, text, review: review as ReviewFeedback } : { id, text };
+
+  return {
+    id,
+    text,
+    ...(typeof review === "object" && review !== null && { review: review as ReviewFeedback }),
+    ...(Array.isArray(attachments) && attachments.length > 0 && { attachments: attachments as Attachment[] }),
+  };
 };
 
 const reviewCard = ({ reviewer, state, url, comments }: ReviewFeedback): ReviewCard => ({
@@ -98,6 +104,7 @@ export function toTranscript(
         text: clip(message.text),
         ...(pending && { pending: true as const }),
         ...(message.review && { review: reviewCard(message.review) }),
+        ...(message.attachments && { attachments: message.attachments }),
       },
     ];
   };

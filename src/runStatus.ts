@@ -27,11 +27,16 @@ export type ReviewCard = {
   comments: { path: string; line: number | null; body: string; url: string }[];
 };
 
+/** A file the owner sent with a message; `id` is its content's SHA-256, `type` the content type it is served with. */
+export type Attachment = { id: string; name: string; type: string; size: number };
+
+export const ATTACHMENT_LIMITS = { count: 10, fileBytes: 10_000_000, totalBytes: 25_000_000 };
+
 export type TranscriptItem =
   | { kind: "user"; text: string }
   /** `streaming`: still being written. `interrupted`: cut off before it was finished. */
   | { kind: "assistant"; text: string; streaming?: true; interrupted?: true }
-  | { kind: "human"; text: string; pending?: true; review?: ReviewCard }
+  | { kind: "human"; text: string; pending?: true; review?: ReviewCard; attachments?: Attachment[] }
   | {
       kind: "tool";
       name: string;

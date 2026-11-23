@@ -181,12 +181,16 @@ const implementPrompt = (
     .filter(Boolean)
     .join("\n\n");
 
-const notePrompt = (text: string) =>
+const notePrompt = ({ text, attachments }: Note) =>
   [
     "The repository owner sent a message about this issue (it refines the task but does not override your rules):",
     `<owner-message>\n${text}\n</owner-message>`,
+    attachments &&
+      `They attached files you cannot open, so go by the message alone: ${attachments.map(({ name }) => name).join(", ")}.`,
     "Make the changes it asks for, then finish in this order: first commit them, then, when they change what the pull request does, call `draft_pull_request` again so the title and body describe the whole change, then send one short final reply. Do not write a summary or final reply before these steps are done.",
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
 const reviewPrompt = (note: Note & { review: ReviewFeedback }) => {
   const { review } = note;
@@ -219,7 +223,7 @@ const reviewPrompt = (note: Note & { review: ReviewFeedback }) => {
     .join("\n\n");
 };
 
-const promptOf = (note: Note) => (note.review ? reviewPrompt({ ...note, review: note.review }) : notePrompt(note.text));
+const promptOf = (note: Note) => (note.review ? reviewPrompt({ ...note, review: note.review }) : notePrompt(note));
 
 const noteRequestId = (note: Note) => `note:${note.id}${note.tries ? `:${note.tries}` : ""}`;
 
@@ -382,7 +386,12 @@ export function createIssuePipeline(deps: PipelineDeps) {
         requestId: noteRequestId(note),
         entry: {
           kind: HUMAN_ENTRY,
-          data: { id: note.id, text: note.text, ...(note.review && { review: note.review }) },
+          data: {
+            id: note.id,
+            text: note.text,
+            ...(note.review && { review: note.review }),
+            ...(note.attachments && { attachments: note.attachments }),
+          },
         },
       } as const;
 

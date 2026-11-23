@@ -74,7 +74,13 @@ if (mode === "review-first") {
 }
 if (mode === "first") {
   while ((await issueStateOf(harness, 1))?.phase !== "verify") await new Promise((resolve) => setTimeout(resolve, 20));
-  await service.message({ repo: REPO, issue: 1, id: "7d2f8c1e-5b3a-4c6d-9e8f-0a1b2c3d4e5f", text: "Keep it short." });
+  await service.message({
+    repo: REPO,
+    issue: 1,
+    id: "7d2f8c1e-5b3a-4c6d-9e8f-0a1b2c3d4e5f",
+    text: "Keep it short.",
+    attachments: [{ id: "a".repeat(64), name: "shot.png", type: "image/png", size: 4_096 }],
+  });
 }
 const outcomes = await Promise.all(runs.map(({ repo, issue }) => pipelineResult(harness, issue, repo)));
 type Part = Exclude<UserMessage["content"], string>[number];
@@ -91,6 +97,16 @@ const count = (has: (part: Part) => boolean) =>
   userMessages.map((messages) => messages.filter((parts) => parts.some(has)).length);
 const imageMessages = count((part) => part.type === "image");
 const textMessages = count((part) => part.type === "text" && part.text.includes(ATTACHED_TEXT));
-console.log(JSON.stringify({ outcomes: outcomes.map((outcome) => outcome.status), imageMessages, textMessages }));
+const ownerAttachments = ((await service.transcript(REPO, 1)) ?? []).flatMap((item) =>
+  item.kind === "human" ? (item.attachments ?? []).map(({ name }) => name) : [],
+);
+console.log(
+  JSON.stringify({
+    outcomes: outcomes.map((outcome) => outcome.status),
+    imageMessages,
+    textMessages,
+    ownerAttachments,
+  }),
+);
 await harness.close(ctx);
 process.exit(0);

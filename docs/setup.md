@@ -16,6 +16,8 @@ For the status UI, run `pnpm -C web dev` next to the server and open http://loca
 
 The factory is configured with environment variables, documented in `.env.example`. `OWNER` (the account the App is installed on) and `ALLOWED_SENDER_IDS` (comma-separated GitHub user ids allowed to trigger runs) are required. `MODEL` (any OpenRouter model, default `openai/gpt-6.2-sol`), `THINKING_LEVEL`, `MAX_TURNS`, `MAX_COST_USD` and `MAX_FIX_ATTEMPTS` apply to every repo.
 
+Messages from the run page can carry up to 10 files, 10 MB each and 25 MB in total; the server keeps them in `DATA_DIR/uploads`, so back that up with `agent.sqlite`.
+
 Each target repo sets its own install command and ordered checks in a `.mike.yaml` at its root, read from the default branch on every run:
 
 ```yaml

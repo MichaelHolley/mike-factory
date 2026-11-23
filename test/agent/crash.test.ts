@@ -45,6 +45,9 @@ describe("restart safety", () => {
       expect(second.code, second.stderr).toBe(0);
       expect(second.stdout).toContain('"outcomes":["completed","completed","completed","completed"]');
       expect(second.stdout).toContain('"imageMessages":[1,1,1,1],"textMessages":[1,1,1,1]');
+      // The owner's note goes out once issue 1 verifies, so exits before that come before the note exists.
+      const noted = ["revise", "publish", "report"].includes(phase);
+      expect(second.stdout).toContain(`"ownerAttachments":${noted ? '["shot.png"]' : "[]"}`);
 
       const github = JSON.parse(readFileSync(join(dir, "github.json"), "utf8")) as FakeGitHubState;
       expect(github.prs.map((pr) => `${pr.repo}:${pr.head}:${pr.state}`).sort()).toEqual([

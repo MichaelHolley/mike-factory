@@ -1,7 +1,7 @@
 import { defineDoc, defineDocFamily, type ConversationId } from "@earendil-works/pi-durable";
 import type { RepoSettings } from "../config.ts";
 import type { ReviewFeedback } from "../contracts.ts";
-import type { PipelinePhase, PrState } from "../runStatus.ts";
+import type { Attachment, PipelinePhase, PrState } from "../runStatus.ts";
 import type { RunStart } from "./extensions/guards.ts";
 
 export type { PipelinePhase };
@@ -109,6 +109,7 @@ export type Note = {
   deliveredAt: string | null;
   tries?: number;
   review?: ReviewFeedback;
+  attachments?: Attachment[];
 };
 
 /** Kept apart from `IssueState` so the pipeline's patches and the server's note writes never clobber each other. */
@@ -135,5 +136,5 @@ export const ReviewReplies = defineDoc<{ items: ReviewReply[] }>({
   checkpointWhen: () => false,
 });
 
-/** Entry kind of a delivered note; its data is `{ id, text, review? }` and its model message is the note prompt. */
+/** Entry kind of a delivered note; its data is `{ id, text, review?, attachments? }` and its model message is the note prompt. */
 export const HUMAN_ENTRY = "app.human";

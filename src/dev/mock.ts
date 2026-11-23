@@ -1,7 +1,11 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import { branchName, branchSlug, type IssueService } from "../contracts.ts";
-import type { PrState, RunStatus, TranscriptItem } from "../runStatus.ts";
+import type { Attachment, PrState, RunStatus, TranscriptItem } from "../runStatus.ts";
 import { createServer } from "../server.ts";
+import { createUploads, type Uploads } from "../uploads.ts";
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
@@ -32,7 +36,13 @@ function run(
   };
 }
 
-const sampleConversation = (): TranscriptItem[] => [
+const SAMPLE_LOG = new File(
+  [' FAIL  src/theme.test.ts > reads the stored theme\n   Expected: "dark"\n   Received: "light"\n'],
+  "test-output.log",
+  { type: "text/plain" },
+);
+
+const sampleConversation = (attachments: Attachment[]): TranscriptItem[] => [
   {
     kind: "user",
     text: [
@@ -88,7 +98,7 @@ const sampleConversation = (): TranscriptItem[] => [
 
   { kind: "assistant", text: "The typecheck fails because `dark` is read as a", interrupted: true },
 
-  { kind: "human", text: "Please use the system preference by default." },
+  { kind: "human", text: "Please use the system preference by default. The test output is attached.", attachments },
 
   {
     kind: "assistant",
@@ -188,7 +198,7 @@ function history(): RunStatus[] {
 }
 
 /** In-memory runs and conversations; messages get a canned reply instead of reaching an agent. */
-function createMockService(): IssueService {
+async function createMockService(uploads: Uploads): Promise<IssueService> {
   const runs: RunStatus[] = [
     run("mike-factory", 31, "Add a dark mode toggle to the status page", "implement", {
       startedAt: ago(4),
@@ -242,7 +252,11 @@ function createMockService(): IssueService {
     ...history(),
   ];
   const key = (repo: string, issue: number) => `${repo}/${issue}`;
-  const conversations = new Map(runs.map((r) => [key(r.repo, r.issue), sampleConversation()]));
+  const sample = async ({ repo, issue }: RunStatus) =>
+    sampleConversation([await uploads.save(repo, issue, SAMPLE_LOG)]);
+  const conversations = new Map(
+    await Promise.all(runs.map(async (r) => [key(r.repo, r.issue), await sample(r)] as const)),
+  );
   const statusListeners = new Set<() => void>();
   const transcriptListeners = new Map<string, Set<() => void>>();
   const notify = (listeners: Set<() => void> | undefined) => listeners?.forEach((listener) => listener());
@@ -263,7 +277,7 @@ function createMockService(): IssueService {
   ];
   const demo = run("phase-demo", 1, "Walk through every phase", "queued", { startedAt: ago(0), updatedAt: ago(0) });
   runs.unshift(demo);
-  conversations.set(key(demo.repo, demo.issue), sampleConversation());
+  conversations.set(key(demo.repo, demo.issue), await sample(demo));
 
   const streaming = conversations.get(key("mike-factory", 31))!;
   const stopped = conversations.get(key("web-shop", 7))!;
@@ -305,14 +319,14 @@ function createMockService(): IssueService {
       listeners.add(listener);
       return { items: async () => items(k) ?? [], stop: () => void listeners.delete(listener) };
     },
-    async message({ repo, issue, text }) {
+    async message({ repo, issue, text, attachments }) {
       const k = key(repo, issue);
       const conversation = conversations.get(k);
       const target = runs.find((r) => key(r.repo, r.issue) === k);
       if (!conversation || !target) return "not_found";
 
       const result = IDLE.includes(target.phase) ? "started" : "steered";
-      const item: TranscriptItem = { kind: "human", text, pending: true };
+      const item: TranscriptItem = { kind: "human", text, pending: true, ...(attachments && { attachments }) };
       conversation.push(item);
       notify(transcriptListeners.get(k));
 
@@ -334,5 +348,6 @@ function createMockService(): IssueService {
 
 const log = (msg: string, data: object = {}) => console.log(JSON.stringify({ msg, ...data }));
 const port = Number(process.env.PORT ?? 3000);
-const app = createServer({ service: createMockService(), log });
+const uploads = createUploads(mkdtempSync(join(tmpdir(), "mike-factory-mock-uploads-")));
+const app = createServer({ service: await createMockService(uploads), log, uploads });
 serve({ fetch: app.fetch, port, hostname: "127.0.0.1" }, () => log(`sample status server on http://localhost:${port}`));
