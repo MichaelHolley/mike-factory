@@ -9,6 +9,7 @@
   --color-muted: #5e6672;
   --color-line: #e2e5e9;
   --color-run: #2447f5;
+  --color-wrap: #e8890c;
   --color-focus: #2447f5;
   --color-ok: #22c27a;
   --color-bad: #ff5650;
@@ -31,6 +32,7 @@
     --color-muted: #959ca7;
     --color-line: #262a31;
     --color-run: #6e8bff;
+    --color-wrap: #f5a524;
     --color-focus: #6e8bff;
     --color-ok: #2fd98a;
     --color-bad: #ff5650;
