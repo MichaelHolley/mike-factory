@@ -695,7 +695,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
           if (state?.reviewer)
             await github
               .requestReview(repo, pr, state.reviewer)
-              .catch((error) => log("could not re-request the review", { error: messageOf(error) }));
+              .catch((error) => log("could not request the review", { error: messageOf(error) }));
         }
 
         const costUsd = await spentCostUsd(rt, context);

@@ -813,7 +813,7 @@ describe("issue pipeline", () => {
       autopilot(world.faux, (messages) => {
         const last = textOf(messages.at(-1));
         if (last.includes("<review>")) return commitFile("broken.txt", "x");
-        if (last.includes("<owner-instructions>\nRemove broken.txt"))
+        if (last.includes("<owner-message>\nRemove broken.txt"))
           return fauxAssistantMessage(
             fauxToolCall("bash", {
               command: "git rm -q broken.txt && git -c user.name=agent -c user.email=agent@example.com commit -qm fix",
@@ -834,7 +834,7 @@ describe("issue pipeline", () => {
       expect((await pipelineResult(harness, 1)).status).toBe("failed");
       expect(world.github.reviewRequests).toEqual([]);
 
-      await service.start(startAction(1, "comment-2", "Remove broken.txt"));
+      await service.message({ repo: REPO, issue: 1, id: randomUUID(), text: "Remove broken.txt" });
       expect((await pipelineResult(harness, 1)).status).toBe("completed");
       expect(world.github.reviewRequests).toEqual([{ repo: REPO, pr, login: "owner" }]);
     });
