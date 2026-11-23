@@ -134,9 +134,9 @@ export function createWorktrees(opts: {
 
         await fetchMirror(repo);
         await ensureRepo(repo);
+        await git(bare, ["fetch", "--prune", "origin"]);
         if (await exists(path)) return { path, branch, created: false };
 
-        await git(bare, ["fetch", "--prune", "origin"]);
         await createDir(dirname(path));
         await git(bare, ["worktree", "prune"]);
 

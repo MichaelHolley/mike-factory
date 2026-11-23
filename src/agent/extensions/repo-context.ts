@@ -15,6 +15,7 @@ export function createRepoContext(owner: string) {
         if (!state || !settings) return undefined;
         return [
           `Repository: ${owner}/${state.repo} (default branch ${settings.defaultBranch}), working on issue #${state.issue} on branch ${state.branch}.`,
+          `To catch up with the default branch, merge \`origin/${settings.defaultBranch}\`, fetched when this round started; the local \`${settings.defaultBranch}\` branch is stale. Don't rebase: published commits can't be rewritten.`,
           `Install: ${settings.setup ?? "none"}`,
           `Checks: ${settings.checks.join(" && ") || "none"}`,
           "The pipeline runs the checks itself after you finish and sends you any failure output.",

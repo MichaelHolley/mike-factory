@@ -145,8 +145,8 @@ export interface Worktrees {
   worktreePath(repo: string, issue: number): string;
   attachmentsPath(repo: string, issue: number): string;
   /**
-   * Idempotent: create, or reuse the existing path or branch. A new branch starts from its remote copy only with `openPr`,
-   * otherwise from `defaultBranch`.
+   * Idempotent: create, or reuse the existing path or branch, and refresh `origin/*` either way. A new branch starts from
+   * its remote copy only with `openPr`, otherwise from `defaultBranch`.
    */
   prepare(
     repo: string,

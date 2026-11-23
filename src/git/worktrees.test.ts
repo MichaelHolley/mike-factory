@@ -84,12 +84,18 @@ describe("createWorktrees", () => {
     expect(await worktrees.repos()).toEqual(["demo"]);
   });
 
-  it("reuses an existing worktree", async () => {
+  it("reuses an existing worktree and refreshes origin", async () => {
     await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
     await writeFile(join(worktrees.worktreePath("demo", 1), "wip.txt"), "wip");
+
+    await writeFile(join(seed, "README.md"), "hello again\n");
+    await commit(seed, "update readme");
+    await git(seed, "push", remote, "main");
+
     const again = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
     expect(again.created).toBe(false);
     expect(await exists(join(again.path, "wip.txt"))).toBe(true);
+    expect(await git(again.path, "rev-parse", "origin/main")).toBe(await git(remote, "rev-parse", "main"));
   });
 
   it("re-adds the worktree from the existing branch when the path is gone", async () => {
