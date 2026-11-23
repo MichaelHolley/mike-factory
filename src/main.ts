@@ -80,6 +80,8 @@ async function main() {
     token: (repo) => github.gitToken(repo),
   });
 
+  const uploads = createUploads(join(dataDir, "uploads"));
+
   const { models, model } = buildModels(secrets.openrouterApiKey, useFaux);
   const branchModel = useFaux ? undefined : models.getModel("openrouter", branchModelId);
   if (!useFaux && !branchModel) throw new Error(`BRANCH_MODEL ${branchModelId} is not a known OpenRouter model`);
@@ -100,6 +102,7 @@ async function main() {
         config,
         github,
         worktrees,
+        uploads,
         env: workspace.env,
         log,
         maxConcurrent,
@@ -128,7 +131,7 @@ async function main() {
     service,
     webhook: { config, secret: secrets.webhookSecret },
     log,
-    uploads: createUploads(join(dataDir, "uploads")),
+    uploads,
     proxySecret: secrets.proxySecret,
     shutdownSignal: shutdownController.signal,
   });

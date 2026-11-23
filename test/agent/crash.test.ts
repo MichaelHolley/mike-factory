@@ -44,9 +44,11 @@ describe("restart safety", () => {
       const second = await runProcess(dir, "second");
       expect(second.code, second.stderr).toBe(0);
       expect(second.stdout).toContain('"outcomes":["completed","completed","completed","completed"]');
-      expect(second.stdout).toContain('"imageMessages":[1,1,1,1],"textMessages":[1,1,1,1]');
-      // The owner's note goes out once issue 1 verifies, so exits before that come before the note exists.
+      // The owner's note, with an image, goes out once issue 1 verifies, so exits before that come before it exists.
       const noted = ["revise", "publish", "report"].includes(phase);
+      expect(second.stdout).toContain(
+        `"issueFileMessages":[1,1,1,1],"ownerFileMessages":[${noted ? 1 : 0},0,0,0],"issueFiles":${JSON.stringify(Array(4).fill(["notes.txt", "reference.png"]))}`,
+      );
       expect(second.stdout).toContain(`"ownerAttachments":${noted ? '["shot.png"]' : "[]"}`);
 
       const github = JSON.parse(readFileSync(join(dir, "github.json"), "utf8")) as FakeGitHubState;
@@ -78,7 +80,9 @@ describe("restart safety", () => {
     const second = await runProcess(dir, "review-second");
     expect(second.code, second.stderr).toBe(0);
     expect(second.stdout).toContain('"outcomes":["completed"]');
-    expect(second.stdout).toContain('"imageMessages":[1],"textMessages":[1]');
+    expect(second.stdout).toContain(
+      '"issueFileMessages":[1],"ownerFileMessages":[0],"issueFiles":[["notes.txt","reference.png"]]',
+    );
 
     const github = JSON.parse(readFileSync(join(dir, "github.json"), "utf8")) as FakeGitHubState;
     // The exit came between posting and recording the reply, so the rerun posts again and its marker finds the first.

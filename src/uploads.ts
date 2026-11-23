@@ -23,13 +23,16 @@ export const servedType = (bytes: Uint8Array) =>
   IMAGE_SIGNATURES.find(({ offset, bytes: signature }) => signature.every((byte, i) => bytes[offset + i] === byte))
     ?.type ?? "application/octet-stream";
 
-const cleanName = (name: string) =>
-  name
+/** A file name safe to show and to use as one path segment: no folders, control characters or dot-only names. */
+export const cleanName = (name: string) => {
+  const clean = name
     .split(/[/\\]/)
     .at(-1)!
     .replace(/[\p{Cc}\p{Cf}]/gu, "")
     .trim()
-    .slice(0, MAX_NAME_CHARS) || "file";
+    .slice(0, MAX_NAME_CHARS);
+  return /^\.*$/.test(clean) ? "file" : clean;
+};
 
 export type Uploads = {
   /** Stores `file` under the issue, named by its content's SHA-256, so storing it again changes nothing. */

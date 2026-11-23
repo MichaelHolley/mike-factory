@@ -1,106 +1,117 @@
-import type { ImageContent, Models } from "@earendil-works/pi-ai";
-import type { ModelRef } from "@earendil-works/pi-durable";
-import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node";
-import { DEFAULT_IMAGE_LIMITS, type ImageLimits, type ImageProcessor } from "@earendil-works/pi-durable/tools";
-import type { GitHubClient } from "../../contracts.ts";
-import { isIssueFileUrl, isIssueImageUrl, truncateUtf8 } from "../../github/attachments.ts";
+import { posix } from "node:path";
+import type { Context } from "@earendil-works/chord/context";
+import { type ExecutionEnv, getOrThrow } from "@earendil-works/pi-durable/env";
+import type { AttachmentDownload, GitHubClient } from "../../contracts.ts";
+import { isAttachmentUrl } from "../../github/attachments.ts";
+import { ATTACHMENT_LIMITS, type Attachment } from "../../runStatus.ts";
+import { cleanName, servedType, type Uploads } from "../../uploads.ts";
 
-export const MAX_ISSUE_IMAGES = 5;
-export const MAX_ISSUE_TEXTS = 5;
-export const MAX_ISSUE_TEXT_TOTAL_BYTES = 256 * 1024;
+/** Where a run's attached files go, relative to its worktree. */
+export const ATTACHMENTS_DIR = ".mike/attachments";
 
-/** The model's image limits, resolved as pi-durable's `read` tool resolves them. */
-export const modelImageLimits = (models: Models, ref: ModelRef | undefined): ImageLimits => {
-  const resize = ref && models.getModel(ref.provider, ref.modelId)?.inputLimits?.images?.resize;
-  return {
-    maxWidth: resize?.maxWidth ?? DEFAULT_IMAGE_LIMITS.maxWidth,
-    maxHeight: resize?.maxHeight ?? DEFAULT_IMAGE_LIMITS.maxHeight,
-    maxBytes: resize?.maxBytes ?? DEFAULT_IMAGE_LIMITS.maxBytes,
-  };
+/** A file for the agent: `label` names it in the prompt, `name` is its file name unless the bytes need an extension. */
+export type AttachmentSource = { label: string; name: string; load: () => Promise<AttachmentDownload> };
+
+/** GitHub's attachment URLs, whether in Markdown, HTML or plain text. */
+export const attachmentUrls = (text: string): string[] =>
+  (text.match(/https:\/\/[^\s)\]"'<>]+/gi) ?? []).map((url) => url.replace(/[.,;:!?]+$/, "")).filter(isAttachmentUrl);
+
+const urlName = (url: string) => {
+  try {
+    return cleanName(decodeURIComponent(new URL(url).pathname.split("/").at(-1)!));
+  } catch {
+    return "file";
+  }
 };
 
-let processor: Promise<ImageProcessor> | undefined;
+/** The GitHub attachments `bodies` link to, each once. */
+export const linkedFiles = (github: GitHubClient, repo: string, bodies: string[]): AttachmentSource[] =>
+  [...new Set(bodies.flatMap(attachmentUrls))].map((url) => ({
+    label: url,
+    name: urlName(url),
+    load: () => github.downloadAttachment(repo, url),
+  }));
 
-/** Decodes the image and scales it to `limits`, so a damaged or oversized one is skipped instead of failing the model request. */
-async function prepare(data: string, mimeType: string, limits: ImageLimits) {
-  // A pooled Buffer's memory cannot be transferred to Photon's worker thread; a plain copy can.
-  const bytes = Uint8Array.from(Buffer.from(data, "base64"));
-  try {
-    return await (processor ??= createNodePhotonImages()).then((images) => images.prepare(bytes, mimeType, limits));
-  } catch {
-    return undefined;
-  }
-}
+/** The owner's uploaded `attachments`. */
+export const uploadedFiles = (
+  uploads: Uploads,
+  repo: string,
+  issue: number,
+  attachments: readonly Attachment[],
+): AttachmentSource[] =>
+  attachments.map(({ id, name }) => ({
+    label: name,
+    name,
+    load: async () => {
+      const bytes = await uploads.read(repo, issue, id);
+      return bytes ? { ok: true, bytes } : { ok: false, reason: "the uploaded file is missing" };
+    },
+  }));
 
-/** GitHub's pasted attachment URLs, whether in Markdown, HTML or plain text. */
-const attachmentUrls = (text: string, accept: (url: string) => boolean): string[] =>
-  (text.match(/https:\/\/[^\s)\]"'<>]+/gi) ?? []).map((url) => url.replace(/[.,;:!?]+$/, "")).filter(accept);
+// GitHub's image links carry no extension, and `read` goes by the bytes, but a name the agent recognizes helps.
+const withExtension = (name: string, bytes: Uint8Array) => {
+  const type = servedType(bytes);
+  return type.startsWith("image/") && !/\.\w+$/.test(name) ? `${name}.${type.slice("image/".length)}` : name;
+};
 
-export const issueImageUrls = (text: string): string[] => attachmentUrls(text, isIssueImageUrl);
+const unique = (name: string, taken: Set<string>) => {
+  const dot = name.lastIndexOf(".");
+  const [stem, extension] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ""];
 
-/** Downloads are read-only and may repeat after a crash; submission deduplication keeps the message exactly once. */
-export async function loadIssueImages(github: GitHubClient, repo: string, bodies: string[], limits: ImageLimits) {
-  const images: ImageContent[] = [];
-  const notes: string[] = [];
+  let candidate = name;
+  for (let n = 2; taken.has(candidate); n++) candidate = `${stem}-${n}${extension}`;
+  taken.add(candidate);
+  return candidate;
+};
+
+/**
+ * Writes the files into the worktree's `ATTACHMENTS_DIR/<folder>/` through the runner, within the attachment limits,
+ * and returns one line per file for the prompt: its path, or why it was skipped. Loads are read-only, and a rerun after
+ * a crash writes the same files again.
+ */
+export async function placeAttachments(
+  env: ExecutionEnv,
+  worktree: string,
+  folder: string,
+  sources: readonly AttachmentSource[],
+  context: Context,
+): Promise<string[]> {
+  if (sources.length === 0) return [];
+
+  const root = posix.join(worktree, ATTACHMENTS_DIR);
+  const dir = posix.join(root, cleanName(folder));
+  getOrThrow(await env.createDir(dir, { recursive: true }, context));
+  // Ignored by git, so the files are never committed and never count as uncommitted changes.
+  getOrThrow(await env.writeFile(posix.join(root, ".gitignore"), "*\n", context));
+
+  const lines: string[] = [];
+  const taken = new Set<string>();
   let attempted = 0;
-  for (const url of new Set(bodies.flatMap(issueImageUrls))) {
-    if (attempted >= MAX_ISSUE_IMAGES) {
-      notes.push(`${url}: skipped (limit of ${MAX_ISSUE_IMAGES} image downloads).`);
+  let total = 0;
+
+  for (const { label, name, load } of sources) {
+    if (attempted >= ATTACHMENT_LIMITS.count) {
+      lines.push(`- ${label}: skipped (limit of ${ATTACHMENT_LIMITS.count} files per message)`);
       continue;
     }
     attempted++;
-    const result = await github.downloadIssueImage(repo, url);
-    const image = result.ok ? await prepare(result.image.data, result.image.mimeType, limits) : undefined;
-    if (image) {
-      images.push({ type: "image", data: image.data, mimeType: image.mimeType });
-      notes.push(`${url}: attached as image ${images.length}.`);
-    } else notes.push(`${url}: skipped (${result.ok ? "image cannot be decoded or scaled to fit" : result.reason}).`);
-  }
-  return { images, notes };
-}
 
-export interface IssueText {
-  url: string;
-  text: string;
-  truncated: boolean;
-}
-
-/** Like `loadIssueImages`, for text file attachments, within a total size budget across all of them. */
-export async function loadIssueTexts(github: GitHubClient, repo: string, bodies: string[]) {
-  const texts: IssueText[] = [];
-  const notes: string[] = [];
-  let attempted = 0;
-  let budget = MAX_ISSUE_TEXT_TOTAL_BYTES;
-  const overBudget = `total text limit of ${MAX_ISSUE_TEXT_TOTAL_BYTES / 1024} KiB reached`;
-
-  for (const url of new Set(bodies.flatMap((text) => attachmentUrls(text, isIssueFileUrl)))) {
-    if (attempted >= MAX_ISSUE_TEXTS) {
-      notes.push(`${url}: skipped (limit of ${MAX_ISSUE_TEXTS} file downloads).`);
-      continue;
-    }
-    if (budget === 0) {
-      notes.push(`${url}: skipped (${overBudget}).`);
-      continue;
-    }
-    attempted++;
-
-    const result = await github.downloadIssueText(repo, url);
+    const result = await load();
     if (!result.ok) {
-      notes.push(`${url}: skipped (${result.reason}).`);
+      lines.push(`- ${label}: skipped (${result.reason})`);
       continue;
     }
-
-    const bytes = Buffer.from(result.text);
-    const kept = truncateUtf8(bytes, budget);
-    if (kept.length === 0) {
-      notes.push(`${url}: skipped (${overBudget}).`);
+    if (total + result.bytes.length > ATTACHMENT_LIMITS.totalBytes) {
+      lines.push(`- ${label}: skipped (over ${ATTACHMENT_LIMITS.totalBytes / 1_000_000} MB per message)`);
       continue;
     }
-    budget -= kept.length;
+    total += result.bytes.length;
 
-    const truncated = result.truncated || kept.length < bytes.length;
-    texts.push({ url, text: kept.toString("utf8"), truncated });
-    notes.push(`${url}: attached as text below${truncated ? `, truncated to its first ${kept.length} bytes` : ""}.`);
+    const path = posix.join(dir, unique(withExtension(name, result.bytes), taken));
+    getOrThrow(await env.writeFile(path, result.bytes, context));
+
+    const shown = posix.relative(worktree, path);
+    lines.push(label === name ? `- ${shown}` : `- ${shown} (from ${label})`);
   }
-  return { texts, notes };
+  return lines;
 }

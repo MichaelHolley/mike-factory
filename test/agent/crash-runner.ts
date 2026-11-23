@@ -1,9 +1,8 @@
-import { writeFileSync } from "node:fs";
+import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { UserMessage } from "@earendil-works/pi-ai";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { openAgentHarness } from "../../src/agent/harness.ts";
-import { PNG_IMAGE } from "../fakes/github.ts";
+import { PNG } from "../fakes/github.ts";
 import {
   autopilot,
   conversationIdOf,
@@ -16,6 +15,7 @@ import {
   replyToReview,
   reviewFeedback,
   startAction,
+  textOf,
 } from "./support.ts";
 
 const dir = process.env.STATE_DIR!;
@@ -34,12 +34,11 @@ const runs = review
   ? [{ repo: REPO, issue: 1 }]
   : [...[1, 2, 3].map((issue) => ({ repo: REPO, issue })), { repo: OTHER_REPO, issue: 1 }];
 
-const ATTACHED_TEXT = "Attached notes: greet briefly.";
 if (mode === "first" || mode === "review-first") {
   const textUrl = "https://github.com/user-attachments/files/1/notes.txt";
   const imageUrl = "https://github.com/user-attachments/assets/reference";
-  world.github.addIssueImage(imageUrl, { ok: true, image: PNG_IMAGE });
-  world.github.addIssueText(textUrl, { ok: true, text: ATTACHED_TEXT, truncated: false });
+  world.github.addAttachment(imageUrl, PNG);
+  world.github.addAttachment(textUrl, "Attached notes: greet briefly.");
   for (const { repo, issue } of runs)
     world.github.addIssue(repo, {
       number: issue,
@@ -79,32 +78,32 @@ if (mode === "first") {
     issue: 1,
     id: "7d2f8c1e-5b3a-4c6d-9e8f-0a1b2c3d4e5f",
     text: "Keep it short.",
-    attachments: [{ id: "a".repeat(64), name: "shot.png", type: "image/png", size: 4_096 }],
+    attachments: [await world.deps.uploads.save(REPO, 1, new File([PNG], "shot.png"))],
   });
 }
 const outcomes = await Promise.all(runs.map(({ repo, issue }) => pipelineResult(harness, issue, repo)));
-type Part = Exclude<UserMessage["content"], string>[number];
-const userMessages = await Promise.all(
+const userTexts = await Promise.all(
   runs.map(async ({ repo, issue }) => {
     const conversation = (await harness.conversation((await conversationIdOf(harness, issue, repo))!, ctx))!;
-    return (await conversation.context(ctx)).messages.flatMap((message): Part[][] => {
-      if (message.role !== "user") return [];
-      return [typeof message.content === "string" ? [{ type: "text", text: message.content }] : message.content];
-    });
+    return (await conversation.context(ctx)).messages.flatMap((message) =>
+      message.role === "user" ? [textOf(message)] : [],
+    );
   }),
 );
-const count = (has: (part: Part) => boolean) =>
-  userMessages.map((messages) => messages.filter((parts) => parts.some(has)).length);
-const imageMessages = count((part) => part.type === "image");
-const textMessages = count((part) => part.type === "text" && part.text.includes(ATTACHED_TEXT));
+const count = (tag: string) => userTexts.map((texts) => texts.filter((text) => text.includes(tag)).length);
+const issueFiles = runs.map(({ repo, issue }) => {
+  const folder = join(world.deps.worktrees.worktreePath(repo, issue), ".mike/attachments/issue");
+  return existsSync(folder) ? readdirSync(folder).sort() : [];
+});
 const ownerAttachments = ((await service.transcript(REPO, 1)) ?? []).flatMap((item) =>
   item.kind === "human" ? (item.attachments ?? []).map(({ name }) => name) : [],
 );
 console.log(
   JSON.stringify({
     outcomes: outcomes.map((outcome) => outcome.status),
-    imageMessages,
-    textMessages,
+    issueFileMessages: count("<issue-files>"),
+    ownerFileMessages: count("<owner-files>"),
+    issueFiles,
     ownerAttachments,
   }),
 );

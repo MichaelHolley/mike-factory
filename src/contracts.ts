@@ -49,16 +49,8 @@ export interface IssueComment {
   createdAt: string;
 }
 
-/** Base64 image bytes, bounded and MIME-checked by the server's GitHub client. */
-export interface IssueImage {
-  data: string;
-  mimeType: string;
-}
-
-export type IssueImageDownload = { ok: true; image: IssueImage } | { ok: false; reason: string };
-
-/** `truncated` when the file was cut at a character boundary to fit the server's size limit. */
-export type IssueTextDownload = { ok: true; text: string; truncated: boolean } | { ok: false; reason: string };
+/** A GitHub attachment's bytes, within the upload size limit. */
+export type AttachmentDownload = { ok: true; bytes: Uint8Array } | { ok: false; reason: string };
 
 export interface PullRequestRef {
   number: number;
@@ -111,12 +103,10 @@ export interface GitHubClient {
   getIssue(repo: string, issue: number): Promise<IssueData>;
   listIssueComments(repo: string, issue: number): Promise<IssueComment[]>;
   /**
-   * Downloads only GitHub issue attachments, authenticated on the server; no credentials reach the runner.
-   * Never throws: skipped attachments and failures return `ok: false`.
+   * Downloads a GitHub attachment link of any type, authenticated on the server; no credentials reach the runner.
+   * Never throws: other URLs and failures return `ok: false`.
    */
-  downloadIssueImage(repo: string, url: string): Promise<IssueImageDownload>;
-  /** Like `downloadIssueImage`, for UTF-8 text file attachments. */
-  downloadIssueText(repo: string, url: string): Promise<IssueTextDownload>;
+  downloadAttachment(repo: string, url: string): Promise<AttachmentDownload>;
   /** Creates the comment, or edits the bot's existing comment that carries the same hidden `marker`. */
   upsertComment(repo: string, issue: number, marker: string, body: string): Promise<void>;
   findOpenPr(repo: string, head: string): Promise<PullRequestRef | undefined>;

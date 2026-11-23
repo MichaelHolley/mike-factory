@@ -5,6 +5,7 @@ import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 import type { FactoryConfig } from "../config.ts";
 import type { GitHubClient, IssueService, Worktrees } from "../contracts.ts";
 import type { BranchNamer } from "./branchNamer.ts";
+import type { Uploads } from "../uploads.ts";
 import type { Skill } from "./extensions/skills.ts";
 import { createAgentRegistry } from "./registry.ts";
 import { createIssueService } from "./service.ts";
@@ -13,6 +14,8 @@ export interface AgentDeps {
   config: FactoryConfig;
   github: GitHubClient;
   worktrees: Worktrees;
+  /** The owner's uploads, for the images the agent gets with their messages. */
+  uploads: Uploads;
   /** Where the agent's tools run for a conversation whose agent works in `cwd`. */
   env: (cwd: string) => ExecutionEnv;
   log?: (msg: string, data?: object) => void;

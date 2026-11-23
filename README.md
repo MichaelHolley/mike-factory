@@ -9,7 +9,7 @@ A self-hosted coding agent that turns a GitHub issue into a pull request. Commen
 - `/mike stop` aborts the run.
 - On mike's PR, request changes or comment `/mike <text>` (including inline) to have it revise the PR. It replies in the threads and re-requests your review.
 
-Screenshots and text files (logs, JSON, CSV) dropped into the issue or its comments are shown to the agent, up to five of each per run; binary files and some private-repository attachments are skipped.
+Files attached to the issue or its comments, to a message on the run page, or to a `/mike` PR comment or review are saved in the agent's worktree for it to open, whatever their type: up to 10 per message, 10 MB each and 25 MB in total. Some private-repository attachments can't be downloaded and are skipped.
 
 Progress appears in a single status comment on the issue, or on the PR for runs started there. A status page lists all runs live, shows each agent's conversation, and lets you steer a running agent or continue a finished one.
 

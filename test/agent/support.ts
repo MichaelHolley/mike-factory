@@ -21,6 +21,7 @@ import { stringify } from "yaml";
 import type { FactoryConfig, RepoSettings } from "../../src/config.ts";
 import { issueKey, type GitHubClient } from "../../src/contracts.ts";
 import { createWorktrees } from "../../src/git/worktrees.ts";
+import { createUploads } from "../../src/uploads.ts";
 import { FakeGitHub, type FakeGitHubState } from "../fakes/github.ts";
 
 export const OWNER = "acme";
@@ -75,8 +76,7 @@ const FAKE_CLIENT_METHODS: Record<keyof GitHubClient, true> = {
   defaultBranch: true,
   getIssue: true,
   listIssueComments: true,
-  downloadIssueImage: true,
-  downloadIssueText: true,
+  downloadAttachment: true,
   upsertComment: true,
   findOpenPr: true,
   createPr: true,
@@ -156,6 +156,7 @@ export function createWorld(opts: {
     config,
     github,
     worktrees,
+    uploads: createUploads(join(opts.dir, "data", "uploads")),
     env: (cwd) => new NodeExecutionEnv({ cwd }),
     log: (msg, data) => logs.push({ msg, data }),
     maxConcurrent: opts.maxConcurrent,
