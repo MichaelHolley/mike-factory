@@ -116,7 +116,10 @@ export async function verifyWebhook(input: {
       instructions: command.instructions,
     };
   }
-  return { ...command, repo, issue, requestId: `comment-${commentId}` };
+
+  const requestId = `comment-${commentId}`;
+  if (command.kind === "stop") return { kind: "stop", repo, issue, requestId };
+  return { ...command, repo, issue, requestId, reviewer: payload.sender?.login ?? "" };
 }
 
 const HANDLED_EVENTS = new Set(["issue_comment", "pull_request", "pull_request_review", "pull_request_review_comment"]);

@@ -796,6 +796,18 @@ describe("issue pipeline", () => {
       expect(git(world.remote, "ls-tree", "--name-only", "mike/1-add-hello")).not.toContain("broken.txt");
     });
 
+    it("requests a review from the sender who started the run", async () => {
+      const world = createWorld({ dir });
+      autopilot(world.faux);
+      const { harness, service } = await launch(world);
+
+      await service.start(startAction(1, "comment-1", "", REPO, "sender"));
+      expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+      const pr = world.github.prs[0]!.number;
+      expect(world.github.reviewRequests).toEqual([{ repo: REPO, pr, login: "sender" }]);
+    });
+
     it("keeps the reviewer through a failed round and re-requests once a later round finishes", async () => {
       const world = createWorld({ dir, repo: { checks: ["test ! -f broken.txt"] }, config: { maxFixAttempts: 1 } });
       autopilot(world.faux, (messages) => {

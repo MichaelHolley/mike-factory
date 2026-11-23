@@ -4,7 +4,7 @@ A self-hosted coding agent that turns a GitHub issue into a pull request. Commen
 
 ## Usage
 
-- `/mike` starts a run on the issue; `/mike <text>` adds instructions.
+- `/mike` starts a run on the issue and requests your review on its PR; `/mike <text>` adds instructions.
 - `/mike` on an issue with an open agent PR continues on that PR.
 - `/mike stop` aborts the run.
 - On mike's PR, request changes or comment `/mike <text>` (including inline) to have it revise the PR. It replies in the threads and re-requests your review.

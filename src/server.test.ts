@@ -94,6 +94,7 @@ describe("webhook server", () => {
       issue: 12,
       requestId: "comment-5",
       instructions: "",
+      reviewer: "",
     });
   });
 

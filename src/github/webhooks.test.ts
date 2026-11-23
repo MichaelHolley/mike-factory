@@ -9,7 +9,7 @@ const payload = (overrides: Record<string, unknown> = {}) => ({
   action: "created",
   comment: { id: 99, body: "/mike" },
   issue: { number: 12 },
-  sender: { id: 42 },
+  sender: { id: 42, login: "octocat" },
   repository: { name: "widgets", owner: { login: "Acme" } },
   ...overrides,
 });
@@ -34,6 +34,7 @@ describe("verifyWebhook", () => {
       issue: 12,
       requestId: "comment-99",
       instructions: "",
+      reviewer: "octocat",
     });
     expect(await run(payload({ comment: { id: 99, body: "/mike stop" } }))).toEqual({
       kind: "stop",
