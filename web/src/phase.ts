@@ -23,16 +23,16 @@ export type StepState = "passed" | "current" | "pending";
 const FLOW = ["queued", "prepare", "implement", "verify", "fix", "revise", "publish", "report"] as const;
 const OUTCOMES: readonly IssuePhase[] = ["review", "merged", "closed", "done", "failed", "aborted"];
 
-// Hue says who has the run: muted while it waits, blue while mike works, then the outcome. The icon names the step.
+// Hue says who has the run: muted while it waits, blue while mike writes code, amber while it checks and wraps up, then the outcome. The icon names the step.
 export const stepLook: Record<IssuePhase, { icon: Component; hue: string }> = {
   queued: { icon: Hourglass, hue: "text-muted" },
   prepare: { icon: FolderGit2, hue: "text-muted" },
   implement: { icon: Code, hue: "text-run" },
-  verify: { icon: FlaskConical, hue: "text-run" },
-  fix: { icon: Wrench, hue: "text-run" },
-  revise: { icon: MessageSquareReply, hue: "text-run" },
-  publish: { icon: GitPullRequestArrow, hue: "text-run" },
-  report: { icon: MessageSquareText, hue: "text-run" },
+  verify: { icon: FlaskConical, hue: "text-wrap" },
+  fix: { icon: Wrench, hue: "text-wrap" },
+  revise: { icon: MessageSquareReply, hue: "text-wrap" },
+  publish: { icon: GitPullRequestArrow, hue: "text-wrap" },
+  report: { icon: MessageSquareText, hue: "text-wrap" },
   review: { icon: Eye, hue: "text-ok" },
   merged: { icon: GitMerge, hue: "text-merged" },
   closed: { icon: GitPullRequestClosed, hue: "text-halt" },
