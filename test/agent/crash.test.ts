@@ -44,7 +44,7 @@ describe("restart safety", () => {
       const second = await runProcess(dir, "second");
       expect(second.code, second.stderr).toBe(0);
       expect(second.stdout).toContain('"outcomes":["completed","completed","completed","completed"]');
-      expect(second.stdout).toContain('"imageMessages":[1,1,1,1],"textMessages":[1,1,1,1]');
+      expect(second.stdout).toContain('"attachmentMessages":[1,1,1,1]');
 
       const github = JSON.parse(readFileSync(join(dir, "github.json"), "utf8")) as FakeGitHubState;
       expect(github.prs.map((pr) => `${pr.repo}:${pr.head}:${pr.state}`).sort()).toEqual([
@@ -75,7 +75,7 @@ describe("restart safety", () => {
     const second = await runProcess(dir, "review-second");
     expect(second.code, second.stderr).toBe(0);
     expect(second.stdout).toContain('"outcomes":["completed"]');
-    expect(second.stdout).toContain('"imageMessages":[1],"textMessages":[1]');
+    expect(second.stdout).toContain('"attachmentMessages":[1]');
 
     const github = JSON.parse(readFileSync(join(dir, "github.json"), "utf8")) as FakeGitHubState;
     // The exit came between posting and recording the reply, so the rerun posts again and its marker finds the first.

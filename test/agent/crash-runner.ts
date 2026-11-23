@@ -1,9 +1,8 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { UserMessage } from "@earendil-works/pi-ai";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { openAgentHarness } from "../../src/agent/harness.ts";
-import { PNG_IMAGE } from "../fakes/github.ts";
+import { PNG_BYTES } from "../fakes/github.ts";
 import {
   autopilot,
   conversationIdOf,
@@ -16,6 +15,7 @@ import {
   replyToReview,
   reviewFeedback,
   startAction,
+  textOf,
 } from "./support.ts";
 
 const dir = process.env.STATE_DIR!;
@@ -38,8 +38,8 @@ const ATTACHED_TEXT = "Attached notes: greet briefly.";
 if (mode === "first" || mode === "review-first") {
   const textUrl = "https://github.com/user-attachments/files/1/notes.txt";
   const imageUrl = "https://github.com/user-attachments/assets/reference";
-  world.github.addIssueImage(imageUrl, { ok: true, image: PNG_IMAGE });
-  world.github.addIssueText(textUrl, { ok: true, text: ATTACHED_TEXT, truncated: false });
+  world.github.addAttachment(imageUrl, PNG_BYTES);
+  world.github.addAttachment(textUrl, ATTACHED_TEXT);
   for (const { repo, issue } of runs)
     world.github.addIssue(repo, {
       number: issue,
@@ -77,20 +77,18 @@ if (mode === "first") {
   await service.message({ repo: REPO, issue: 1, id: "7d2f8c1e-5b3a-4c6d-9e8f-0a1b2c3d4e5f", text: "Keep it short." });
 }
 const outcomes = await Promise.all(runs.map(({ repo, issue }) => pipelineResult(harness, issue, repo)));
-type Part = Exclude<UserMessage["content"], string>[number];
-const userMessages = await Promise.all(
+// Each run's implement message lists its files once, and they are on disk whole.
+const attachmentMessages = await Promise.all(
   runs.map(async ({ repo, issue }) => {
+    const notes = join(world.deps.worktrees.attachmentsPath(repo, issue), "issue", "notes.txt");
+    if (readFileSync(notes, "utf8") !== ATTACHED_TEXT) return -1;
+
     const conversation = (await harness.conversation((await conversationIdOf(harness, issue, repo))!, ctx))!;
-    return (await conversation.context(ctx)).messages.flatMap((message): Part[][] => {
-      if (message.role !== "user") return [];
-      return [typeof message.content === "string" ? [{ type: "text", text: message.content }] : message.content];
-    });
+    return (await conversation.context(ctx)).messages.filter(
+      (message) => message.role === "user" && textOf(message).includes(`- ${notes} (from `),
+    ).length;
   }),
 );
-const count = (has: (part: Part) => boolean) =>
-  userMessages.map((messages) => messages.filter((parts) => parts.some(has)).length);
-const imageMessages = count((part) => part.type === "image");
-const textMessages = count((part) => part.type === "text" && part.text.includes(ATTACHED_TEXT));
-console.log(JSON.stringify({ outcomes: outcomes.map((outcome) => outcome.status), imageMessages, textMessages }));
+console.log(JSON.stringify({ outcomes: outcomes.map((outcome) => outcome.status), attachmentMessages }));
 await harness.close(ctx);
 process.exit(0);
