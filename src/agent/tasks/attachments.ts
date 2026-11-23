@@ -2,6 +2,7 @@ import { posix } from "node:path";
 import type { Context } from "@earendil-works/chord/context";
 import { type ExecutionEnv, getOrThrow } from "@earendil-works/pi-durable/env";
 import type { GitHubClient } from "../../contracts.ts";
+import type { AttachedFile } from "../../runStatus.ts";
 import { isAttachmentUrl } from "../../github/attachments.ts";
 import { imageHeader } from "../images.ts";
 
@@ -119,6 +120,30 @@ export async function placeAttachments(
     }
   }
   return placed;
+}
+
+const ATTACHMENTS_BLOCK = /<attachments>\n([\s\S]*?)\n<\/attachments>/g;
+const STORED_LINE = /^- .+\/([^/\s]+)\/([^/\s]+) \(from (https:\/\/\S+)\)$/;
+const SKIPPED_LINE = /^- (https:\/\/\S+): skipped \((.*)\)$/;
+
+/**
+ * The files `attachmentsSection` listed in `prompt`, by their `<folder>/<name>` under the issue's attachments. Only the
+ * last block counts, since untrusted issue text comes before it.
+ */
+export function attachedFiles(prompt: string): AttachedFile[] {
+  const block = [...prompt.matchAll(ATTACHMENTS_BLOCK)].at(-1)?.[1] ?? "";
+
+  return block.split("\n").flatMap((line): AttachedFile[] => {
+    const stored = STORED_LINE.exec(line);
+    if (stored) return [{ name: stored[2]!, source: stored[3]!, path: `${stored[1]}/${stored[2]}` }];
+
+    const skipped = SKIPPED_LINE.exec(line);
+    if (!skipped) return [];
+
+    const source = skipped[1]!;
+    const name = (URL.canParse(source) && nameFromUrl(source)) || "attachment";
+    return [{ name, source, skipped: skipped[2]! }];
+  });
 }
 
 /** Lists the files for the prompt, without their content, after `intro`; undefined when there are none. */

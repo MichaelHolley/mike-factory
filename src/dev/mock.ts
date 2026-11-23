@@ -1,3 +1,4 @@
+import { deflateSync } from "node:zlib";
 import { serve } from "@hono/node-server";
 import { branchName, branchSlug, type IssueService } from "../contracts.ts";
 import type { PrState, RunStatus, TranscriptItem } from "../runStatus.ts";
@@ -32,6 +33,69 @@ function run(
   };
 }
 
+const crcTable = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+const crc32 = (bytes: Buffer) => (bytes.reduce((c, byte) => crcTable[(c ^ byte) & 0xff]! ^ (c >>> 8), ~0) ^ ~0) >>> 0;
+
+const chunk = (type: string, data: Buffer) => {
+  const body = Buffer.concat([Buffer.from(type, "latin1"), data]);
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(body));
+  return Buffer.concat([length, body, crc]);
+};
+
+/** A `width`×`height` RGB PNG that looks like a page screenshot: a header bar over rows of text lines. */
+function screenshot(width: number, height: number, dark: boolean): Buffer {
+  const [page, bar, line] = dark
+    ? [
+        [22, 25, 30],
+        [36, 71, 245],
+        [58, 63, 71],
+      ]
+    : [
+        [255, 255, 255],
+        [36, 71, 245],
+        [214, 218, 224],
+      ];
+
+  const rows = Array.from({ length: height }, (_, y) => {
+    const row = Buffer.alloc(1 + width * 3);
+    for (let x = 0; x < width; x++) {
+      const inText = y > 70 && y % 28 < 10 && x > 32 && x < width - 32 - ((y * 7) % 180);
+      const color = (y < 48 && bar) || (inText && line) || page;
+      row.set(color, 1 + x * 3);
+    }
+    return row;
+  });
+
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header.set([8, 2, 0, 0, 0], 8);
+
+  return Buffer.concat([
+    Buffer.from("\x89PNG\r\n\x1a\n", "latin1"),
+    chunk("IHDR", header),
+    chunk("IDAT", deflateSync(Buffer.concat(rows))),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+const SAMPLE_FILES: Record<string, Buffer> = {
+  "issue/image-1.png": screenshot(960, 600, false),
+  "issue/image-2.png": screenshot(600, 900, true),
+  "issue/server.log": Buffer.from("12:04:31 GET /status 200 4ms\n12:04:32 GET /status/stream 200 open\n"),
+  "review-1/image-1.png": screenshot(390, 760, true),
+};
+
+const ASSET = "https://github.com/user-attachments/assets";
+const FILES = "https://github.com/user-attachments/files";
+
 const sampleConversation = (): TranscriptItem[] => [
   {
     kind: "user",
@@ -52,6 +116,16 @@ const sampleConversation = (): TranscriptItem[] => [
       "",
       "The web UI lives in `web/` and uses Vue 3 with plain CSS custom properties in `web/src/style.css`.",
     ].join("\n"),
+    files: [
+      { name: "image-1.png", source: `${ASSET}/1f0c`, path: "issue/image-1.png" },
+      { name: "image-2.png", source: `${ASSET}/2a7d`, path: "issue/image-2.png" },
+      { name: "server.log", source: `${FILES}/3/server.log`, path: "issue/server.log" },
+      {
+        name: "night-mode-research.pdf",
+        source: `${FILES}/4/night-mode-research.pdf`,
+        skipped: "file exceeds the 10 MiB size limit",
+      },
+    ],
   },
 
   {
@@ -119,6 +193,7 @@ const sampleConversation = (): TranscriptItem[] => [
         },
       ],
     },
+    files: [{ name: "image-1.png", source: `${ASSET}/9c3e`, path: "review-1/image-1.png" }],
   },
 ];
 
@@ -293,6 +368,7 @@ function createMockService(): IssueService {
     sweep: async () => {},
     status: async () => runs,
     transcript: async (repo, issue) => items(key(repo, issue)),
+    attachment: async (repo, issue, path) => (conversations.has(key(repo, issue)) ? SAMPLE_FILES[path] : undefined),
     subscribeStatus(listener) {
       statusListeners.add(listener);
       return () => void statusListeners.delete(listener);

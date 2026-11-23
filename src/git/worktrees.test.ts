@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -54,6 +54,20 @@ afterEach(async () => {
 });
 
 describe("createWorktrees", () => {
+  it("reads a stored attachment, but nothing outside the issue's attachments or behind a link", async () => {
+    const folder = join(worktrees.attachmentsPath(repo, 3), "issue");
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, "build.log"), "ok\n");
+    await writeFile(join(dataDir, "secret.txt"), "secret\n");
+    await symlink(join(dataDir, "secret.txt"), join(folder, "link.txt"));
+
+    expect(Buffer.from((await worktrees.attachment(repo, 3, "issue/build.log"))!).toString()).toBe("ok\n");
+    expect(await worktrees.attachment(repo, 3, "issue/link.txt")).toBeUndefined();
+    expect(await worktrees.attachment(repo, 3, "issue/missing.log")).toBeUndefined();
+    expect(await worktrees.attachment(repo, 3, "../../../secret.txt")).toBeUndefined();
+    expect(await worktrees.attachment("..", 3, "../secret.txt")).toBeUndefined();
+  });
+
   it("creates a bare clone and a worktree on the issue branch", async () => {
     const info = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
     expect(info).toEqual({

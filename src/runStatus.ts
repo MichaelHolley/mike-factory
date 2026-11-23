@@ -27,11 +27,14 @@ export type ReviewCard = {
   comments: { path: string; line: number | null; body: string; url: string }[];
 };
 
+/** A file attached to a message: stored at `path`, `<folder>/<name>` under the issue's attachments, or skipped. */
+export type AttachedFile = { name: string; source: string } & ({ path: string } | { skipped: string });
+
 export type TranscriptItem =
-  | { kind: "user"; text: string }
+  | { kind: "user"; text: string; files?: AttachedFile[] }
   /** `streaming`: still being written. `interrupted`: cut off before it was finished. */
   | { kind: "assistant"; text: string; streaming?: true; interrupted?: true }
-  | { kind: "human"; text: string; pending?: true; review?: ReviewCard }
+  | { kind: "human"; text: string; pending?: true; review?: ReviewCard; files?: AttachedFile[] }
   | {
       kind: "tool";
       name: string;

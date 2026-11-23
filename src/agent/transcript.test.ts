@@ -112,6 +112,29 @@ describe("toTranscript", () => {
     ]);
   });
 
+  it("lists the files each prompt names, for the pipeline's prompts and owner messages", () => {
+    const section = (path: string) =>
+      `Files.\n<attachments>\n- /data/attachments/r/issue-1/${path} (from https://github.com/user-attachments/files/1/a.log)\n</attachments>`;
+    const file = (path: string) => ({
+      name: "a.log",
+      source: "https://github.com/user-attachments/files/1/a.log",
+      path,
+    });
+    const entries = entriesOf([
+      { role: "user", content: `Implement it\n\n${section("issue/a.log")}`, timestamp: 1 } as Message,
+      {
+        kind: HUMAN_ENTRY,
+        data: { id: "a", text: "See the log" },
+        model: [{ role: "user", content: section("note-a/a.log"), timestamp: 2 } as Message],
+      },
+    ]);
+
+    expect(toTranscript(entries)).toMatchObject([
+      { kind: "user", files: [file("issue/a.log")] },
+      { kind: "human", text: "See the log", files: [file("note-a/a.log")] },
+    ]);
+  });
+
   it("shows a review note with its review card", () => {
     const review = {
       reviewer: "owner",

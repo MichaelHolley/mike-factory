@@ -27,6 +27,7 @@ function setup(uiDir = join(tmpdir(), "mike-factory-no-such-ui"), proxySecret?: 
     sweep: vi.fn(async () => {}),
     status: vi.fn(async () => []),
     transcript: vi.fn(async () => undefined),
+    attachment: vi.fn(async () => undefined),
     subscribeStatus: vi.fn(subscribe),
     watchTranscript: vi.fn(async () => undefined),
   };
@@ -129,6 +130,31 @@ describe("webhook server", () => {
     );
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(await response.text()).toBe(JSON.stringify(transcript, null, 2));
+  });
+
+  it("opens attached images in the browser and downloads every other file", async () => {
+    const { app, service } = setup();
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGP4z8DwH4QZYAwAR8oH+WdZbrcAAAAASUVORK5CYII=",
+      "base64",
+    );
+    vi.mocked(service.attachment).mockImplementation(async (_repo, _issue, path) =>
+      path.endsWith(".png") ? png : Buffer.from("<script>alert(1)</script>"),
+    );
+
+    const image = await app.request("/status/widgets/12/files/issue/image-1.png");
+    expect(image.headers.get("Content-Type")).toBe("image/png");
+    expect(image.headers.get("Content-Disposition")).toBe('inline; filename="image-1.png"');
+    expect(Buffer.from(await image.arrayBuffer())).toEqual(png);
+    expect(service.attachment).toHaveBeenLastCalledWith("widgets", 12, "issue/image-1.png");
+
+    const page = await app.request("/status/widgets/12/files/issue/page.html");
+    expect(page.headers.get("Content-Type")).toBe("application/octet-stream");
+    expect(page.headers.get("Content-Disposition")).toBe('attachment; filename="page.html"');
+    expect(page.headers.get("Content-Security-Policy")).toBe("default-src 'none'; sandbox");
+
+    vi.mocked(service.attachment).mockResolvedValue(undefined);
+    expect((await app.request("/status/widgets/12/files/issue/gone.log")).status).toBe(404);
   });
 
   it("streams the full run list first, then only the changed tail", async () => {
