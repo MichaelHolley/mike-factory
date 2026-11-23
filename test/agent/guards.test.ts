@@ -66,6 +66,7 @@ describe("pathToolViolation", () => {
     ["read", "src/index.ts"],
     ["write", `${worktree}/notes.md`],
     ["read", `${attachments}/issue/image-1.png`],
+    ["read", "@src/index.ts"],
   ])("allows %s of %s", (tool, path) => {
     expect(pathToolViolation(tool, path, dirs)).toBeUndefined();
   });
@@ -75,6 +76,10 @@ describe("pathToolViolation", () => {
     ["edit", "../../../attachments/demo/issue-1/issue/build.log", "read-only"],
     ["read", "../issue-2/secret.txt", "outside"],
     ["read", "/data/attachments/demo/issue-2/issue/x.png", "outside"],
+    ["write", `@${attachments}/issue/build.log`, "read-only"],
+    ["read", "@/etc/passwd", "outside"],
+    ["read", "~/.ssh/id_ed25519", "plain path"],
+    ["read", "file:///etc/passwd", "plain path"],
   ])("blocks %s of %s", (tool, path, reason) => {
     expect(pathToolViolation(tool, path, dirs)).toContain(reason);
   });

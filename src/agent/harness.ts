@@ -6,6 +6,7 @@ import type { FactoryConfig } from "../config.ts";
 import type { GitHubClient, IssueService, Worktrees } from "../contracts.ts";
 import type { BranchNamer } from "./branchNamer.ts";
 import type { Skill } from "./extensions/skills.ts";
+import { capReads } from "./images.ts";
 import { createAgentRegistry } from "./registry.ts";
 import { createIssueService } from "./service.ts";
 
@@ -42,7 +43,7 @@ export async function openAgentHarness(
     {
       models: opts.models,
       registry,
-      env: ({ cwd }) => (cwd === undefined ? undefined : opts.deps.env(cwd)),
+      env: ({ cwd }) => (cwd === undefined ? undefined : capReads(opts.deps.env(cwd))),
       onReport: ({ error, ...info }) =>
         log("harness report", {
           ...info,

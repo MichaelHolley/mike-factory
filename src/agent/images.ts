@@ -1,8 +1,32 @@
+import { err, type ExecutionEnv, FileError } from "@earendil-works/pi-durable/env";
 import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node";
 import type { ImageProcessor } from "@earendil-works/pi-durable/tools";
 
 // Decoding takes 4 bytes per pixel, so a small file declaring huge dimensions would take gigabytes of memory.
 export const MAX_IMAGE_PIXELS = 50_000_000;
+export const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
+
+/**
+ * `env`, except that a single read of more than `MAX_IMAGE_BYTES` fails. With an image processor, `read` loads a whole
+ * image into the server at once, before any header check; text it reads in small chunks.
+ */
+export function capReads(env: ExecutionEnv): ExecutionEnv {
+  const open = env.openBinaryReader.bind(env);
+
+  env.openBinaryReader = async (path, options, context) => {
+    const opened = await open(path, options, context);
+    if (!opened.ok) return opened;
+
+    const reader = opened.value;
+    const read = reader.read.bind(reader);
+    reader.read = async (offset, length, readContext) =>
+      length > MAX_IMAGE_BYTES
+        ? err(new FileError("invalid", `${path} is larger than ${MAX_IMAGE_BYTES / (1024 * 1024)} MiB`, path))
+        : read(offset, length, readContext);
+    return opened;
+  };
+  return env;
+}
 
 type Size = { width: number; height: number };
 

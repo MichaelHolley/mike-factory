@@ -1,7 +1,13 @@
+import { mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
+import { getOrThrow } from "@earendil-works/pi-durable/env";
+import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { DEFAULT_IMAGE_LIMITS, type ImageProcessor } from "@earendil-works/pi-durable/tools";
 import { describe, expect, it, vi } from "vitest";
 import { PNG_BYTES } from "../../test/fakes/github.ts";
-import { checkedImages } from "./images.ts";
+import { capReads, checkedImages, MAX_IMAGE_BYTES } from "./images.ts";
 
 const png = PNG_BYTES;
 
@@ -112,5 +118,29 @@ describe("checkedImages", () => {
     });
     const header = Buffer.from(image!.data, "base64");
     expect([header.readUInt32BE(16), header.readUInt32BE(20)]).toEqual([1, 1]);
+  });
+});
+
+describe("capReads", () => {
+  it("refuses to load a file larger than the cap at once, but still reads it in chunks", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "cap-reads-"));
+    try {
+      const path = join(dir, "huge.png");
+      await writeFile(path, PNG_BYTES);
+      await truncate(path, MAX_IMAGE_BYTES + 1);
+
+      const reader = getOrThrow(
+        await capReads(new NodeExecutionEnv({ cwd: dir })).openBinaryReader(path, undefined, ctx),
+      );
+      try {
+        const whole = await reader.read(0, MAX_IMAGE_BYTES + 1, ctx);
+        expect(whole.ok ? undefined : whole.error.message).toMatch(/larger than 32 MiB/);
+        expect(getOrThrow(await reader.read(0, PNG_BYTES.length, ctx))).toEqual(new Uint8Array(PNG_BYTES));
+      } finally {
+        await reader.close(ctx);
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

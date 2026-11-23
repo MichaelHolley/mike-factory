@@ -79,7 +79,12 @@ export function bashViolation(command: string, dirs: IssueDirs): string | undefi
 
 /** Returns why `read`, `write` or `edit` must not touch `path`, relative to the worktree, or undefined when it may. */
 export function pathToolViolation(tool: string, path: string, dirs: IssueDirs): string | undefined {
-  const resolved = posix.resolve(dirs.worktree, path);
+  // Normalized as pi-durable's tools do, so the guard judges the path they open.
+  const normalized = path.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ").replace(/^@/, "");
+  // The tools expand these against the runner's home or a URL, which the guard can't resolve the same way.
+  if (/^(~|file:)/.test(normalized)) return `use a plain path, not ~ or file: ${path}`;
+
+  const resolved = posix.resolve(dirs.worktree, normalized);
   const writes = tool !== "read";
   if (writes && inside(resolved, dirs.attachments)) return `attached files are read-only: ${path}`;
 
