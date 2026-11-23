@@ -136,7 +136,7 @@ export function createIssueService(opts: {
   const launch = async (
     conversationId: ConversationId | undefined,
     input: PipelineInput,
-    statusOn: number | null = null,
+    { statusOn = null, reviewer = "" }: { statusOn?: number | null; reviewer?: string } = {},
   ) => {
     const { repo, issue, requestId } = input;
     const key = issueKey(config.owner, repo, issue);
@@ -189,6 +189,7 @@ export function createIssueService(opts: {
         statusOn,
         startedAt: now,
         updatedAt: now,
+        ...(reviewer && { reviewer }),
       });
     }, context);
 
@@ -280,7 +281,7 @@ export function createIssueService(opts: {
   };
 
   return {
-    start: ({ repo, issue, requestId, instructions }) =>
+    start: ({ repo, issue, requestId, instructions, reviewer }) =>
       mutex.run(async () => {
         const { key, conversationId, state } = await lookup(repo, issue);
         if (state?.requestId === requestId) return log("start ignored: request already handled", { key, requestId });
@@ -288,7 +289,7 @@ export function createIssueService(opts: {
           return log("start ignored: pipeline already running", { key, requestId });
         }
 
-        await launch(conversationId, { repo, issue, requestId, instructions, trigger: "comment" });
+        await launch(conversationId, { repo, issue, requestId, instructions, trigger: "comment" }, { reviewer });
       }),
 
     message: ({ repo, issue, id, text }) =>
@@ -337,7 +338,7 @@ export function createIssueService(opts: {
         if (!pending) return log("feedback ignored: already delivered", { key, id });
 
         const input = { repo, issue: target.issue, requestId: id, instructions: "", trigger: "pr" } as const;
-        await launch(conversation.id, input, number);
+        await launch(conversation.id, input, { statusOn: number });
       }),
 
     stop: (action) =>

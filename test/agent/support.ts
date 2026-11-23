@@ -205,8 +205,8 @@ export const commitFile = (path: string, content: string, subject = `feat: add $
 export const draftPr = (title: string, body: string) =>
   fauxAssistantMessage(fauxToolCall("draft_pull_request", { title, body }), { stopReason: "toolUse" });
 
-export const startAction = (issue: number, requestId: string, instructions = "", repo = REPO) =>
-  ({ kind: "start", repo, issue, requestId, instructions }) as const;
+export const startAction = (issue: number, requestId: string, instructions = "", repo = REPO, reviewer = "") =>
+  ({ kind: "start", repo, issue, requestId, instructions, reviewer }) as const;
 export const stopAction = (issue: number, requestId: string) =>
   ({ kind: "stop", repo: REPO, issue, requestId }) as const;
 

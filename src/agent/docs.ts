@@ -49,7 +49,7 @@ export type IssueStateValue = {
   /** Issue or PR number that carries the run's status comment; null means the issue. */
   statusOn?: number | null;
   prNumber?: number | null;
-  /** Login whose review the run re-requests when it finishes; set by PR feedback. */
+  /** Login whose review the run requests when it finishes; set by the `/mike` comment or PR feedback that started it. */
   reviewer?: string | null;
   /** Branch head `publish` last pushed. */
   pushedHead?: string | null;

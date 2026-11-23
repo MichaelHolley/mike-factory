@@ -182,7 +182,7 @@ export interface Worktrees {
 
 export type WebhookAction =
   /** `requestId` is `comment-<id>` of the triggering comment, so a redelivered webhook maps to the same run. */
-  | { kind: "start"; repo: string; issue: number; requestId: string; instructions: string }
+  | { kind: "start"; repo: string; issue: number; requestId: string; instructions: string; reviewer: string }
   | { kind: "stop"; repo: string; issue: number; requestId: string }
   /** An agent PR was merged, closed or reopened. */
   | { kind: "pr-state"; repo: string; issue: number; branch: string; state: PrState }
