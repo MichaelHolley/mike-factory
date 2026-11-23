@@ -1,11 +1,10 @@
 import {
+  type AttachmentDownload,
   issueOfBranch,
   type GitHubClient,
   type GitIdentity,
   type IssueComment,
   type IssueData,
-  type IssueImageDownload,
-  type IssueTextDownload,
   type PullRequestInfo,
   type PullRequestRef,
   type ReviewFeedback,
@@ -62,16 +61,18 @@ export interface FakeReviewComment {
   inReplyTo: number | null;
 }
 
-/** A decodable 2x2 PNG, for images the pipeline must prepare for the model. */
-export const PNG_IMAGE = {
-  mimeType: "image/png",
-  data: "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGP4z8DwH4QZYAwAR8oH+WdZbrcAAAAASUVORK5CYII=",
-};
+/** A decodable 2x2 PNG. */
+export const PNG_BYTES = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGP4z8DwH4QZYAwAR8oH+WdZbrcAAAAASUVORK5CYII=",
+  "base64",
+);
+
+/** Base64 bytes, so the state survives JSON. */
+type StoredAttachment = { ok: true; data: string } | { ok: false; reason: string };
 
 export interface FakeGitHubState {
   issues: FakeIssue[];
-  images: [string, IssueImageDownload][];
-  texts: [string, IssueTextDownload][];
+  attachments: [string, StoredAttachment][];
   comments: FakeComment[];
   prs: FakePr[];
   reviews: FakeReview[];
@@ -84,8 +85,7 @@ export interface FakeGitHubState {
 
 export class FakeGitHub implements GitHubClient {
   private issues = new Map<string, FakeIssue>();
-  private images = new Map<string, IssueImageDownload>();
-  private texts = new Map<string, IssueTextDownload>();
+  private attachments = new Map<string, StoredAttachment>();
   private commentList: FakeComment[] = [];
   private prList: FakePr[] = [];
   private reviewList: FakeReview[] = [];
@@ -98,8 +98,7 @@ export class FakeGitHub implements GitHubClient {
   static fromJSON(state: FakeGitHubState): FakeGitHub {
     const fake = new FakeGitHub();
     for (const issue of state.issues) fake.issues.set(fake.key(issue.repo, issue.number), issue);
-    fake.images = new Map(state.images);
-    fake.texts = new Map(state.texts);
+    fake.attachments = new Map(state.attachments);
     fake.commentList = state.comments;
     fake.prList = state.prs;
     fake.reviewList = state.reviews;
@@ -114,8 +113,7 @@ export class FakeGitHub implements GitHubClient {
   toJSON(): FakeGitHubState {
     return {
       issues: [...this.issues.values()],
-      images: [...this.images],
-      texts: [...this.texts],
+      attachments: [...this.attachments],
       comments: this.commentList,
       prs: this.prList,
       reviews: this.reviewList,
@@ -131,22 +129,20 @@ export class FakeGitHub implements GitHubClient {
     this.issues.set(this.key(repo, issue.number), { title: "", body: "", labels: [], state: "open", ...issue, repo });
   }
 
-  addIssueImage(url: string, result: IssueImageDownload): void {
-    this.images.set(url, result);
+  /** Serves `content` at `url`, or fails its download with `{ reason }`. */
+  addAttachment(url: string, content: string | Uint8Array | { reason: string }): void {
+    this.attachments.set(
+      url,
+      typeof content === "object" && "reason" in content
+        ? { ok: false, reason: content.reason }
+        : { ok: true, data: Buffer.from(content).toString("base64") },
+    );
   }
 
-  async downloadIssueImage(_repo: string, url: string): Promise<IssueImageDownload> {
-    this.called("downloadIssueImage");
-    return this.images.get(url) ?? { ok: false, reason: "download returned HTTP 404" };
-  }
-
-  addIssueText(url: string, result: IssueTextDownload): void {
-    this.texts.set(url, result);
-  }
-
-  async downloadIssueText(_repo: string, url: string): Promise<IssueTextDownload> {
-    this.called("downloadIssueText");
-    return this.texts.get(url) ?? { ok: false, reason: "download returned HTTP 404" };
+  async downloadAttachment(_repo: string, url: string): Promise<AttachmentDownload> {
+    this.called("downloadAttachment");
+    const stored = this.attachments.get(url) ?? { ok: false, reason: "download returned HTTP 404" };
+    return stored.ok ? { ok: true, bytes: Buffer.from(stored.data, "base64") } : stored;
   }
 
   addComment(repo: string, issue: number, author: string, body: string): void {
@@ -226,7 +222,7 @@ export class FakeGitHub implements GitHubClient {
 
   async listIssueComments(repo: string, issue: number): Promise<IssueComment[]> {
     this.called("listIssueComments");
-    return this.commentsOn(repo, issue).map(({ author, body, createdAt }) => ({ author, body, createdAt }));
+    return this.commentsOn(repo, issue).map(({ id, author, body, createdAt }) => ({ id, author, body, createdAt }));
   }
 
   async upsertComment(repo: string, issue: number, marker: string, body: string): Promise<void> {

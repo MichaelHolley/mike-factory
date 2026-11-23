@@ -1,0 +1,155 @@
+import { err, type ExecutionEnv, FileError } from "@earendil-works/pi-durable/env";
+import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node";
+import type { ImageProcessor } from "@earendil-works/pi-durable/tools";
+
+// Decoding takes 4 bytes per pixel, so a small file declaring huge dimensions would take gigabytes of memory.
+export const MAX_IMAGE_PIXELS = 50_000_000;
+export const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
+
+/**
+ * `env`, except that a single read of more than `MAX_IMAGE_BYTES` fails. With an image processor, `read` loads a whole
+ * image into the server at once, before any header check; text it reads in small chunks.
+ */
+export function capReads(env: ExecutionEnv): ExecutionEnv {
+  const open = env.openBinaryReader.bind(env);
+
+  env.openBinaryReader = async (path, options, context) => {
+    const opened = await open(path, options, context);
+    if (!opened.ok) return opened;
+
+    const reader = opened.value;
+    const read = reader.read.bind(reader);
+    reader.read = async (offset, length, readContext) =>
+      length > MAX_IMAGE_BYTES
+        ? err(new FileError("invalid", `${path} is larger than ${MAX_IMAGE_BYTES / (1024 * 1024)} MiB`, path))
+        : read(offset, length, readContext);
+    return opened;
+  };
+  return env;
+}
+
+type Size = { width: number; height: number };
+
+const larger = (a: Size, b: Size): Size => ({
+  width: Math.max(a.width, b.width),
+  height: Math.max(a.height, b.height),
+});
+
+const colorTableBytes = (flags: number) => (flags & 0x80 ? 3 << ((flags & 7) + 1) : 0);
+
+/** The screen and every frame of a GIF: the decoder sizes its buffer by the first frame, which may exceed the screen. */
+function gifSize(bytes: Buffer): Size | undefined {
+  let size = { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) };
+  let offset = 13 + colorTableBytes(bytes[10]!);
+
+  const skipSubBlocks = () => {
+    while (offset < bytes.length && bytes[offset] !== 0) offset += bytes[offset]! + 1;
+    offset++;
+  };
+
+  while (offset < bytes.length && bytes[offset] !== 0x3b) {
+    if (bytes[offset] === 0x21) {
+      offset += 2;
+      skipSubBlocks();
+    } else if (bytes[offset] === 0x2c) {
+      size = larger(size, { width: bytes.readUInt16LE(offset + 5), height: bytes.readUInt16LE(offset + 7) });
+      // The descriptor, its local color table and the LZW code size byte precede the image data.
+      offset += 10 + colorTableBytes(bytes[offset + 9]!) + 1;
+      skipSubBlocks();
+    } else return undefined;
+  }
+  return size;
+}
+
+/** The canvas and every bitstream in WebP chunks: the decoder trusts each bitstream's size over the VP8X canvas. */
+function webpSize(bytes: Buffer, start: number, end: number): Size | undefined {
+  let size: Size | undefined;
+  for (let offset = start; offset < end;) {
+    const type = bytes.toString("latin1", offset, offset + 4);
+    const body = offset + 8;
+    const next = body + bytes.readUInt32LE(offset + 4);
+    if (next > end) return undefined;
+
+    let found: Size | undefined;
+    if (type === "VP8X" || type === "ANMF") {
+      const at = type === "VP8X" ? body + 4 : body + 6;
+      found = { width: bytes.readUIntLE(at, 3) + 1, height: bytes.readUIntLE(at + 3, 3) + 1 };
+      if (type === "ANMF") {
+        const frame = webpSize(bytes, body + 16, next);
+        if (!frame) return undefined;
+        found = larger(found, frame);
+      }
+    } else if (type === "VP8 ") {
+      found = { width: bytes.readUInt16LE(body + 6) & 0x3fff, height: bytes.readUInt16LE(body + 8) & 0x3fff };
+    } else if (type === "VP8L") {
+      const bits = bytes.readUInt32LE(body + 1);
+      found = { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 };
+    }
+    if (found) size = size ? larger(size, found) : found;
+
+    offset = next + (next % 2);
+  }
+  return size;
+}
+
+/** The first JPEG frame's size, unless markers the decoder would read differently come before it. */
+function jpegSize(bytes: Buffer): Size | undefined {
+  for (let offset = 2; offset + 9 <= bytes.length;) {
+    if (bytes[offset] !== 0xff) return undefined;
+    const marker = bytes[offset + 1]!;
+    if (marker === 0xff) offset++;
+    // Markers without a length field; the decoder skips them where this would read a length.
+    else if (marker === 0x00 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) return undefined;
+    // SOF0 to SOF15, except DHT (C4), JPG (C8) and DAC (CC), which share the range.
+    else if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc)
+      return { width: bytes.readUInt16BE(offset + 7), height: bytes.readUInt16BE(offset + 5) };
+    else offset += 2 + bytes.readUInt16BE(offset + 2);
+  }
+  return undefined;
+}
+
+/** BMP's core header stores 16-bit sizes; later headers store signed 32-bit ones, negative for top-down rows. */
+const bmpSize = (bytes: Buffer): Size =>
+  bytes.readUInt32LE(14) === 12
+    ? { width: bytes.readUInt16LE(18), height: bytes.readUInt16LE(20) }
+    : { width: Math.abs(bytes.readInt32LE(18)), height: Math.abs(bytes.readInt32LE(22)) };
+
+/**
+ * The format and largest size an image declares, read without decoding it; the bytes decide, not a file name.
+ * `undefined` for other formats and for structures the decoder could read differently.
+ */
+export function imageHeader(data: Uint8Array): (Size & { mimeType: string }) | undefined {
+  const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  const ascii = (offset: number, text: string) => bytes.toString("latin1", offset, offset + text.length) === text;
+  const as = (mimeType: string, size: Size | undefined) => size && { mimeType, ...size };
+  try {
+    if (ascii(0, "\x89PNG\r\n\x1a\n") && ascii(12, "IHDR"))
+      return as("image/png", { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) });
+    if (ascii(0, "GIF87a") || ascii(0, "GIF89a")) return as("image/gif", gifSize(bytes));
+    if (ascii(0, "RIFF") && ascii(8, "WEBP")) return as("image/webp", webpSize(bytes, 12, bytes.length));
+    if (bytes[0] === 0xff && bytes[1] === 0xd8) return as("image/jpeg", jpegSize(bytes));
+    if (ascii(0, "BM")) return as("image/bmp", bmpSize(bytes));
+    return undefined;
+  } catch {
+    // A field past the end of a truncated file.
+    return undefined;
+  }
+}
+
+/**
+ * `inner`, Photon by default, for images whose header declares a size within `MAX_IMAGE_PIXELS`. `read` hands it every
+ * image, attached or made by the agent, so nothing reaches the decoder unchecked.
+ */
+export function checkedImages(inner: () => Promise<ImageProcessor> = () => createNodePhotonImages()): ImageProcessor {
+  let processor: Promise<ImageProcessor> | undefined;
+
+  return {
+    async prepare(bytes, mimeType, limits) {
+      const header = imageHeader(bytes);
+      if (header?.mimeType !== mimeType || header.width * header.height > MAX_IMAGE_PIXELS) return undefined;
+
+      // A pooled Buffer's memory cannot be transferred to Photon's worker thread; a plain copy can.
+      return (await (processor ??= inner())).prepare(Uint8Array.from(bytes), mimeType, limits);
+    },
+  };
+}

@@ -9,7 +9,7 @@ import {
 } from "../contracts.ts";
 import type { PrState } from "../runStatus.ts";
 
-import { downloadIssueImage, downloadIssueText } from "./attachments.ts";
+import { downloadAttachment } from "./attachments.ts";
 
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60_000;
 const PER_PAGE = 100;
@@ -137,15 +137,14 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
     async listIssueComments(repo, issue): Promise<IssueComment[]> {
       const comments = await rawComments(repo, issue);
       return comments.map((comment) => ({
+        id: Number(comment.id),
         author: comment.user?.login ?? "",
         body: comment.body ?? "",
         createdAt: comment.created_at,
       }));
     },
 
-    downloadIssueImage: (repo, url) => downloadIssueImage(url, (signal) => attachmentToken(repo, signal)),
-
-    downloadIssueText: (repo, url) => downloadIssueText(url, (signal) => attachmentToken(repo, signal)),
+    downloadAttachment: (repo, url) => downloadAttachment(url, (signal) => attachmentToken(repo, signal)),
 
     async upsertComment(repo, issue, marker, body) {
       const octokit = await octokitFor(repo);

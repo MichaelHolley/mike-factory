@@ -29,6 +29,7 @@ export function createWorktrees(opts: {
   const barePath = (repo: string) => join(dataDir, "repos", `${repo}.git`);
   const worktreePath = (repo: string, issue: number) => join(dataDir, "worktrees", repo, `issue-${issue}`);
   const mirrorPath = (repo: string) => join(opts.mirrorDir, `${repo}.git`);
+  const attachmentsPath = (repo: string, issue: number) => join(dataDir, "attachments", repo, `issue-${issue}`);
 
   const exists = async (path: string) => getOrThrow(await workspace.exists(path, ctx));
   const createDir = async (path: string) => getOrThrow(await workspace.createDir(path, { recursive: true }, ctx));
@@ -124,6 +125,7 @@ export function createWorktrees(opts: {
 
   return {
     worktreePath,
+    attachmentsPath,
 
     prepare: (repo, issue, { branch, openPr, defaultBranch }) =>
       withLock(repo, async () => {

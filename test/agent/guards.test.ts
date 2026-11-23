@@ -3,12 +3,15 @@ import { describe, expect, it } from "vitest";
 import {
   bashViolation,
   budgetBreach,
-  pathOutsideWorktree,
+  pathOutside,
+  pathToolViolation,
   spentSince,
   totalCostUsd,
 } from "../../src/agent/extensions/guards.ts";
 
 const worktree = "/data/worktrees/demo/issue-1";
+const attachments = "/data/attachments/demo/issue-1";
+const dirs = { worktree, attachments };
 
 describe("bashViolation", () => {
   it.each([
@@ -30,8 +33,9 @@ describe("bashViolation", () => {
     "cat /etc/passwd",
     "cp secrets.txt /root/x",
     "ls --color=auto /data/worktrees/demo/issue-2",
+    "cat /data/attachments/demo/issue-2/issue/build.log",
   ])("blocks %s", (command) => {
-    expect(bashViolation(command, worktree)).toBeDefined();
+    expect(bashViolation(command, dirs)).toBeDefined();
   });
 
   it.each([
@@ -47,12 +51,37 @@ describe("bashViolation", () => {
     "echo hi > /dev/null",
     "curl https://example.com/file.tgz",
     "echo ghost",
+    "unzip -l /data/attachments/demo/issue-1/issue/logs.zip",
   ])("allows %s", (command) => {
-    expect(bashViolation(command, worktree)).toBeUndefined();
+    expect(bashViolation(command, dirs)).toBeUndefined();
   });
 
   it("normalizes .. segments before judging a path", () => {
-    expect(pathOutsideWorktree("/data/worktrees/demo/issue-1/../issue-2/x", worktree)).toBeDefined();
+    expect(pathOutside("/data/worktrees/demo/issue-1/../issue-2/x", [worktree])).toBeDefined();
+  });
+});
+
+describe("pathToolViolation", () => {
+  it.each([
+    ["read", "src/index.ts"],
+    ["write", `${worktree}/notes.md`],
+    ["read", `${attachments}/issue/image-1.png`],
+    ["read", "@src/index.ts"],
+  ])("allows %s of %s", (tool, path) => {
+    expect(pathToolViolation(tool, path, dirs)).toBeUndefined();
+  });
+
+  it.each([
+    ["write", `${attachments}/issue/build.log`, "read-only"],
+    ["edit", "../../../attachments/demo/issue-1/issue/build.log", "read-only"],
+    ["read", "../issue-2/secret.txt", "outside"],
+    ["read", "/data/attachments/demo/issue-2/issue/x.png", "outside"],
+    ["write", `@${attachments}/issue/build.log`, "read-only"],
+    ["read", "@/etc/passwd", "outside"],
+    ["read", "~/.ssh/id_ed25519", "plain path"],
+    ["read", "file:///etc/passwd", "plain path"],
+  ])("blocks %s of %s", (tool, path, reason) => {
+    expect(pathToolViolation(tool, path, dirs)).toContain(reason);
   });
 });
 

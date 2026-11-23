@@ -48,17 +48,17 @@ const ALLOWED_ABSOLUTE_ROOTS = [
 ];
 const ABSOLUTE_PATH = /(?:^|[\s"'=(])(\/[^\s"'`;|&<>)]*)/g;
 
-const insideWorktree = (path: string, worktreePath: string) => {
+const inside = (path: string, dir: string) => {
   const normalized = posix.normalize(path);
-  const root = posix.normalize(worktreePath);
+  const root = posix.normalize(dir);
   return normalized === root || normalized.startsWith(`${root}/`);
 };
 
-/** Best-effort: returns the first absolute path that is neither inside the worktree nor a harmless system location. */
-export function pathOutsideWorktree(text: string, worktreePath: string): string | undefined {
+/** Best-effort: returns the first absolute path that is neither inside one of `dirs` nor a harmless system location. */
+export function pathOutside(text: string, dirs: readonly string[]): string | undefined {
   for (const match of text.matchAll(ABSOLUTE_PATH)) {
     const path = match[1]!;
-    if (insideWorktree(path, worktreePath)) continue;
+    if (dirs.some((dir) => inside(path, dir))) continue;
     const normalized = posix.normalize(path);
     if (ALLOWED_ABSOLUTE_ROOTS.some((root) => normalized === root || normalized.startsWith(root))) continue;
     return path;
@@ -66,12 +66,30 @@ export function pathOutsideWorktree(text: string, worktreePath: string): string 
   return undefined;
 }
 
+/** The issue's worktree, where the agent works, and its attached files, which it may only read. */
+export type IssueDirs = { worktree: string; attachments: string };
+
 /** Returns why a bash command must not run, or undefined when it may. */
-export function bashViolation(command: string, worktreePath: string): string | undefined {
+export function bashViolation(command: string, dirs: IssueDirs): string | undefined {
   const blocked = BLOCKED_COMMANDS.find(({ pattern }) => pattern.test(command));
   if (blocked) return blocked.reason;
-  const outside = pathOutsideWorktree(command, worktreePath);
+  const outside = pathOutside(command, [dirs.worktree, dirs.attachments]);
   return outside && `path outside the issue worktree: ${outside}`;
+}
+
+/** Returns why `read`, `write` or `edit` must not touch `path`, relative to the worktree, or undefined when it may. */
+export function pathToolViolation(tool: string, path: string, dirs: IssueDirs): string | undefined {
+  // Normalized as pi-durable's tools do, so the guard judges the path they open.
+  const normalized = path.replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, " ").replace(/^@/, "");
+  // The tools expand these against the runner's home or a URL, which the guard can't resolve the same way.
+  if (/^(~|file:)/.test(normalized)) return `use a plain path, not ~ or file: ${path}`;
+
+  const resolved = posix.resolve(dirs.worktree, normalized);
+  const writes = tool !== "read";
+  if (writes && inside(resolved, dirs.attachments)) return `attached files are read-only: ${path}`;
+
+  const outside = pathOutside(resolved, writes ? [dirs.worktree] : [dirs.worktree, dirs.attachments]);
+  return outside && `path outside the issue worktree: ${path}`;
 }
 
 /** Assistant turns since `at`; a timestamp, not a context count, because compaction shrinks the context mid-run. */
@@ -134,7 +152,11 @@ const PATH_TOOLS = new Set(["read", "write", "edit"]);
  * Bash and file-path guards plus turn and cost budgets. A budget breach aborts the generation, so the run's submission
  * settles unanswered and the pipeline reports the breach.
  */
-export function createGuards(opts: { config: Budgets; abortTask: (id: TaskId) => void }) {
+export function createGuards(opts: {
+  config: Budgets;
+  abortTask: (id: TaskId) => void;
+  attachmentsPath: (repo: string, issue: number) => string;
+}) {
   return defineExtension({
     name: "guards",
     hooks: [
@@ -144,17 +166,14 @@ export function createGuards(opts: { config: Budgets; abortTask: (id: TaskId) =>
           if (!state || state.worktreePath === "") return undefined;
 
           const args = call.arguments as { command?: unknown; path?: unknown };
+          const dirs = { worktree: state.worktreePath, attachments: opts.attachmentsPath(state.repo, state.issue) };
 
-          if (call.name === "bash" && typeof args.command === "string") {
-            const reason = bashViolation(args.command, state.worktreePath);
-            if (reason) return { block: `Blocked: ${reason}.` };
-          }
+          let reason: string | undefined;
+          if (call.name === "bash" && typeof args.command === "string") reason = bashViolation(args.command, dirs);
+          if (PATH_TOOLS.has(call.name) && typeof args.path === "string")
+            reason = pathToolViolation(call.name, args.path, dirs);
 
-          if (PATH_TOOLS.has(call.name) && typeof args.path === "string") {
-            const outside = pathOutsideWorktree(args.path, state.worktreePath);
-            if (outside) return { block: `Blocked: path outside the issue worktree: ${outside}.` };
-          }
-          return undefined;
+          return reason ? { block: `Blocked: ${reason}.` } : undefined;
         },
       }),
       hook(GenerationTask, {

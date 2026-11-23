@@ -44,21 +44,14 @@ export interface IssueData {
 }
 
 export interface IssueComment {
+  id: number;
   author: string;
   body: string;
   createdAt: string;
 }
 
-/** Base64 image bytes, bounded and MIME-checked by the server's GitHub client. */
-export interface IssueImage {
-  data: string;
-  mimeType: string;
-}
-
-export type IssueImageDownload = { ok: true; image: IssueImage } | { ok: false; reason: string };
-
-/** `truncated` when the file was cut at a character boundary to fit the server's size limit. */
-export type IssueTextDownload = { ok: true; text: string; truncated: boolean } | { ok: false; reason: string };
+/** An attached file's bytes, bounded by the server's GitHub client; any type. */
+export type AttachmentDownload = { ok: true; bytes: Uint8Array } | { ok: false; reason: string };
 
 export interface PullRequestRef {
   number: number;
@@ -111,12 +104,10 @@ export interface GitHubClient {
   getIssue(repo: string, issue: number): Promise<IssueData>;
   listIssueComments(repo: string, issue: number): Promise<IssueComment[]>;
   /**
-   * Downloads only GitHub issue attachments, authenticated on the server; no credentials reach the runner.
+   * Downloads only GitHub attachments, authenticated on the server; no credentials reach the runner.
    * Never throws: skipped attachments and failures return `ok: false`.
    */
-  downloadIssueImage(repo: string, url: string): Promise<IssueImageDownload>;
-  /** Like `downloadIssueImage`, for UTF-8 text file attachments. */
-  downloadIssueText(repo: string, url: string): Promise<IssueTextDownload>;
+  downloadAttachment(repo: string, url: string): Promise<AttachmentDownload>;
   /** Creates the comment, or edits the bot's existing comment that carries the same hidden `marker`. */
   upsertComment(repo: string, issue: number, marker: string, body: string): Promise<void>;
   findOpenPr(repo: string, head: string): Promise<PullRequestRef | undefined>;
@@ -146,9 +137,13 @@ export interface WorktreeInfo {
   created: boolean;
 }
 
-/** Bare clones under `<dataDir>/repos`, worktrees under `<dataDir>/worktrees/<repo>/issue-<n>`. */
+/**
+ * Bare clones under `<dataDir>/repos`, worktrees under `<dataDir>/worktrees/<repo>/issue-<n>`, and attached files under
+ * `<dataDir>/attachments/<repo>/issue-<n>`, outside the worktree so checks and commits never see them.
+ */
 export interface Worktrees {
   worktreePath(repo: string, issue: number): string;
+  attachmentsPath(repo: string, issue: number): string;
   /**
    * Idempotent: create, or reuse the existing path or branch. A new branch starts from its remote copy only with `openPr`,
    * otherwise from `defaultBranch`.
