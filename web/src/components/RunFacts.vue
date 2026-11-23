@@ -32,6 +32,7 @@ const duration = computed(() => {
 });
 
 const LINK = "group flex min-w-0 items-center gap-3 text-base font-semibold text-ink no-underline";
+const LINK_ICON = "-ml-1.5 size-3.5 flex-none text-muted group-hover:text-ink";
 const NODE = "grid size-7 flex-none place-items-center rounded-full border bg-surface [&_svg]:size-3.5";
 const ROW = "flex items-center justify-between gap-4";
 const TERM = "flex flex-none items-center gap-1.5 text-muted [&_svg]:size-3.5 [&_svg]:flex-none";
@@ -42,15 +43,15 @@ const TERM = "flex flex-none items-center gap-1.5 text-muted [&_svg]:size-3.5 [&
     aria-label="Run details"
     class="grid grid-cols-1 divide-line rounded-lg border border-line bg-surface text-sm max-sm:divide-y sm:max-lg:grid-cols-2 sm:max-lg:divide-x lg:divide-y"
   >
-    <div class="px-3.5 pt-3.5 pb-3">
-      <ol aria-label="From issue to pull request">
+    <div class="divide-y divide-line">
+      <ol aria-label="From issue to pull request" class="px-3.5 pt-3.5 pb-3">
         <li>
           <a :href="run.issueUrl" target="_blank" rel="noopener" :class="LINK">
             <span :class="NODE" class="border-line text-muted"><CircleDot aria-hidden="true" /></span>
-            <span class="flex-1 tabular-nums group-hover:underline group-hover:underline-offset-3">
-              Issue #{{ run.issue }}
-            </span>
-            <ExternalLink class="size-3.5 flex-none text-muted" aria-hidden="true" />
+            <span class="tabular-nums group-hover:underline group-hover:underline-offset-3"
+              >Issue #{{ run.issue }}</span
+            >
+            <ExternalLink :class="LINK_ICON" aria-hidden="true" />
           </a>
         </li>
 
@@ -69,10 +70,8 @@ const TERM = "flex flex-none items-center gap-1.5 text-muted [&_svg]:size-3.5 [&
         <li>
           <a v-if="run.prUrl" :href="run.prUrl" target="_blank" rel="noopener" :class="LINK">
             <span :class="[NODE, pr.hue]" class="border-current"><component :is="pr.icon" aria-hidden="true" /></span>
-            <span class="flex-1 tabular-nums group-hover:underline group-hover:underline-offset-3"
-              >PR #{{ prNumber }}</span
-            >
-            <ExternalLink class="size-3.5 flex-none text-muted" aria-hidden="true" />
+            <span class="tabular-nums group-hover:underline group-hover:underline-offset-3">PR #{{ prNumber }}</span>
+            <ExternalLink :class="LINK_ICON" aria-hidden="true" />
           </a>
           <span v-else class="flex items-center gap-3 text-muted">
             <span :class="NODE" class="border-dashed border-line"><component :is="pr.icon" aria-hidden="true" /></span>
@@ -81,7 +80,7 @@ const TERM = "flex flex-none items-center gap-1.5 text-muted [&_svg]:size-3.5 [&
         </li>
       </ol>
 
-      <dl class="mt-4 flex items-baseline justify-between gap-4 border-t border-line pt-3">
+      <dl class="flex items-baseline justify-between gap-4 px-3.5 py-3">
         <dt class="flex items-center gap-1.5 text-muted">
           <CircleDollarSign class="size-3.5 flex-none" aria-hidden="true" />Cost
         </dt>
