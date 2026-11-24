@@ -151,7 +151,7 @@ function liveTail(tick: number): TranscriptItem[] {
   return [answer, { ...tool, result: { text: LIVE_OUTPUT.join("\n"), isError: false } }];
 }
 
-const IDLE: RunStatus["phase"][] = ["review", "merged", "closed", "done", "failed", "aborted"];
+const IDLE: RunStatus["phase"][] = ["review", "merged", "closed", "failed", "aborted"];
 
 const FAILURES = [
   "verify: `pnpm test` failed 3 times",
@@ -168,7 +168,6 @@ function history(): RunStatus[] {
     const prState: PrState = i % 3 === 0 ? "closed" : "merged";
 
     let phase: RunStatus["phase"] = prState;
-    if (i % 13 === 4) phase = "done";
     if (i % 7 === 3) phase = "failed";
     if (i % 11 === 5) phase = "aborted";
 

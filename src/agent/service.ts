@@ -34,12 +34,11 @@ const INSTRUCTIONS = [
 
 const HISTORY_PAGE = 200;
 
-/** The public phase of a `done` run, by its PR's state; unknown for runs published before PR states were stored. */
-const DONE_PHASE: Record<PrState | "unknown", IssuePhase> = {
+/** The public phase of a `done` run, by its PR's state. */
+const DONE_PHASE: Record<PrState, IssuePhase> = {
   open: "review",
   merged: "merged",
   closed: "closed",
-  unknown: "done",
 };
 
 function observeChanges(harness: Harness, matches: (change: CommitChange) => boolean, listener: () => void) {
@@ -409,7 +408,7 @@ export function createIssueService(opts: {
           issueUrl: `https://github.com/${config.owner}/${state.repo}/issues/${state.issue}`,
           title: state.title ?? null,
           branch: state.branch,
-          phase: state.phase === "done" ? DONE_PHASE[prState ?? "unknown"] : state.phase,
+          phase: state.phase === "done" ? DONE_PHASE[prState ?? "open"] : state.phase,
           attempts: state.attempts,
           costUsd: state.costUsd,
           model: agent?.model?.modelId ?? null,

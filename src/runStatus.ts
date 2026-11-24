@@ -17,7 +17,7 @@ export type PipelinePhase =
 export type PrState = "open" | "merged" | "closed";
 
 /** A run's public phase: a finished run with a PR is in review until the PR merges or closes. */
-export type IssuePhase = PipelinePhase | "review" | "merged" | "closed";
+export type IssuePhase = Exclude<PipelinePhase, "done"> | "review" | "merged" | "closed";
 
 /** A PR review the owner sent, as the run page shows it. */
 export type ReviewCard = {
