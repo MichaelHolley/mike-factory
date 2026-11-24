@@ -181,6 +181,14 @@ describe("issue pipeline", () => {
       expect.objectContaining({ type: "image", mimeType: "image/png" }),
     );
     expect(git(world.remote, "ls-tree", "-r", "--name-only", "mike/1-add-hello")).not.toContain("build.log");
+    expect((await service.transcript(REPO, 1))?.[0]).toMatchObject({
+      kind: "user",
+      files: [
+        { name: "image-1.png", source: image, path: "issue/image-1.png" },
+        { name: "build.log", source: log, path: "issue/build.log" },
+        { name: "logs.zip", source: archive, skipped: "file exceeds the 10 MiB size limit" },
+      ],
+    });
   });
 
   it("opens the PR with the drafted title, body and run link", async () => {
@@ -751,6 +759,12 @@ describe("issue pipeline", () => {
       expect(prompt).toContain(`- ${join(folder, "image-1.png")} (from ${inline})`);
       expect(prompt).not.toContain(`(from ${theirs})`);
       expect(world.github.callCount("downloadAttachment")).toBe(2);
+      expect((await service.transcript(REPO, 1))?.find((item) => item.kind === "human")).toMatchObject({
+        files: [
+          { name: "expected.txt", source: summary, path: `review-${reviewId}/expected.txt` },
+          { name: "image-1.png", source: inline, path: `review-${reviewId}/image-1.png` },
+        ],
+      });
     });
 
     it("steers feedback that arrives during a live run into it", async () => {

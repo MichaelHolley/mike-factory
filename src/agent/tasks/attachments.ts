@@ -122,29 +122,15 @@ export async function placeAttachments(
   return placed;
 }
 
-const ATTACHMENTS_BLOCK = /<attachments>\n([\s\S]*?)\n<\/attachments>/g;
-const STORED_LINE = /^- .+\/([^/\s]+)\/([^/\s]+) \(from (https:\/\/\S+)\)$/;
-const SKIPPED_LINE = /^- (https:\/\/\S+): skipped \((.*)\)$/;
+/** `placed` for the run page, each stored file by its `<folder>/<name>` under the issue's attachments. */
+export const attachedFiles = (placed: readonly PlacedAttachment[]): AttachedFile[] =>
+  placed.map((file) => {
+    if ("skipped" in file)
+      return { name: nameFromUrl(file.url) ?? "attachment", source: file.url, skipped: file.skipped };
 
-/**
- * The files `attachmentsSection` listed in `prompt`, by their `<folder>/<name>` under the issue's attachments. Only the
- * last block counts, since untrusted issue text comes before it.
- */
-export function attachedFiles(prompt: string): AttachedFile[] {
-  const block = [...prompt.matchAll(ATTACHMENTS_BLOCK)].at(-1)?.[1] ?? "";
-
-  return block.split("\n").flatMap((line): AttachedFile[] => {
-    const stored = STORED_LINE.exec(line);
-    if (stored) return [{ name: stored[2]!, source: stored[3]!, path: `${stored[1]}/${stored[2]}` }];
-
-    const skipped = SKIPPED_LINE.exec(line);
-    if (!skipped) return [];
-
-    const source = skipped[1]!;
-    const name = (URL.canParse(source) && nameFromUrl(source)) || "attachment";
-    return [{ name, source, skipped: skipped[2]! }];
+    const [folder, name] = file.path.split("/").slice(-2);
+    return { name: name!, source: file.url, path: `${folder}/${name}` };
   });
-}
 
 /** Lists the files for the prompt, without their content, after `intro`; undefined when there are none. */
 export function attachmentsSection(intro: string, placed: readonly PlacedAttachment[]) {

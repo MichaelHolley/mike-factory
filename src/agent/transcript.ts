@@ -2,9 +2,8 @@ import type { JsonValue } from "@earendil-works/chord/json";
 import type { ImageContent, Message, TextContent } from "@earendil-works/pi-ai";
 import type { EntryRecord, LiveState } from "@earendil-works/pi-durable";
 import type { ReviewFeedback } from "../contracts.ts";
-import type { ReviewCard, TranscriptItem } from "../runStatus.ts";
-import { HUMAN_ENTRY } from "./docs.ts";
-import { attachedFiles } from "./tasks/attachments.ts";
+import type { AttachedFile, ReviewCard, TranscriptItem } from "../runStatus.ts";
+import { HUMAN_ENTRY, PROMPT_ENTRY } from "./docs.ts";
 
 const MAX_ITEM_CHARS = 4_000;
 
@@ -30,13 +29,26 @@ const summarize = (args: Record<string, unknown>) => {
   return line.length > SUMMARY_CHARS ? `${line.slice(0, SUMMARY_CHARS)}...` : line;
 };
 
-export type HumanMessage = { id: string; text: string; review?: ReviewFeedback };
+export type HumanMessage = { id: string; text: string; review?: ReviewFeedback; files?: AttachedFile[] };
 
-/** The `{ id, text, review? }` of an owner message entry's data, or undefined for anything else. */
+/** The `files` the pipeline stored in an entry's data, or none. */
+const filesOf = (data: JsonValue | undefined): AttachedFile[] => {
+  const { files } = (data ?? {}) as Partial<Record<string, unknown>>;
+  return Array.isArray(files) ? (files as AttachedFile[]) : [];
+};
+
+/** The `{ id, text, review?, files? }` of an owner message entry's data, or undefined for anything else. */
 export const humanMessage = (data: JsonValue | undefined): HumanMessage | undefined => {
   const { id, text, review } = (data ?? {}) as Partial<Record<string, unknown>>;
   if (typeof id !== "string" || typeof text !== "string") return undefined;
-  return review && typeof review === "object" ? { id, text, review: review as ReviewFeedback } : { id, text };
+
+  const files = filesOf(data);
+  return {
+    id,
+    text,
+    ...(typeof review === "object" && review !== null && { review: review as ReviewFeedback }),
+    ...(files.length > 0 && { files }),
+  };
 };
 
 const reviewCard = ({ reviewer, state, url, comments }: ReviewFeedback): ReviewCard => ({
@@ -62,8 +74,8 @@ type Calls = {
 
 /**
  * The public projection of a conversation's entries: no system prompt, thinking or images, each tool call paired with
- * its result, the files each prompt lists, and long text is clipped. An aborted answer keeps only its text, marked `interrupted`. Owner messages
- * show as `human` items, followed by `queued` ones the agent hasn't seen yet. `live`, the conversation's `pi.live`,
+ * its result, the files the pipeline attached to a prompt, and long text is clipped. An aborted answer keeps only its text,
+ * marked `interrupted`. Owner messages show as `human` items, followed by `queued` ones the agent hasn't seen yet. `live`, the conversation's `pi.live`,
  * adds the answer being streamed, the output of running tools, and at the end whether the agent is busy and why its
  * last run ended without an answer.
  */
@@ -90,26 +102,27 @@ export function toTranscript(
   };
 
   const shown = new Set<string>();
-  const human = (message: HumanMessage | undefined, pending: boolean, prompt?: Message): TranscriptItem[] => {
+  const human = (message: HumanMessage | undefined, pending: boolean): TranscriptItem[] => {
     if (!message || shown.has(message.id)) return [];
     shown.add(message.id);
 
-    const files = prompt?.role === "user" ? attachedFiles(textOf(prompt.content)) : [];
     return [
       {
         kind: "human",
         text: clip(message.text),
         ...(pending && { pending: true as const }),
         ...(message.review && { review: reviewCard(message.review) }),
-        ...(files.length > 0 && { files }),
+        ...(message.files && { files: message.files }),
       },
     ];
   };
 
   const placed = entries.flatMap((entry, index): TranscriptItem[] =>
     entry.kind === HUMAN_ENTRY
-      ? human(humanMessage(entry.data), false, contributions[index]![0])
-      : contributions[index]!.flatMap((message) => itemsOf(message, calls)),
+      ? human(humanMessage(entry.data), false)
+      : contributions[index]!.flatMap((message) =>
+          itemsOf(message, calls, entry.kind === PROMPT_ENTRY ? filesOf(entry.data) : []),
+        ),
   );
 
   const streaming = (live?.generation?.message?.content ?? []).flatMap((part): TranscriptItem[] =>
@@ -130,15 +143,12 @@ export function toTranscript(
   ];
 }
 
-function itemsOf(message: Message, { results, outputs }: Calls): TranscriptItem[] {
+function itemsOf(message: Message, { results, outputs }: Calls, files: AttachedFile[]): TranscriptItem[] {
   switch (message.role) {
     case "system":
       return [];
-    case "user": {
-      const text = textOf(message.content);
-      const files = attachedFiles(text);
-      return [{ kind: "user", text: clip(text), ...(files.length > 0 && { files }) }];
-    }
+    case "user":
+      return [{ kind: "user", text: clip(textOf(message.content)), ...(files.length > 0 && { files }) }];
     case "assistant": {
       const interrupted = message.stopReason === "aborted";
       return message.content.flatMap((part): TranscriptItem[] => {

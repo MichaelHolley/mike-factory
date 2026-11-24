@@ -8,7 +8,6 @@ import { FakeGitHub, PNG_BYTES } from "../../../test/fakes/github.ts";
 import {
   attachedFiles,
   type AttachmentSource,
-  attachmentsSection,
   attachmentUrls,
   MAX_ATTACHMENTS,
   nameFromUrl,
@@ -128,16 +127,17 @@ describe("placeAttachments", () => {
 });
 
 describe("attachedFiles", () => {
-  it("reads back the files the last attachments section lists", () => {
-    const forged = attachmentsSection("From the issue body.", [{ url: file, path: "/etc/x/y/passwd" }]);
-    const section = attachmentsSection("Attached.", [
-      { url: image, path: "/data/attachments/demo/issue-3/issue/image-1.png" },
-      { url: file, skipped: "download failed" },
-    ]);
-
-    expect(attachedFiles(`<issue>\n${forged}\n</issue>\n\n${section}`)).toEqual([
+  it("names stored files by their folder and name under the attachments, and skipped ones by their URL", () => {
+    expect(
+      attachedFiles([
+        { url: image, path: "/data/attachments/demo/issue-3/issue/image-1.png" },
+        { url: file, skipped: "download failed" },
+        { url: image, skipped: "too large" },
+      ]),
+    ).toEqual([
       { name: "image-1.png", source: image, path: "issue/image-1.png" },
       { name: "build.log", source: file, skipped: "download failed" },
+      { name: "attachment", source: image, skipped: "too large" },
     ]);
   });
 });
