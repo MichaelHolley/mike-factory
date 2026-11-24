@@ -1,6 +1,5 @@
 import {
   Ban,
-  Check,
   Code,
   Eye,
   FlaskConical,
@@ -21,7 +20,7 @@ import type { IssuePhase, PrState } from "../../src/runStatus.ts";
 export type StepState = "passed" | "current" | "pending";
 
 const FLOW = ["queued", "prepare", "implement", "verify", "fix", "revise", "publish", "report"] as const;
-const OUTCOMES: readonly IssuePhase[] = ["review", "merged", "closed", "done", "failed", "aborted"];
+const OUTCOMES: readonly IssuePhase[] = ["review", "merged", "closed", "failed", "aborted"];
 
 // Hue says who has the run: muted while it waits, blue while mike writes code, amber while it checks and wraps up, then the outcome. The icon names the step.
 export const stepLook: Record<IssuePhase, { icon: Component; hue: string }> = {
@@ -36,7 +35,6 @@ export const stepLook: Record<IssuePhase, { icon: Component; hue: string }> = {
   review: { icon: Eye, hue: "text-ok" },
   merged: { icon: GitMerge, hue: "text-merged" },
   closed: { icon: GitPullRequestClosed, hue: "text-halt" },
-  done: { icon: Check, hue: "text-ok" },
   failed: { icon: X, hue: "text-bad" },
   aborted: { icon: Ban, hue: "text-halt" },
 };
@@ -63,7 +61,7 @@ export function prLook(state: PrState | null) {
 
 /** Every pipeline state in order, ending in the run's outcome slot. */
 export function pipelineSteps(phase: IssuePhase): { name: IssuePhase; state: StepState }[] {
-  const outcome = OUTCOMES.includes(phase) ? phase : "done";
+  const outcome = OUTCOMES.includes(phase) ? phase : "review";
   const current = OUTCOMES.includes(phase) ? FLOW.length : (FLOW as readonly IssuePhase[]).indexOf(phase);
   // A failed or aborted run doesn't record where it stopped, so earlier steps can't be shown as passed.
   const reached = phase === "failed" || phase === "aborted" ? 0 : current;

@@ -150,21 +150,21 @@ describe("webhook server", () => {
       startedAt: null,
       updatedAt: null,
     });
-    vi.mocked(service.status).mockResolvedValue([run(1, "done"), run(2, "queued")]);
+    vi.mocked(service.status).mockResolvedValue([run(1, "merged"), run(2, "queued")]);
     const response = await app.request("/status/stream");
     expect(response.headers.get("Content-Type")).toBe("text/event-stream");
     expect(response.headers.get("X-Accel-Buffering")).toBe("no");
     expect(response.headers.get("Connection")).toBe("close");
     const events = sseEvents(response);
-    expect(await events.next()).toEqual({ from: 0, items: [run(1, "done"), run(2, "queued")] });
+    expect(await events.next()).toEqual({ from: 0, items: [run(1, "merged"), run(2, "queued")] });
 
     notify();
     await vi.waitFor(() => expect(service.status).toHaveBeenCalledTimes(2));
-    vi.mocked(service.status).mockResolvedValue([run(1, "done"), run(2, "implement"), run(3, "queued")]);
+    vi.mocked(service.status).mockResolvedValue([run(1, "merged"), run(2, "implement"), run(3, "queued")]);
     notify();
     expect(await events.next()).toEqual({ from: 1, items: [run(2, "implement"), run(3, "queued")] });
 
-    vi.mocked(service.status).mockResolvedValue([run(1, "done")]);
+    vi.mocked(service.status).mockResolvedValue([run(1, "merged")]);
     notify();
     expect(await events.next()).toEqual({ from: 1, items: [] });
 

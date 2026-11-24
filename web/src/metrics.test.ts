@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RunStatus } from "../../src/runStatus.ts";
+import type { PrState, RunStatus } from "../../src/runStatus.ts";
 import { computeMetrics, quantile } from "./metrics.ts";
 
 const NOW = Date.parse("2026-11-19T12:00:00Z");
@@ -14,7 +14,7 @@ function run(issue: number, fields: Partial<RunStatus> = {}): RunStatus {
     issueUrl: `https://github.com/app/issues/${issue}`,
     title: null,
     branch: `mike/${issue}`,
-    phase: "done",
+    phase: "failed",
     attempts: 0,
     costUsd: 1,
     model: "sol",
@@ -28,8 +28,8 @@ function run(issue: number, fields: Partial<RunStatus> = {}): RunStatus {
   };
 }
 
-const pr = (issue: number, prState: RunStatus["prState"], fields: Partial<RunStatus> = {}) =>
-  run(issue, { phase: prState === "open" ? "review" : (prState ?? "done"), prState, prUrl: `pr/${issue}`, ...fields });
+const pr = (issue: number, prState: PrState, fields: Partial<RunStatus> = {}) =>
+  run(issue, { phase: prState === "open" ? "review" : prState, prState, prUrl: `pr/${issue}`, ...fields });
 
 describe("quantile", () => {
   it("interpolates between the nearest values", () => {

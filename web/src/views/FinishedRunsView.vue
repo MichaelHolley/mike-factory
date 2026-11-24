@@ -52,7 +52,6 @@ const OUTCOMES: [IssuePhase, string][] = [
   ["closed", "Closed"],
   ["failed", "Failed"],
   ["aborted", "Aborted"],
-  ["done", "Done"],
 ];
 const outcomes: FilterOption<IssuePhase | typeof ALL>[] = [
   { value: ALL, label: "Any outcome", icon: ListFilter, hue: "text-muted" },

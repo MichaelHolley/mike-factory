@@ -9,7 +9,7 @@ function run(repo: string, issue: number, fields: Partial<RunStatus> = {}): RunS
     issueUrl: `https://github.com/${repo}/issues/${issue}`,
     title: null,
     branch: `mike/${issue}`,
-    phase: "done",
+    phase: "failed",
     attempts: 1,
     costUsd: 0,
     model: null,

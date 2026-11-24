@@ -18,7 +18,7 @@ const RANGE_LEAD: Record<MetricsRange, string> = {
   all: "So far",
 };
 
-export const OUTCOMES = ["working", "review", "merged", "closed", "done", "failed", "aborted"] as const;
+export const OUTCOMES = ["working", "review", "merged", "closed", "failed", "aborted"] as const;
 export type Outcome = (typeof OUTCOMES)[number];
 
 const OUTCOME_LABELS: Record<Outcome, string> = {
@@ -26,7 +26,6 @@ const OUTCOME_LABELS: Record<Outcome, string> = {
   review: "In review",
   merged: "Merged",
   closed: "Closed",
-  done: "Done",
   failed: "Failed",
   aborted: "Aborted",
 };
