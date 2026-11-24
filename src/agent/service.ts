@@ -432,6 +432,8 @@ export function createIssueService(opts: {
       }
     },
 
+    attachment: (repo, issue, path) => worktrees.attachment(repo, issue, path),
+
     subscribeStatus: (listener) =>
       observeChanges(
         harness,

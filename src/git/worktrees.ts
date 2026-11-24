@@ -6,8 +6,11 @@ import { promisify } from "node:util";
 import { BACKGROUND_CONTEXT as ctx } from "@earendil-works/chord/context";
 import { type ExecutionEnv, getOrThrow } from "@earendil-works/pi-durable/env";
 import { issueOfBranch, legacyBranchName, type Worktrees } from "../contracts.ts";
+import { MAX_ATTACHMENT_BYTES } from "../github/attachments.ts";
 
 const execFileAsync = promisify(execFile);
+
+const isPathSegment = (value: string) => /^[\w.-]+$/.test(value) && !/^\.+$/.test(value);
 
 /**
  * The agent's clones and worktrees live in `env` and are only touched through it. The server keeps a trusted mirror per
@@ -126,6 +129,29 @@ export function createWorktrees(opts: {
   return {
     worktreePath,
     attachmentsPath,
+
+    async attachment(repo, issue, path) {
+      const segments = [repo, ...path.split("/")];
+      if (segments.length !== 3 || !segments.every(isPathSegment)) return undefined;
+
+      const opened = await workspace.openBinaryReader(
+        join(attachmentsPath(repo, issue), path),
+        { noFollow: true },
+        ctx,
+      );
+      if (!opened.ok) return undefined;
+
+      const reader = opened.value;
+      try {
+        const info = await reader.info(ctx);
+        if (!info.ok || info.value.size > MAX_ATTACHMENT_BYTES) return undefined;
+
+        const bytes = await reader.read(0, info.value.size, ctx);
+        return bytes.ok ? bytes.value : undefined;
+      } finally {
+        await reader.close(ctx);
+      }
+    },
 
     prepare: (repo, issue, { branch, openPr, defaultBranch }) =>
       withLock(repo, async () => {

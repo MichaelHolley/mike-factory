@@ -145,6 +145,11 @@ export interface Worktrees {
   worktreePath(repo: string, issue: number): string;
   attachmentsPath(repo: string, issue: number): string;
   /**
+   * The bytes of `<folder>/<name>` in the issue's attachments, or undefined when it is missing, not a regular file or
+   * over the size limit. The runner can write there, so the bytes are untrusted.
+   */
+  attachment(repo: string, issue: number, path: string): Promise<Uint8Array | undefined>;
+  /**
    * Idempotent: create, or reuse the existing path or branch, and refresh `origin/*` either way. A new branch starts from
    * its remote copy only with `openPr`, otherwise from `defaultBranch`.
    */
@@ -237,6 +242,8 @@ export interface IssueService {
    * issue has none.
    */
   transcript(repo: string, issue: number): Promise<TranscriptItem[] | undefined>;
+  /** A file the issue's transcript lists by its `path`; see `Worktrees.attachment`. */
+  attachment(repo: string, issue: number, path: string): Promise<Uint8Array | undefined>;
   /** Calls `listener` after any run's status may have changed. Returns an unsubscribe. */
   subscribeStatus(listener: () => void): () => void;
   /** Watches the issue's conversation, calling `listener` after it may have changed; undefined when the issue has none. */

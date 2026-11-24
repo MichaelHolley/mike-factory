@@ -18,6 +18,7 @@ Self-hosted agent that turns a `/mike` comment on a GitHub issue into a pull req
 ## Rules
 
 - Every pipeline phase must be safe to rerun from its top after a crash; `test/agent/crash.test.ts` checks this.
+- When a change alters run state or behavior, consider migrating existing runs if it's a low-effort quick win that leaves every existing feature working.
 - Secrets never reach `process.env` or tool shells; see `src/secrets.ts`.
 - Agent tools and every command on the agent's repos run in the runner through the execution environment. Server-side code never runs commands inside directories the runner can write.
 - Server-side git commands that take input from the runner (bundles) fetch one fully qualified ref with `--no-tags` and fsck, and the image's git must be 2.46 or newer.

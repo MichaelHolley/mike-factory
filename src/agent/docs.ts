@@ -135,5 +135,8 @@ export const ReviewReplies = defineDoc<{ items: ReviewReply[] }>({
   checkpointWhen: () => false,
 });
 
-/** Entry kind of a delivered note; its data is `{ id, text, review? }` and its model message is the note prompt. */
+/** Entry kind of a delivered note; its data is `{ id, text, review?, files? }` and its model message is the note prompt. */
 export const HUMAN_ENTRY = "app.human";
+
+/** Entry kind of the implement prompt; its data is `{ files }`, the `AttachedFile`s it lists. */
+export const PROMPT_ENTRY = "app.prompt";

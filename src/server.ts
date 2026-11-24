@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
+import { imageHeader } from "./agent/images.ts";
 import type { IssueService } from "./contracts.ts";
 import { InvalidSignatureError, verifyWebhook, type WebhookConfig } from "./github/webhooks.ts";
 
@@ -199,6 +200,23 @@ export function createServer({
       return c.body(JSON.stringify(transcript, null, 2), 200, { "Content-Type": "application/json; charset=UTF-8" });
     }
     return c.json(transcript);
+  });
+
+  app.get("/status/:repo/:issue/files/:folder/:name", async (c) => {
+    const { repo, folder, name } = c.req.param();
+    const issue = Number(c.req.param("issue"));
+    if (!Number.isInteger(issue)) return c.text("not found", 404);
+
+    const bytes = await service.attachment(repo, issue, `${folder}/${name}`);
+    if (!bytes) return c.text("not found", 404);
+
+    // The runner can rewrite these files, so only raster images it can't disguise open in the browser, and nothing runs.
+    const image = imageHeader(bytes)?.mimeType;
+    c.header("Content-Security-Policy", "default-src 'none'; sandbox");
+    c.header("X-Content-Type-Options", "nosniff");
+    c.header("Cache-Control", "no-store");
+    c.header("Content-Disposition", `${image ? "inline" : "attachment"}; filename="${name}"`);
+    return c.body(new Uint8Array(bytes), 200, { "Content-Type": image ?? "application/octet-stream" });
   });
 
   if (existsSync(uiDir)) {

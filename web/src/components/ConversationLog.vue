@@ -15,6 +15,7 @@ import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@ui-sdk/vue/c
 import { type Component, computed } from "vue";
 import type { TranscriptItem } from "../../../src/runStatus.ts";
 import { useTranscript } from "../composables/useTranscript.ts";
+import AttachedFiles from "./AttachedFiles.vue";
 import EmptyState from "./EmptyState.vue";
 import ErrorBanner from "./ErrorBanner.vue";
 import IconButton from "./IconButton.vue";
@@ -31,7 +32,7 @@ type Entry = { kind: "message"; message: Message } | { kind: "tools"; calls: Cal
 const MAX_MARKS = 32;
 
 const props = defineProps<{ repo: string; issue: string }>();
-const { items, error, loaded, downloadUrl } = useTranscript(
+const { items, error, loaded, downloadUrl, fileUrl } = useTranscript(
   () => props.repo,
   () => props.issue,
 );
@@ -131,7 +132,10 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
         >
 
         <template v-if="entry.kind === 'message'">
-          <PipelineMessage v-if="entry.message.kind === 'user'" :text="entry.message.text" :class="SAY" />
+          <div v-if="entry.message.kind === 'user'" :class="SAY">
+            <PipelineMessage :text="entry.message.text" />
+            <AttachedFiles v-if="entry.message.files" :files="entry.message.files" :file-url class="mt-2.5" />
+          </div>
           <div v-else :class="[SAY, TEXT[entry.message.kind]]">
             <ReviewCard
               v-if="entry.message.kind === 'human' && entry.message.review"
@@ -154,6 +158,12 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
               class="mt-1 flex items-center gap-1 text-xs text-muted italic"
               ><Ban class="size-3" aria-hidden="true" />Interrupted</span
             >
+            <AttachedFiles
+              v-if="entry.message.kind === 'human' && entry.message.files"
+              :files="entry.message.files"
+              :file-url
+              class="mt-2.5"
+            />
           </div>
         </template>
 

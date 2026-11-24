@@ -2,6 +2,7 @@ import { posix } from "node:path";
 import type { Context } from "@earendil-works/chord/context";
 import { type ExecutionEnv, getOrThrow } from "@earendil-works/pi-durable/env";
 import type { GitHubClient } from "../../contracts.ts";
+import type { AttachedFile } from "../../runStatus.ts";
 import { isAttachmentUrl } from "../../github/attachments.ts";
 import { imageHeader } from "../images.ts";
 
@@ -120,6 +121,16 @@ export async function placeAttachments(
   }
   return placed;
 }
+
+/** `placed` for the run page, each stored file by its `<folder>/<name>` under the issue's attachments. */
+export const attachedFiles = (placed: readonly PlacedAttachment[]): AttachedFile[] =>
+  placed.map((file) => {
+    if ("skipped" in file)
+      return { name: nameFromUrl(file.url) ?? "attachment", source: file.url, skipped: file.skipped };
+
+    const [folder, name] = file.path.split("/").slice(-2);
+    return { name: name!, source: file.url, path: `${folder}/${name}` };
+  });
 
 /** Lists the files for the prompt, without their content, after `intro`; undefined when there are none. */
 export function attachmentsSection(intro: string, placed: readonly PlacedAttachment[]) {

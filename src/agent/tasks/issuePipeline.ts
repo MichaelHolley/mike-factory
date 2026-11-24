@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import type { Context } from "@earendil-works/chord/context";
+import type { JsonValue } from "@earendil-works/chord/json";
 import {
   defineTask,
   type ConversationHandle,
@@ -24,6 +25,7 @@ import {
   HUMAN_ENTRY,
   IssueNotes,
   IssueState,
+  PROMPT_ENTRY,
   ReviewReplies,
   type IssueStateValue,
   type Note,
@@ -34,6 +36,7 @@ import { closingRef, CONVENTIONAL_TITLE, NO_CHECKS_NOTE, prBodyLimit } from "../
 import { runUrl } from "../runUrl.ts";
 import { createSlots } from "../slots.ts";
 import {
+  attachedFiles,
   type AttachmentSource,
   attachmentsSection,
   noteFolder,
@@ -409,7 +412,12 @@ export function createIssuePipeline(deps: PipelineDeps) {
         requestId: noteRequestId(note),
         entry: {
           kind: HUMAN_ENTRY,
-          data: { id: note.id, text: note.text, ...(note.review && { review: note.review }) },
+          data: {
+            id: note.id,
+            text: note.text,
+            ...(note.review && { review: note.review }),
+            ...(attachments.length > 0 && { files: attachedFiles(attachments) }),
+          },
         },
       } as const;
 
@@ -430,7 +438,12 @@ export function createIssuePipeline(deps: PipelineDeps) {
    * Submits `prompt`, if any, then feeds pending notes into the agent's work until it is idle with none left.
    * Waiting for idle also covers a model run resumed after a crash, so a rerun phase never moves on while the agent edits.
    */
-  const converse = async (rt: Rt, context: Context, run: Run, prompt?: { content: string; requestId: string }) => {
+  const converse = async (
+    rt: Rt,
+    context: Context,
+    run: Run,
+    prompt?: { content: string; requestId: string; entry?: { kind: string; data: JsonValue } },
+  ) => {
     settingsOf(await rt.snapshot(IssueState, rt.conversationId, context));
 
     const conversation = await rt.conversation(rt.conversationId, context);
@@ -599,6 +612,9 @@ export function createIssuePipeline(deps: PipelineDeps) {
           await converse(rt, context, task.input, {
             content: implementPrompt(deps.config.owner, repo, data, comments, instructions, attachments),
             requestId: `${requestId}:implement`,
+            ...(attachments.length > 0 && {
+              entry: { kind: PROMPT_ENTRY, data: { files: attachedFiles(attachments) } },
+            }),
           });
         }
 
