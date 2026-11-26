@@ -57,5 +57,6 @@ export async function openAgentHarness(
   const service = createIssueService({ harness, storage: opts.storage, pipeline, deps: opts.deps, context });
 
   harness.resume();
+
   return { harness, service };
 }

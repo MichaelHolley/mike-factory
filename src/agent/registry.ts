@@ -27,5 +27,6 @@ export function createAgentRegistry(deps: AgentDeps, opts: { crashAt?: string; a
     }),
   );
   registry.install(defineExtension({ name: "issue-pipeline", tasks: [pipeline] }));
+
   return { registry, pipeline };
 }

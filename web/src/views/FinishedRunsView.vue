@@ -53,6 +53,7 @@ const OUTCOMES: [IssuePhase, string][] = [
   ["failed", "Failed"],
   ["aborted", "Aborted"],
 ];
+
 const outcomes: FilterOption<IssuePhase | typeof ALL>[] = [
   { value: ALL, label: "Any outcome", icon: ListFilter, hue: "text-muted" },
   ...OUTCOMES.map(([value, label]) => ({ value, label, ...stepLook[value] })),
@@ -73,13 +74,16 @@ function clearFilters() {
 }
 
 const daysBefore = (days: number) => localDate(new Date(now.value - days * 86_400_000).toISOString());
+
 const presets = computed(() => {
   const today = daysBefore(0);
+
   const presets: { label: string; value: [string, string] }[] = [
     { label: "Today", value: [today, today] },
     { label: "Last 7 days", value: [daysBefore(6), today] },
     { label: "Last 30 days", value: [daysBefore(29), today] },
   ];
+
   return presets;
 });
 
@@ -95,12 +99,15 @@ const dayCounts = computed(() => {
 
 const days = computed(() => {
   const groups: { day: string; runs: typeof filtered.value }[] = [];
+
   for (const run of visible.value) {
     const day = dayOf(run);
     const last = groups.at(-1);
+
     if (last?.day === day) last.runs.push(run);
     else groups.push({ day, runs: [run] });
   }
+
   return groups;
 });
 

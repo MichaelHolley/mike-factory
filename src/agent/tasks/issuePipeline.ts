@@ -138,6 +138,7 @@ const tail = (value: string, max: number) => (value.length > max ? `...${value.s
 const codeBlock = (value: string) => {
   const longestRun = Math.max(0, ...(value.match(/`+/g) ?? []).map((run) => run.length));
   const fence = "`".repeat(Math.max(3, longestRun + 1));
+
   return `${fence}\n${value}\n${fence}`;
 };
 
@@ -272,6 +273,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
 
   const settingsOf = (state: IssueStateValue | undefined): RunSettings => {
     if (!state?.settings) throw new PipelineFailure("the run has no repo settings; start it again");
+
     return state.settings;
   };
 
@@ -290,6 +292,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
       (await tx.doc(IssueState, rt.conversationId)).settings = settings;
       return undefined;
     }, context);
+
     return settings;
   };
 
@@ -309,6 +312,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
 
       const doc = (await tx.doc(IssueState, rt.conversationId)) as Record<string, unknown>;
       for (const [key, value] of Object.entries({ ...patch, updatedAt: new Date().toISOString() })) doc[key] = value;
+
       return next;
     }, context);
 
@@ -323,6 +327,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
 
   const crashOnce = async (phase: string, rt: Rt, context: Context) => {
     if (deps.crashAt !== phase || (await rt.memo(`crash:${phase}`, context)) !== undefined) return;
+
     await rt.memo(`crash:${phase}`, true, context);
     log("CRASH_AT: exiting", { phase });
     process.exit(137);
@@ -334,6 +339,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
   const envOf = async (rt: Rt, context: Context) => {
     const env = await rt.env(context);
     if (!env) throw new Error("no execution environment for the issue conversation");
+
     return env;
   };
 
@@ -364,6 +370,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
     );
 
     if (!result.ok) return { ok: false, output: `${output}\n[${result.error.message}]` };
+
     return { ok: result.value.exitCode === 0, output };
   };
 
@@ -376,6 +383,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
       const result = await run(rt, context, command, worktrees.worktreePath(repo, issue));
       if (!result.ok) return { problem: `\`${command}\` still fails`, output: `$ ${command}\n${result.output}` };
     }
+
     return undefined;
   };
 
@@ -424,13 +432,16 @@ export function createIssuePipeline(deps: PipelineDeps) {
       await rt.commit(async (tx) => {
         const item = (await tx.doc(IssueNotes, rt.conversationId)).items.find(({ id }) => id === note.id);
         if (!item) return undefined;
+
         ids.push(await conversation.submit(tx, draft));
         item.deliveredAt = new Date().toISOString();
+
         return undefined;
       }, context);
 
       log("note delivered", { taskId: rt.taskId, id: note.id });
     }
+
     return ids;
   };
 
@@ -452,6 +463,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
     const ids = prompt ? [(await conversation.submit({ type: "input", ...prompt }, context)).id] : [];
 
     let idle: Promise<void> | undefined;
+
     for (;;) {
       const delivered = await deliverNotes(rt, conversation, context, run);
       ids.push(...delivered);
@@ -465,6 +477,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
     await rt.commit(async (tx) => {
       for (const record of await Promise.all(ids.map((id) => tx.submission(id))))
         if (record?.status !== "done") reasons.push(record?.reason ?? "unknown");
+
       return undefined;
     }, context);
 
@@ -692,6 +705,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
         await worktrees.push(repo, head, settings.defaultBranch);
 
         let pr = await github.findOpenPr(repo, head);
+
         if (!pr) {
           const content = await prContent(rt, context, repo, issue, state, settings);
           pr = await github.createPr(repo, { head, base: settings.defaultBranch, ...content });
@@ -721,8 +735,10 @@ export function createIssuePipeline(deps: PipelineDeps) {
 
         const state = await rt.snapshot(IssueState, rt.conversationId, context);
         const pr = state?.prNumber;
+
         if (pr != null) {
           await postReplies(rt, context, repo, pr);
+
           if (state?.reviewer)
             await github
               .requestReview(repo, pr, state.reviewer)
@@ -730,8 +746,10 @@ export function createIssuePipeline(deps: PipelineDeps) {
         }
 
         const costUsd = await spentCostUsd(rt, context);
+
         const unchanged =
           state?.startHead != null && (await worktrees.headSha(repo, issue, state.branch)) === state.startHead;
+
         let headline = `Pull request: ${prUrl}`;
         if (state?.statusOn) headline = unchanged ? NO_CHANGES_STATUS : "Done. Pushed the changes.";
 
@@ -752,6 +770,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
 
       failed: async (task, rt, context) => {
         const { reason, output } = task.state.checkpoint;
+
         await upsertStatus(deps, await statusTarget(rt, context, task.input), failureComment(reason, output));
 
         await advance(
@@ -777,9 +796,11 @@ export function createIssuePipeline(deps: PipelineDeps) {
         notes.items.forEach((note, index) => {
           const record = records[index];
           if (record?.type !== "input" || record.status !== "unanswered" || record.entry) return;
+
           note.deliveredAt = null;
           note.tries = (note.tries ?? 0) + 1;
         });
+
         return undefined;
       }, context);
 

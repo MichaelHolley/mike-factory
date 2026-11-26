@@ -3,11 +3,14 @@ import MarkdownIt from "markdown-it";
 import { computed } from "vue";
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
+
 const defaultLinkOpen =
   md.renderer.rules.link_open ?? ((tokens, i, options, _env, self) => self.renderToken(tokens, i, options));
+
 md.renderer.rules.link_open = (tokens, i, options, env, self) => {
   tokens[i]!.attrSet("target", "_blank");
   tokens[i]!.attrSet("rel", "noopener noreferrer");
+
   return defaultLinkOpen(tokens, i, options, env, self);
 };
 

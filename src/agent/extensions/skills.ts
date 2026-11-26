@@ -26,6 +26,7 @@ export function parseSkill(source: string, file: string): Skill {
   if (!match || typeof meta?.name !== "string" || typeof meta.description !== "string") {
     throw new Error(`${file}: frontmatter needs a name and a description`);
   }
+
   return { name: meta.name, description: meta.description.trim(), body: source.slice(match[0].length).trim() };
 }
 
@@ -38,11 +39,13 @@ export async function loadSkills(dir: string): Promise<Skill[]> {
       .map((entry) => entry.name);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+
     throw error;
   }
   return Promise.all(
     names.sort().map(async (name) => {
       const file = join(dir, name, "SKILL.md");
+
       return parseSkill(await readFile(file, "utf8"), file);
     }),
   );

@@ -10,6 +10,7 @@ const props = defineProps<{ call: Extract<TranscriptItem, { kind: "tool" }>; qui
 const status = computed(() => {
   const { result } = props.call;
   if (!result) return { icon: LoaderCircle, hue: "text-run animate-spin motion-reduce:animate-none" };
+
   return result.isError ? { icon: CircleX, hue: "text-bad" } : { icon: CircleCheck, hue: "text-muted/70" };
 });
 

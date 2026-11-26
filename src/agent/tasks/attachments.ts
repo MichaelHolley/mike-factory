@@ -41,7 +41,9 @@ export function nameFromUrl(url: string): string | undefined {
   const name = decoded.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[.-]+/, "");
   const extension = /\.[A-Za-z0-9]{1,10}$/.exec(name)?.[0];
   if (!extension) return undefined;
+
   if (name.length <= MAX_NAME_LENGTH) return name;
+
   return name.slice(0, MAX_NAME_LENGTH - extension.length) + extension;
 }
 
@@ -54,6 +56,7 @@ function unique(name: string, taken: Set<string>) {
   for (let n = 2; taken.has(candidate.toLowerCase()); n++) candidate = `${stem}-${n}${extension}`;
 
   taken.add(candidate.toLowerCase());
+
   return candidate;
 }
 
@@ -65,7 +68,9 @@ export type PlacedAttachment = { url: string; path: string } | { url: string; sk
 /** The folder of a note's files: `review-<id>` and `comment-<id>` for PR feedback, `note-<uuid>` for the run page. */
 export const noteFolder = (id: string) => {
   if (id.startsWith("pr-comment-")) return id.slice("pr-".length);
+
   if (id.startsWith("review-")) return id;
+
   return `note-${id}`;
 };
 
@@ -93,18 +98,21 @@ export async function placeAttachments(
 
     for (const url of attachmentUrls(texts)) {
       if (seen.has(url)) continue;
+
       seen.add(url);
 
       if (attempted >= MAX_ATTACHMENTS) {
         placed.push({ url, skipped: `limit of ${MAX_ATTACHMENTS} files per message` });
         continue;
       }
+
       attempted++;
 
       const named = nameFromUrl(url);
       if (!named) unnamed++;
 
       const download = await github.downloadAttachment(repo, url);
+
       if (!download.ok) {
         placed.push({ url, skipped: download.reason });
         continue;
@@ -119,6 +127,7 @@ export async function placeAttachments(
       placed.push({ url, path });
     }
   }
+
   return placed;
 }
 
@@ -139,6 +148,7 @@ export function attachmentsSection(intro: string, placed: readonly PlacedAttachm
   const lines = placed.map((file) =>
     "path" in file ? `- ${file.path} (from ${file.url})` : `- ${file.url}: skipped (${file.skipped})`,
   );
+
   return [
     `${intro} They are stored outside the working directory, so they can't be committed; read them but don't change them. Open them with \`read\` for text and images, or \`bash\` for other formats such as archives or PDFs. Copy one into the repository only when the task asks for it.`,
     `<attachments>\n${lines.join("\n")}\n</attachments>`,

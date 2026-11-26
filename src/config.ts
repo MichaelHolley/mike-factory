@@ -42,6 +42,7 @@ type Env = Record<string, string | undefined>;
 const required = (env: Env, name: string) => {
   const value = env[name]?.trim();
   if (!value) throw new Error(`${name} is required`);
+
   return value;
 };
 
@@ -52,6 +53,7 @@ const positiveNumber = (env: Env, name: string, fallback: number, integer: boole
   const value = Number(raw);
   if (!(value > 0) || (integer && !Number.isInteger(value)))
     throw new Error(`${name} must be a positive ${integer ? "integer" : "number"}`);
+
   return value;
 };
 
@@ -61,6 +63,7 @@ const maxFixAttempts = (env: Env) => {
 
   const value = Number(raw);
   if (!Number.isInteger(value) || value < 0) throw new Error("MAX_FIX_ATTEMPTS must be a non-negative integer");
+
   return value;
 };
 
@@ -71,6 +74,7 @@ const senderIds = (env: Env) => {
 
   if (ids.some((id) => !/^\d+$/.test(id)))
     throw new Error("ALLOWED_SENDER_IDS must be comma-separated numeric GitHub user ids");
+
   return ids.map(Number);
 };
 
@@ -78,6 +82,7 @@ const thinkingLevel = (env: Env): ModelThinkingLevel => {
   const value = env.THINKING_LEVEL?.trim() || "high";
   const level = THINKING_LEVELS.find((candidate) => candidate === value);
   if (!level) throw new Error(`THINKING_LEVEL must be one of ${THINKING_LEVELS.join(", ")}`);
+
   return level;
 };
 
@@ -97,6 +102,7 @@ export function loadFactoryConfig(env: Env): FactoryConfig {
 /** Parses `.mike.yaml`; an unknown key or a wrong type throws, naming the key. */
 export function parseRepoSettings(source: string): RepoSettings {
   let raw: unknown;
+
   try {
     raw = parse(source);
   } catch (error) {
@@ -104,6 +110,7 @@ export function parseRepoSettings(source: string): RepoSettings {
   }
 
   if (raw == null) return { setup: null, checks: [] };
+
   if (typeof raw !== "object" || Array.isArray(raw)) throw new Error(`${REPO_SETTINGS_FILE} must be a mapping`);
 
   const { setup = null, checks = [], ...rest } = raw as Record<string, unknown>;

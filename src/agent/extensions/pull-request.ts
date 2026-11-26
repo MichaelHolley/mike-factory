@@ -34,6 +34,7 @@ export function createPullRequestTools(publicUrl?: string) {
         execute: async (args, api, context) => {
           const state = await api.snapshot(IssueState, api.conversationId, context);
           if (!state || state.issue === 0) throw new Error("This conversation is not bound to a GitHub issue.");
+
           const title = args.title.trim();
           const body = args.body.trim();
 

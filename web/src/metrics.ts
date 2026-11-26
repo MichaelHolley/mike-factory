@@ -61,10 +61,12 @@ const MAX_REASON_CHARS = 120;
 
 export function quantile(values: readonly number[], q: number): number | null {
   if (values.length === 0) return null;
+
   const sorted = [...values].sort((a, b) => a - b);
   const position = (sorted.length - 1) * q;
   const below = Math.floor(position);
   const above = Math.min(below + 1, sorted.length - 1);
+
   return sorted[below]! + (sorted[above]! - sorted[below]!) * (position - below);
 }
 
@@ -93,10 +95,12 @@ export function computeMetrics(all: readonly RunStatus[], range: MetricsRange, n
   const closed = runs.filter((run) => run.prState === "closed");
   const mergedCosts = merged.map((run) => run.costUsd);
   const finished = runs.filter((run) => isIdle(run.phase) && run.updatedAt);
+
   const runTimes = finished.map((run) => ({
     outcome: outcomeOf(run.phase),
     ms: Date.parse(run.updatedAt!) - Date.parse(run.startedAt!),
   }));
+
   const reviewQueue = all.filter((run) => run.phase === "review");
 
   const starts = new Map<string, { weekday: number; hour: number; count: number }>();
@@ -105,11 +109,13 @@ export function computeMetrics(all: readonly RunStatus[], range: MetricsRange, n
     const weekday = (date.getDay() + 6) % 7;
     const key = `${weekday}:${date.getHours()}`;
     const cell = starts.get(key) ?? { weekday, hour: date.getHours(), count: 0 };
+
     cell.count++;
     starts.set(key, cell);
   }
 
   const outcomes = groupBy(runs, (run) => outcomeOf(run.phase));
+
   const failures = groupBy(
     runs.filter((run) => run.phase === "failed"),
     (run) => reasonOf(run.lastError),
@@ -201,14 +207,19 @@ export function summarize(metrics: Metrics, now: number): SentencePart[][] {
     prs.merged + prs.closed > 0
       ? [{ text: "You merged " }, figure(prs.merged), { text: " and closed " }, figure(prs.closed)]
       : [];
+
   const waiting: SentencePart[] = [];
+
   if (inReview.count > 0) {
     waiting.push({ text: settled.length ? ", and " : "There " }, figure(inReview.count), {
       text: ` ${plural(inReview.count, "is", "are")} waiting for your review`,
     });
+
     if (inReview.oldestSince)
       waiting.push({ text: `, the oldest for ${formatDuration(now - Date.parse(inReview.oldestSince))}` });
   }
+
   if (settled.length || waiting.length) sentences.push([...settled, ...waiting, { text: "." }]);
+
   return sentences;
 }

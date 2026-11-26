@@ -26,6 +26,7 @@ const SUMMARY_CHARS = 120;
 const summarize = (args: Record<string, unknown>) => {
   const first = Object.values(args).find((value): value is string => typeof value === "string" && value.trim() !== "");
   const line = first?.trim().split("\n")[0] ?? "";
+
   return line.length > SUMMARY_CHARS ? `${line.slice(0, SUMMARY_CHARS)}...` : line;
 };
 
@@ -34,6 +35,7 @@ export type HumanMessage = { id: string; text: string; review?: ReviewFeedback; 
 /** The `files` the pipeline stored in an entry's data, or none. */
 const filesOf = (data: JsonValue | undefined): AttachedFile[] => {
   const { files } = (data ?? {}) as Partial<Record<string, unknown>>;
+
   return Array.isArray(files) ? (files as AttachedFile[]) : [];
 };
 
@@ -104,6 +106,7 @@ export function toTranscript(
   const shown = new Set<string>();
   const human = (message: HumanMessage | undefined, pending: boolean): TranscriptItem[] => {
     if (!message || shown.has(message.id)) return [];
+
     shown.add(message.id);
 
     return [
@@ -171,6 +174,7 @@ function itemsOf(message: Message, { results, outputs }: Calls, files: AttachedF
             },
           ];
         }
+
         return [];
       });
     }

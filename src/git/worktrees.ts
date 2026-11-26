@@ -53,6 +53,7 @@ export function createWorktrees(opts: {
     );
 
     if (exitCode !== 0) throw new Error(`git ${args.join(" ")} failed with exit code ${exitCode}: ${stderr.trim()}`);
+
     return stdout.trim();
   };
 
@@ -77,15 +78,18 @@ export function createWorktrees(opts: {
 
   const withLock = <T>(repo: string, task: () => Promise<T>): Promise<T> => {
     const run = (locks.get(repo) ?? Promise.resolve()).then(task);
+
     locks.set(
       repo,
       run.catch(() => undefined),
     );
+
     return run;
   };
 
   const fetchMirror = async (repo: string) => {
     const mirror = mirrorPath(repo);
+
     const cloned = await access(join(mirror, "HEAD")).then(
       () => true,
       () => false,
@@ -95,6 +99,7 @@ export function createWorktrees(opts: {
       await mkdir(opts.mirrorDir, { recursive: true });
       await mirrorGit(opts.mirrorDir, ["clone", "--bare", remoteUrl(repo), mirror], await authEnv(repo));
     }
+
     await mirrorGit(mirror, ["fetch", "--prune", "origin", "+refs/heads/*:refs/heads/*"], await authEnv(repo));
   };
 
@@ -142,6 +147,7 @@ export function createWorktrees(opts: {
       if (!opened.ok) return undefined;
 
       const reader = opened.value;
+
       try {
         const info = await reader.info(ctx);
         if (!info.ok || info.value.size > MAX_ATTACHMENT_BYTES) return undefined;
@@ -161,6 +167,7 @@ export function createWorktrees(opts: {
         await fetchMirror(repo);
         await ensureRepo(repo);
         await git(bare, ["fetch", "--prune", "origin"]);
+
         if (await exists(path)) return { path, branch, created: false };
 
         await createDir(dirname(path));
@@ -173,6 +180,7 @@ export function createWorktrees(opts: {
           const base = openPr && (await refExists(repo, `refs/remotes/origin/${branch}`)) ? branch : defaultBranch;
           await git(bare, ["worktree", "add", "-b", branch, path, `origin/${base}`]);
         }
+
         return { path, branch, created: true };
       }),
 
@@ -202,6 +210,7 @@ export function createWorktrees(opts: {
           await writeFile(localBundle, getOrThrow(await workspace.readBinaryFile(bundle, ctx)));
 
           const mirror = mirrorPath(repo);
+
           await mirrorGit(mirror, [
             "-c",
             "fetch.fsckObjects=true",
@@ -210,6 +219,7 @@ export function createWorktrees(opts: {
             localBundle,
             `+${ref}:${ref}`,
           ]);
+
           await mirrorGit(mirror, ["push", "origin", `${ref}:${ref}`], await authEnv(repo));
         } finally {
           await workspace.remove(bundle, { force: true }, ctx);
@@ -231,6 +241,7 @@ export function createWorktrees(opts: {
 
         const path = worktreePath(repo, issue);
         if (await exists(path)) await git(bare, ["worktree", "remove", "--force", path]);
+
         await git(bare, ["worktree", "prune"]);
 
         const branches = await git(bare, [
@@ -239,6 +250,7 @@ export function createWorktrees(opts: {
           `refs/heads/mike/${issue}-*`,
           `refs/heads/${legacyBranchName(issue)}`,
         ]);
+
         for (const branch of branches.split("\n").filter((name) => issueOfBranch(name) === issue))
           await git(bare, ["branch", "-D", branch]);
       }),
@@ -266,6 +278,7 @@ export function createWorktrees(opts: {
           "agent/issue-*",
           "--format=%(refname:short)",
         ]);
+
         for (const branch of branches.split("\n")) {
           const issue = issueOfBranch(branch);
           if (issue !== undefined) numbers.add(issue);

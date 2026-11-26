@@ -8,6 +8,7 @@ import { text } from "./text.ts";
 async function currentIssue(api: Pick<ToolExecutionApi, "snapshot" | "conversationId">, context: Context) {
   const state = await api.snapshot(IssueState, api.conversationId, context);
   if (!state || state.issue === 0) throw new Error("This conversation is not bound to a GitHub issue.");
+
   return state;
 }
 

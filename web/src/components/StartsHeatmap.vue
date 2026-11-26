@@ -10,6 +10,7 @@ const props = defineProps<{ starts: Metrics["starts"] }>();
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const HOURS = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
+
 // Opacity steps instead of a continuous color scale, which would need d3-scale.
 const LEVELS = [0.3, 0.55, 0.8, 1];
 
@@ -19,6 +20,7 @@ const definition = computed(() => {
   const rows = props.starts.map((start) => ({ ...start, day: WEEKDAYS[start.weekday]!, hour: HOURS[start.hour]! }));
   const most = Math.max(1, ...rows.map((row) => row.count));
   const levelOf = (count: number) => Math.min(LEVELS.length - 1, Math.floor(((count - 1) / most) * LEVELS.length));
+
   return defineChart({
     marks: [
       cell(slots, { x: "hour", y: "day", fill: "currentColor", fillOpacity: 0.05, inset: 1.5, radius: 2 }),

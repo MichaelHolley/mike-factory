@@ -13,23 +13,27 @@ export function useLazyList<T>(items: Ref<readonly T[]>, root?: Ref<HTMLElement 
   const more = computed(() => shown.value < items.value.length);
 
   let observer: IntersectionObserver | undefined;
+
   // A fresh observer reports on observe, so a page too short to scroll still loads the next one.
   watch(
     [sentinel, shown, () => items.value.length],
     async () => {
       observer?.disconnect();
       if (!sentinel.value) return;
+
       observer = new IntersectionObserver(
         (entries) => {
           if (entries.some((entry) => entry.isIntersecting)) shown.value += PAGE;
         },
         { root: root?.value, rootMargin: "0px 0px 240px 0px" },
       );
+
       await nextTick();
       if (sentinel.value) observer.observe(sentinel.value);
     },
     { flush: "post" },
   );
+
   onBeforeUnmount(() => observer?.disconnect());
 
   function reset() {

@@ -10,8 +10,10 @@ export function useRuns() {
   onMounted(() => {
     if (users++ === 0) stream.start();
   });
+
   onBeforeUnmount(() => {
     if (--users === 0) stream.stop();
   });
+
   return { runs: stream.data, error: stream.error, loaded: stream.loaded };
 }

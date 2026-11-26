@@ -32,6 +32,7 @@ type Entry = { kind: "message"; message: Message } | { kind: "tools"; calls: Cal
 const MAX_MARKS = 32;
 
 const props = defineProps<{ repo: string; issue: string }>();
+
 const { items, error, loaded, downloadUrl, fileUrl } = useTranscript(
   () => props.repo,
   () => props.issue,
@@ -43,9 +44,11 @@ const entries = computed(() =>
   items.value.reduce<Entry[]>((entries, item) => {
     const last = entries.at(-1);
     if (isStatus(item)) return entries;
+
     if (item.kind !== "tool") entries.push({ kind: "message", message: item });
     else if (last?.kind === "tools") last.calls.push(item);
     else entries.push({ kind: "tools", calls: [item] });
+
     return entries;
   }, []),
 );
@@ -83,16 +86,19 @@ const ROLES: Record<Message["kind"], { label: string; icon: Component }> = {
 };
 
 const speaker = (entry: Entry) => (entry.kind === "tools" ? "assistant" : entry.message.kind);
+
 const startsTurn = (index: number) =>
   index === 0 || speaker(entries.value[index - 1]!) !== speaker(entries.value[index]!);
 
 const tone = (call: Call) => {
   if (!call.result) return "bg-run";
+
   return call.result.isError ? "bg-bad" : "bg-muted/55";
 };
 
 const SAY = "col-2 min-w-0 max-sm:col-1";
 const WHO: Record<Message["kind"], string> = { user: "pt-3.5 text-muted", assistant: "", human: "pt-2.5 text-you" };
+
 const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
   assistant: "max-w-prose pt-0.5",
   human: "w-fit max-w-prose rounded-r-md border-l-3 border-you bg-you/10 px-4 py-2.5",

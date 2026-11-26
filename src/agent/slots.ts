@@ -21,7 +21,9 @@ export function createSlots(limit: number): Slots {
   return {
     acquire(key, signal) {
       if (held.has(key)) return Promise.resolve();
+
       if (signal?.aborted) return Promise.reject(signal.reason);
+
       return new Promise<void>((resolve, reject) => {
         const onAbort = () => {
           const index = waiters.indexOf(waiter);

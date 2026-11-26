@@ -20,6 +20,7 @@ const SCRUBBED = [
 function required(env: NodeJS.ProcessEnv, name: string): string {
   const value = env[name];
   if (!value) throw new Error(`${name} is required`);
+
   return value;
 }
 
@@ -31,6 +32,7 @@ export function parsePrivateKey(raw: string): string {
     .trim();
 
   if (!value.includes("-----BEGIN")) value = Buffer.from(value, "base64").toString("utf8").trim();
+
   value = value.replaceAll("\\n", "\n");
 
   try {
@@ -39,6 +41,7 @@ export function parsePrivateKey(raw: string): string {
     const firstLine = value.split("\n", 1)[0] ?? "";
     // Describe only the shape, never the key material.
     const start = firstLine.startsWith("-----") ? `starts with "${firstLine}"` : "does not start with -----BEGIN";
+
     throw new Error(
       `GITHUB_PRIVATE_KEY is not a valid PEM private key (${value.split("\n").length} lines, ${value.length} chars, ${start})`,
     );
@@ -61,6 +64,8 @@ export function takeSecrets(env: NodeJS.ProcessEnv = process.env): Secrets {
     openrouterApiKey: env.OPENROUTER_API_KEY || undefined,
     proxySecret: env.PROXY_SECRET || undefined,
   };
+
   for (const name of SCRUBBED) delete env[name];
+
   return secrets;
 }
