@@ -90,6 +90,7 @@ describe("GitHub attachment downloads", () => {
   it.each([
     [attachment, "https://private-user-images.githubusercontent.com/123/screenshot.png?jwt=signed"],
     [file, "https://objects.githubusercontent.com/github-production-repository-file-5c1aeb/1/2?X-Amz-Signature=s"],
+    [attachment, "https://github-production-user-asset-6210df.s3.amazonaws.com/1/2-screenshot.png?X-Amz-Signature=s"],
   ])("follows the signed redirect of %s without forwarding credentials", async (url, signed) => {
     imageFetch.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: signed } }));
     expect(await client.downloadAttachment("demo", url)).toMatchObject({ ok: true });
@@ -99,15 +100,20 @@ describe("GitHub attachment downloads", () => {
   });
 
   it.each([
-    "https://evil.test/x",
-    "http://user-images.githubusercontent.com/x",
-    "http://127.0.0.1/x",
-    "https://objects.githubusercontent.com.evil.test/x",
-  ])("does not follow a redirect to %s", async (location) => {
+    ["https://evil.test/x?token=secret", "https://evil.test"],
+    ["http://user-images.githubusercontent.com/x", "http://user-images.githubusercontent.com"],
+    ["http://127.0.0.1/x", "http://127.0.0.1"],
+    ["https://objects.githubusercontent.com.evil.test/x", "https://objects.githubusercontent.com.evil.test"],
+    ["https://githubusercontent.com/x", "https://githubusercontent.com"],
+    [
+      "https://github-production-user-asset-evil.s3.amazonaws.com/x",
+      "https://github-production-user-asset-evil.s3.amazonaws.com",
+    ],
+  ])("does not follow a redirect to %s", async (location, origin) => {
     imageFetch.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location } }));
     expect(await client.downloadAttachment("demo", attachment)).toEqual({
       ok: false,
-      reason: "redirect is not an allowed GitHub attachment URL",
+      reason: `redirect to ${origin} is not an allowed GitHub attachment host`,
     });
     expect(imageFetch).toHaveBeenCalledTimes(1);
   });
