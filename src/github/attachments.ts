@@ -27,12 +27,14 @@ export const isAttachmentUrl = (value: string): boolean => {
   );
 };
 
-// Checked against live attachments: GitHub redirects images and files to signed URLs on these hosts.
-const SIGNED_HOSTS = new Set(["private-user-images.githubusercontent.com", "objects.githubusercontent.com"]);
+// Public repos' images redirect to this S3 bucket, matched exactly because anyone can create S3 buckets.
+const SIGNED_HOSTS = new Set(["github-production-user-asset-6210df.s3.amazonaws.com"]);
 
 const isAllowedRedirect = (value: string) => {
   const host = secureUrl(value)?.hostname;
-  return isAttachmentUrl(value) || (host !== undefined && SIGNED_HOSTS.has(host));
+  if (!host) return false;
+
+  return isAttachmentUrl(value) || host.endsWith(".githubusercontent.com") || SIGNED_HOSTS.has(host);
 };
 
 /**
@@ -70,7 +72,10 @@ export async function downloadAttachment(
 
           const next = new URL(location, url).href;
           if (!isAllowedRedirect(next))
-            return { ok: false, reason: "redirect is not an allowed GitHub attachment URL" };
+            return {
+              ok: false,
+              reason: `redirect to ${new URL(next).origin} is not an allowed GitHub attachment host`,
+            };
 
           url = next;
           continue;
