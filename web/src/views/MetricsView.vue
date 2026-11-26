@@ -71,6 +71,7 @@ const facts = computed(() => {
       note: "Median, start to finish",
     },
   ];
+
   return list;
 });
 </script>

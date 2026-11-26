@@ -24,7 +24,12 @@ Self-hosted agent that turns a `/mike` comment on a GitHub issue into a pull req
 - Server-side git commands that take input from the runner (bundles) fetch one fully qualified ref with `--no-tags` and fsck, and the image's git must be 2.46 or newer.
 - Only pipeline code pushes, opens PRs or comments on GitHub. The agent only edits and commits locally.
 - No nested ternaries. oxlint's `no-nested-ternary` doesn't reach Vue templates, so avoid them there too.
-- Keep code scannable: separate logical steps inside a function, and groups of declarations, with empty lines. Empty lines are the current way to break up dense code.
+- Keep code scannable: separate logical steps inside a function, and groups of declarations, with empty lines. Empty lines are the current way to break up dense code. Concretely, in `.ts` files and Vue `<script>` blocks:
+  - Put an empty line between a guard (an early `if (...) return`/`throw`, with or without braces) and the code after it, and between consecutive guards that check different things.
+  - Put an empty line before the final `return`, unless the function body is only that return or a short declaration-then-return pair.
+  - Group related `const` declarations together; separate them from the next group (inputs and parsing, lookups, decisions, side effects, result) with an empty line.
+  - Surround every multi-line statement (`if`/`for`/`try` blocks, multi-line calls, object literals) with empty lines, except at the start of a block.
+  - Aim for no more than about 4 consecutive lines without a break. Never add empty lines inside an object literal, argument list or a single chained expression.
 - Build interactive controls from `@ui-sdk/vue` components, themed through the `--ui-*` tokens in `web/src/style.css`. Use the `ui-sdk` skill if it's installed. Its docs for the installed version are in `web/node_modules/@ui-sdk/vue/docs/`: read `llms.txt` first, then only the pages you need. Its default styles are in `web/node_modules/@ui-sdk/core/dist/web.css`.
 - Style the web UI with Tailwind utilities and the theme tokens in `web/src/style.css`, not custom CSS. Avoid arbitrary values like `w-[6px]` or `max-[48rem]:`; use the nearest scale class or breakpoint, even if it isn't pixel-identical.
 - Use distinctive `@lucide/vue` icons to make things recognizable at a glance, and use the same icon for a concept everywhere. For example, a run's PR always uses `GitPullRequest` (`GitMerge` once merged, `GitPullRequestClosed` once closed), and a phase always uses its icon from `stepLook` in `web/src/phase.ts`.

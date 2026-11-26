@@ -41,11 +41,13 @@ export function createBranchNamer(opts: {
       const text = reply.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("");
       if (reply.stopReason === "error" || reply.stopReason === "aborted" || !text.trim()) {
         log("branch naming failed, using the issue title", { issue: issue.number, error: reply.errorMessage });
+
         return fallback();
       }
       return branchSlug(text);
     } catch (error) {
       log("branch naming failed, using the issue title", { issue: issue.number, error: String(error) });
+
       return fallback();
     }
   };

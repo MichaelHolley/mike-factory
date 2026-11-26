@@ -30,6 +30,7 @@ const inReview = computed(() =>
 
 const RECENT_MS = 24 * 60 * 60 * 1000;
 const RECENT_SHOWN = 8;
+
 const recent = computed(() =>
   runs.value
     .filter((run) => isFinished(run.phase) && now.value - (time(run.updatedAt) ?? 0) < RECENT_MS)

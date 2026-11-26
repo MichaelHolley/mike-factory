@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@ui-sdk/vue/tooltip";
 import type { Component } from "vue";
 
 defineOptions({ inheritAttrs: false });
+
 const TONES = {
   default: "text-muted hover:bg-ink/6 hover:text-ink",
   merged: "text-merged hover:bg-merged/10",

@@ -15,29 +15,35 @@ const props = defineProps<{ repo: string; issue: string; phase: IssuePhase }>();
 const text = ref("");
 const sending = ref(false);
 const error = ref<string | null>(null);
+
 // Kept across retries of the same text, so a send that failed after the server stored it isn't added twice.
 let id = crypto.randomUUID();
 watch(text, () => (id = crypto.randomUUID()));
 
 const finished = computed(() => isIdle(props.phase));
+
 const sendLabel = computed(() => {
   if (sending.value) return "Sending message";
   return finished.value ? "Continue run" : "Steer agent";
 });
+
 const canSend = computed(() => !sending.value && text.value.trim() !== "" && text.value.length <= MAX_CHARS);
 
 async function send() {
   if (!canSend.value) return;
+
   sending.value = true;
   error.value = null;
 
   try {
     const url = `/status/${encodeURIComponent(props.repo)}/${encodeURIComponent(props.issue)}/messages`;
+
     const response = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ id, text: text.value }),
     });
+
     if (!response.ok) throw new Error((await response.text()) || `HTTP ${response.status}`);
 
     text.value = "";

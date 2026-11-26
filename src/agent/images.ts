@@ -25,6 +25,7 @@ export function capReads(env: ExecutionEnv): ExecutionEnv {
         : read(offset, length, readContext);
     return opened;
   };
+
   return env;
 }
 
@@ -58,6 +59,7 @@ function gifSize(bytes: Buffer): Size | undefined {
       skipSubBlocks();
     } else return undefined;
   }
+
   return size;
 }
 
@@ -77,6 +79,7 @@ function webpSize(bytes: Buffer, start: number, end: number): Size | undefined {
       if (type === "ANMF") {
         const frame = webpSize(bytes, body + 16, next);
         if (!frame) return undefined;
+
         found = larger(found, frame);
       }
     } else if (type === "VP8 ") {
@@ -89,6 +92,7 @@ function webpSize(bytes: Buffer, start: number, end: number): Size | undefined {
 
     offset = next + (next % 2);
   }
+
   return size;
 }
 
@@ -96,6 +100,7 @@ function webpSize(bytes: Buffer, start: number, end: number): Size | undefined {
 function jpegSize(bytes: Buffer): Size | undefined {
   for (let offset = 2; offset + 9 <= bytes.length;) {
     if (bytes[offset] !== 0xff) return undefined;
+
     const marker = bytes[offset + 1]!;
     if (marker === 0xff) offset++;
     // Markers without a length field; the decoder skips them where this would read a length.
@@ -105,6 +110,7 @@ function jpegSize(bytes: Buffer): Size | undefined {
       return { width: bytes.readUInt16BE(offset + 7), height: bytes.readUInt16BE(offset + 5) };
     else offset += 2 + bytes.readUInt16BE(offset + 2);
   }
+
   return undefined;
 }
 
@@ -126,9 +132,13 @@ export function imageHeader(data: Uint8Array): (Size & { mimeType: string }) | u
     if (ascii(0, "\x89PNG\r\n\x1a\n") && ascii(12, "IHDR"))
       return as("image/png", { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) });
     if (ascii(0, "GIF87a") || ascii(0, "GIF89a")) return as("image/gif", gifSize(bytes));
+
     if (ascii(0, "RIFF") && ascii(8, "WEBP")) return as("image/webp", webpSize(bytes, 12, bytes.length));
+
     if (bytes[0] === 0xff && bytes[1] === 0xd8) return as("image/jpeg", jpegSize(bytes));
+
     if (ascii(0, "BM")) return as("image/bmp", bmpSize(bytes));
+
     return undefined;
   } catch {
     // A field past the end of a truncated file.

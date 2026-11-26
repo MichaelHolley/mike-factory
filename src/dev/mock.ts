@@ -36,16 +36,21 @@ function run(
 const crcTable = Array.from({ length: 256 }, (_, n) => {
   let c = n;
   for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+
   return c >>> 0;
 });
+
 const crc32 = (bytes: Buffer) => (bytes.reduce((c, byte) => crcTable[(c ^ byte) & 0xff]! ^ (c >>> 8), ~0) ^ ~0) >>> 0;
 
 const chunk = (type: string, data: Buffer) => {
   const body = Buffer.concat([Buffer.from(type, "latin1"), data]);
+
   const length = Buffer.alloc(4);
   length.writeUInt32BE(data.length);
+
   const crc = Buffer.alloc(4);
   crc.writeUInt32BE(crc32(body));
+
   return Buffer.concat([length, body, crc]);
 };
 
@@ -65,11 +70,13 @@ function screenshot(width: number, height: number, dark: boolean): Buffer {
 
   const rows = Array.from({ length: height }, (_, y) => {
     const row = Buffer.alloc(1 + width * 3);
+
     for (let x = 0; x < width; x++) {
       const inText = y > 70 && y % 28 < 10 && x > 32 && x < width - 32 - ((y * 7) % 180);
       const color = (y < 48 && bar) || (inText && line) || page;
       row.set(color, 1 + x * 3);
     }
+
     return row;
   });
 
@@ -315,6 +322,7 @@ function createMockService(): IssueService {
     }),
     ...history(),
   ];
+
   const key = (repo: string, issue: number) => `${repo}/${issue}`;
   const conversations = new Map(runs.map((r) => [key(r.repo, r.issue), sampleConversation()]));
   const statusListeners = new Set<() => void>();
@@ -335,6 +343,7 @@ function createMockService(): IssueService {
     "failed",
     "aborted",
   ];
+
   const demo = run("phase-demo", 1, "Walk through every phase", "queued", { startedAt: ago(0), updatedAt: ago(0) });
   runs.unshift(demo);
   conversations.set(key(demo.repo, demo.issue), sampleConversation());
@@ -344,6 +353,7 @@ function createMockService(): IssueService {
   stopped.push({ kind: "failure", reason: "aborted", detail: "Stopped from the issue with /mike stop." });
 
   let tick = 0;
+
   const items = (k: string) => {
     const conversation = conversations.get(k);
     return conversation === streaming ? [...conversation, ...liveTail(tick)] : conversation;
@@ -353,6 +363,7 @@ function createMockService(): IssueService {
     tick++;
     notify(transcriptListeners.get(key("mike-factory", 31)));
   }, 400);
+
   setInterval(() => {
     demo.phase = cycle[(cycle.indexOf(demo.phase) + 1) % cycle.length]!;
     demo.updatedAt = new Date().toISOString();
@@ -375,9 +386,11 @@ function createMockService(): IssueService {
     async watchTranscript(repo, issue, listener) {
       const k = key(repo, issue);
       if (!conversations.has(k)) return undefined;
+
       const listeners = transcriptListeners.get(k) ?? new Set();
       transcriptListeners.set(k, listeners);
       listeners.add(listener);
+
       return { items: async () => items(k) ?? [], stop: () => void listeners.delete(listener) };
     },
     async message({ repo, issue, text }) {
@@ -388,6 +401,7 @@ function createMockService(): IssueService {
 
       const result = IDLE.includes(target.phase) ? "started" : "steered";
       const item: TranscriptItem = { kind: "human", text, pending: true };
+
       conversation.push(item);
       notify(transcriptListeners.get(k));
 
@@ -402,6 +416,7 @@ function createMockService(): IssueService {
         conversation.push({ kind: "assistant", text: `(sample reply) Noted: “${text.slice(0, 80)}”` });
         notify(transcriptListeners.get(k));
       }, 1500);
+
       return result;
     },
   };
@@ -409,5 +424,7 @@ function createMockService(): IssueService {
 
 const log = (msg: string, data: object = {}) => console.log(JSON.stringify({ msg, ...data }));
 const port = Number(process.env.PORT ?? 3000);
+
 const app = createServer({ service: createMockService(), log });
+
 serve({ fetch: app.fetch, port, hostname: "127.0.0.1" }, () => log(`sample status server on http://localhost:${port}`));

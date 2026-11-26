@@ -53,6 +53,7 @@ export function createReviewTools(github: GitHubClient) {
         execute: async (args, api, context) => {
           const body = args.body.trim();
           if (!body) return { output: text("Rejected: the reply is empty."), isError: true };
+
           if (body.length > MAX_REPLY_CHARS) {
             return {
               output: text(`Rejected: the reply has ${body.length} characters; keep it under ${MAX_REPLY_CHARS}.`),

@@ -17,6 +17,7 @@ const shown = computed(() => OUTCOMES.filter((outcome) => props.runTimes.some((t
 
 const definition = computed(() => {
   const rows = props.runTimes.map((time) => ({ label: outcomeLook(time.outcome).label, minutes: time.ms / MINUTE }));
+
   return defineChart({
     marks: shown.value.map((outcome) => {
       const { label, hue } = outcomeLook(outcome);

@@ -31,7 +31,9 @@ function buildModels(openrouterApiKey: string | undefined, useFaux: boolean) {
     const model = faux.getModel();
     return { models, model: { provider: model.provider, modelId: model.id } };
   }
+
   if (!openrouterApiKey) throw new Error("OPENROUTER_API_KEY is required unless MODEL=faux");
+
   // openrouterProvider() resolves its key lazily from process.env, which takeSecrets has already scrubbed.
   const models = createModels({
     authContext: {
@@ -39,6 +41,7 @@ function buildModels(openrouterApiKey: string | undefined, useFaux: boolean) {
       fileExists: async () => false,
     },
   });
+
   models.setProvider(openrouterProvider());
   return { models, model: undefined };
 }
@@ -46,12 +49,16 @@ function buildModels(openrouterApiKey: string | undefined, useFaux: boolean) {
 async function main() {
   const useFaux = process.env.MODEL === "faux";
   const factoryConfig = loadFactoryConfig(process.env);
+
   const skills = await loadSkills(SKILLS_DIR);
+
   const dataDir = process.env.DATA_DIR ?? "/data";
   const mirrorDir = process.env.MIRRORS_DIR ?? join(dataDir, "mirrors");
+
   const port = Number(process.env.PORT ?? 3000);
   const hostname = process.env.HOST ?? "127.0.0.1";
   const maxConcurrent = Number(process.env.MAX_CONCURRENT ?? DEFAULT_MAX_CONCURRENT);
+
   if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1)
     throw new Error("MAX_CONCURRENT must be a positive integer");
 
@@ -65,10 +72,12 @@ async function main() {
     privateKey: secrets.privateKey,
     owner: factoryConfig.owner,
   });
+
   const runnerHost = process.env.RUNNER_HOST || undefined;
   const workspace = await openWorkspace({ runnerHost, dataDir, gitIdentity: await github.botIdentity() });
 
   if (!runnerHost) log("RUNNER_HOST is unset: agent tools run unsandboxed in the server process");
+
   if (!secrets.proxySecret) log("PROXY_SECRET is unset: anything that reaches the port can use the status API");
 
   const worktrees = createWorktrees({
@@ -91,6 +100,7 @@ async function main() {
 
   await mkdir(dataDir, { recursive: true });
   const storage = await openNodeSqliteStorage(join(dataDir, "agent.sqlite"));
+
   const { harness, service } = await openAgentHarness(
     {
       storage,
@@ -112,8 +122,10 @@ async function main() {
   );
 
   let shuttingDown = false;
+
   void harness.closed.then((end) => {
     if (shuttingDown) return;
+
     log("harness closed unexpectedly", { end: end.kind === "failed" ? String(end.error) : end.kind });
     process.exit(1);
   });
@@ -123,6 +135,7 @@ async function main() {
   setInterval(sweep, SWEEP_INTERVAL_MS).unref();
 
   const shutdownController = new AbortController();
+
   const app = createServer({
     service,
     webhook: { config, secret: secrets.webhookSecret },
@@ -142,12 +155,14 @@ async function main() {
 
   const shutdown = async (signal: string) => {
     if (shuttingDown) return;
+
     shuttingDown = true;
     log("shutting down", { signal });
     shutdownController.abort();
 
     const serverClosed = new Promise<void>((resolve) => server.close(() => resolve()));
     if ("closeIdleConnections" in server) server.closeIdleConnections();
+
     // A client that stopped reading never drains its live stream, so its socket would never close.
     if ("closeAllConnections" in server) setTimeout(() => server.closeAllConnections(), 5_000).unref();
 

@@ -41,6 +41,7 @@ function reset() {
 function onValueChange(next: string, details: { reason: string; cancel: () => void }) {
   if (details.reason === "input-change") dismissed.value = false;
   if (details.reason !== "item-press") return;
+
   details.cancel();
   const run = results.value.find((candidate) => key(candidate) === next);
   if (run) void router.push(`/runs/${run.repo}/${run.issue}`);

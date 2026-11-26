@@ -38,6 +38,7 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
       id.catch(() => installationIds.delete(repo));
       installationIds.set(repo, id);
     }
+
     return id;
   };
 
@@ -58,6 +59,7 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
       permissions,
       request: { signal },
     });
+
     cache.set(repo, { token: data.token, expiresAt: Date.parse(data.expires_at) });
     return data.token;
   };
@@ -120,11 +122,13 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
 
     async getIssue(repo, issue): Promise<IssueData> {
       const octokit = await octokitFor(repo);
+
       const { data } = await octokit.request("GET /repos/{owner}/{repo}/issues/{issue_number}", {
         owner,
         repo,
         issue_number: issue,
       });
+
       return {
         number: data.number,
         title: data.title,
@@ -150,6 +154,7 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
       const octokit = await octokitFor(repo);
       const tag = markerComment(marker);
       const { name: botLogin } = await this.botIdentity();
+
       const existing = (await rawComments(repo, issue)).find(
         (comment) => comment.user?.login === botLogin && comment.body?.includes(tag),
       );
@@ -175,6 +180,7 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
 
     async findOpenPr(repo, head) {
       const octokit = await octokitFor(repo);
+
       const { data } = await octokit.request("GET /repos/{owner}/{repo}/pulls", {
         owner,
         repo,
@@ -182,6 +188,7 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
         state: "open",
         per_page: 1,
       });
+
       const pr = data[0];
       return pr && { number: pr.number, url: pr.html_url };
     },
@@ -194,6 +201,7 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
 
     async updatePr(repo, number, pr) {
       const octokit = await octokitFor(repo);
+
       await octokit.request("PATCH /repos/{owner}/{repo}/pulls/{pull_number}", {
         owner,
         repo,
@@ -204,11 +212,13 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
 
     async getPr(repo, number) {
       const octokit = await octokitFor(repo);
+
       const { data } = await octokit.request("GET /repos/{owner}/{repo}/pulls/{pull_number}", {
         owner,
         repo,
         pull_number: number,
       });
+
       return {
         number: data.number,
         url: data.html_url,
@@ -220,6 +230,7 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
 
     async getReviewFeedback(repo, pr, reviewId): Promise<ReviewFeedback> {
       const octokit = await octokitFor(repo);
+
       const [{ data: review }, all] = await Promise.all([
         octokit.request("GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}", {
           owner,
@@ -254,6 +265,7 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
 
     async listReviewThreads(repo, pr) {
       const octokit = await octokitFor(repo);
+
       type Page = {
         repository: {
           pullRequest: {
@@ -287,6 +299,7 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
           }`,
           { owner, repo, pr, cursor },
         );
+
         const { nodes, pageInfo } = page.repository.pullRequest.reviewThreads;
 
         for (const thread of nodes.filter((node) => !node.isResolved)) {
@@ -300,13 +313,16 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
             })),
           });
         }
+
         cursor = pageInfo.hasNextPage ? pageInfo.endCursor : null;
       } while (cursor);
+
       return threads;
     },
 
     async react(repo, nodeId) {
       const octokit = await octokitFor(repo);
+
       await octokit.graphql(
         `mutation($id: ID!) { addReaction(input: { subjectId: $id, content: EYES }) { clientMutationId } }`,
         { id: nodeId },
@@ -318,6 +334,7 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
       const { name: botLogin } = await this.botIdentity();
       const tag = markerComment(marker);
       const all = await rawReviewComments(repo, pr);
+
       if (all.some((comment) => comment.user?.login === botLogin && comment.body.includes(tag))) return true;
 
       const target = all.find((comment) => comment.id === commentId);
@@ -330,11 +347,13 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
         comment_id: target.rootId,
         body: `${tag}\n${body}`,
       });
+
       return true;
     },
 
     async requestReview(repo, pr, login) {
       const octokit = await octokitFor(repo);
+
       await octokit.request("POST /repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers", {
         owner,
         repo,
@@ -352,16 +371,20 @@ export function createGitHubClient(opts: { appId: string; privateKey: string; ow
         if (!slug) throw new Error("GET /app returned no slug");
 
         const botLogin = `${slug}[bot]`;
+
         // App JWT auth only covers /app routes; the bot's public profile needs no auth.
         const res = await fetch(`https://api.github.com/users/${encodeURIComponent(botLogin)}`, {
           headers: { accept: "application/vnd.github+json", "user-agent": "mike-factory" },
         });
+
         if (!res.ok) throw new Error(`GET /users/${botLogin} failed: ${res.status}`);
 
         const user = (await res.json()) as { id: number };
         return { name: botLogin, email: `${user.id}+${botLogin}@users.noreply.github.com` };
       })();
+
       identity.catch(() => (identity = undefined));
+
       return identity;
     },
   };

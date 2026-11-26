@@ -18,7 +18,9 @@ const secureUrl = (value: string) => {
 export const isAttachmentUrl = (value: string): boolean => {
   const url = secureUrl(value);
   if (!url) return false;
+
   if (url.hostname === "user-images.githubusercontent.com") return true;
+
   return (
     url.hostname === "github.com" &&
     (url.pathname.startsWith("/user-attachments/assets/") || url.pathname.startsWith("/user-attachments/files/"))
@@ -45,6 +47,7 @@ export async function downloadAttachment(
 
   const limit = `file exceeds the ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MiB size limit`;
   const signal = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS);
+
   try {
     const token = await authenticate(signal);
     let url = value;
@@ -74,18 +77,23 @@ export async function downloadAttachment(
         }
 
         if (!response.ok) return { ok: false, reason: `download returned HTTP ${response.status}` };
+
         if (Number(response.headers.get("content-length")) > MAX_ATTACHMENT_BYTES) return { ok: false, reason: limit };
+
         if (!response.body) return { ok: false, reason: "empty file" };
 
         const chunks: Uint8Array[] = [];
         let size = 0;
+
         for await (const chunk of response.body) {
           size += chunk.byteLength;
           if (size > MAX_ATTACHMENT_BYTES) return { ok: false, reason: limit };
+
           chunks.push(chunk);
         }
 
         if (size === 0) return { ok: false, reason: "empty file" };
+
         return { ok: true, bytes: Buffer.concat(chunks, size) };
       } finally {
         if (!response.body?.locked) await response.body?.cancel();

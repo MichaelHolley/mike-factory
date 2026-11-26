@@ -43,9 +43,12 @@ export function createServer({
 
   if (proxySecret) {
     const expected = digest(proxySecret);
+
     app.use("*", async (c, next) => {
       if (c.req.path === "/webhooks/github") return next();
+
       if (!timingSafeEqual(digest(c.req.header("x-proxy-secret") ?? ""), expected)) return c.text("unauthorized", 401);
+
       return next();
     });
   }
@@ -60,10 +63,12 @@ export function createServer({
   ) => {
     let wake = () => {};
     let changed = false;
+
     const live = await watch(() => {
       changed = true;
       wake();
     });
+
     if (!live) return c.text("not found", 404);
 
     c.header("X-Accel-Buffering", "no");
@@ -72,6 +77,7 @@ export function createServer({
       c,
       async (stream) => {
         const ended = () => stream.aborted || c.req.raw.signal.aborted || shutdownSignal?.aborted === true;
+
         const end = () => {
           stream.abort();
           wake();
@@ -100,10 +106,13 @@ export function createServer({
                 retry: sent ? undefined : RETRY_MS,
               });
             }
+
             sent = items;
 
             if (!changed && !ended()) await new Promise<void>((resolve) => (wake = resolve));
+
             if (ended()) break;
+
             await stream.sleep(Math.max(0, loadedAt + THROTTLE_MS - Date.now()));
           }
         } finally {
@@ -127,6 +136,7 @@ export function createServer({
       const deliveryId = c.req.header("x-github-delivery") ?? "";
 
       let action;
+
       try {
         action = await verifyWebhook({
           event: c.req.header("x-github-event") ?? "",
@@ -140,6 +150,7 @@ export function createServer({
           log("webhook rejected", { deliveryId, reason: "invalid signature" });
           return c.text("invalid signature", 401);
         }
+
         throw error;
       }
 
@@ -148,6 +159,7 @@ export function createServer({
       else if (action.kind === "stop" || action.kind === "pr-stop") await service.stop(action);
       else if (action.kind === "feedback") await service.feedback(action);
       else await service.prState(action);
+
       return c.body(null, 202);
     });
 
@@ -184,14 +196,17 @@ export function createServer({
     const repo = c.req.param("repo");
     const issue = Number(c.req.param("issue"));
     if (!Number.isInteger(issue)) return c.text("not found", 404);
+
     return liveList(c, (onChange) => service.watchTranscript(repo, issue, onChange));
   });
 
   app.get("/status/:repo/:issue/conversation", async (c) => {
     const issue = Number(c.req.param("issue"));
     if (!Number.isInteger(issue)) return c.text("not found", 404);
+
     const transcript = await service.transcript(c.req.param("repo"), issue);
     if (!transcript) return c.text("not found", 404);
+
     if (c.req.query("download") === "1") {
       const repo = c.req.param("repo").replace(/[^a-zA-Z0-9._-]/g, "_");
 
@@ -199,6 +214,7 @@ export function createServer({
       c.header("Cache-Control", "no-store");
       return c.body(JSON.stringify(transcript, null, 2), 200, { "Content-Type": "application/json; charset=UTF-8" });
     }
+
     return c.json(transcript);
   });
 
@@ -212,10 +228,12 @@ export function createServer({
 
     // The runner can rewrite these files, so only raster images it can't disguise open in the browser, and nothing runs.
     const image = imageHeader(bytes)?.mimeType;
+
     c.header("Content-Security-Policy", "default-src 'none'; sandbox");
     c.header("X-Content-Type-Options", "nosniff");
     c.header("Cache-Control", "no-store");
     c.header("Content-Disposition", `${image ? "inline" : "attachment"}; filename="${name}"`);
+
     return c.body(new Uint8Array(bytes), 200, { "Content-Type": image ?? "application/octet-stream" });
   });
 

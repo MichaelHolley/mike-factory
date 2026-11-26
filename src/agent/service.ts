@@ -48,6 +48,7 @@ function observeChanges(harness: Harness, matches: (change: CommitChange) => boo
     },
     end: () => {},
   });
+
   return () => observation.detach();
 }
 
@@ -88,11 +89,13 @@ export function createIssueService(opts: {
 
   const isLive = async (taskId: number) => {
     const task = await harness.getTask(taskId as TaskId, context);
+
     return task !== undefined && task.state.status !== "terminal";
   };
 
   const hasLivePipeline = async (repo: string, issue: number) => {
     const { state } = await lookup(repo, issue);
+
     return state?.pipelineTaskId != null && (await isLive(state.pipelineTaskId));
   };
 
@@ -164,6 +167,7 @@ export function createIssueService(opts: {
           context,
         );
     if (!conversation) throw new Error(`conversation ${conversationId} for ${key} is missing`);
+
     if (conversationId) {
       await conversation.configure({ model: config.model, thinkingLevel: config.thinkingLevel }, context);
     }
@@ -234,6 +238,7 @@ export function createIssueService(opts: {
     history.merge(watch.value);
     watch.start(async (call) => {
       if (call.kind !== "value") return;
+
       history.merge(call.value);
       listener();
     });
@@ -284,6 +289,7 @@ export function createIssueService(opts: {
       mutex.run(async () => {
         const { key, conversationId, state } = await lookup(repo, issue);
         if (state?.requestId === requestId) return log("start ignored: request already handled", { key, requestId });
+
         if (state?.pipelineTaskId != null && (await isLive(state.pipelineTaskId))) {
           return log("start ignored: pipeline already running", { key, requestId });
         }
@@ -299,11 +305,13 @@ export function createIssueService(opts: {
 
         const { live, pending } = await addNote(conversation, { id, text });
         if (live) return "steered";
+
         // A retry of a message that was already delivered has nothing left to start.
         if (!pending) return "started";
 
         const input = { repo, issue, requestId: `web-${id}`, instructions: "", trigger: "web" } as const;
         await launch(conversation.id, input);
+
         return "started";
       }),
 
@@ -319,6 +327,7 @@ export function createIssueService(opts: {
         const { key, conversationId, state } = await lookup(repo, target.issue);
         const conversation = conversationId && (await harness.conversation(conversationId, context));
         if (!conversation) return log("feedback ignored: issue has no conversation", { key, pr: number, id });
+
         if (state?.branch !== pr.headRef)
           return log("feedback ignored: not the issue's agent branch", { key, pr: number, branch: pr.headRef });
 
@@ -334,6 +343,7 @@ export function createIssueService(opts: {
           { number, reviewer: action.reviewer },
         );
         if (live) return log("feedback steered into the live run", { key, id });
+
         if (!pending) return log("feedback ignored: already delivered", { key, id });
 
         const input = { repo, issue: target.issue, requestId: id, instructions: "", trigger: "pr" } as const;
@@ -349,6 +359,7 @@ export function createIssueService(opts: {
           const pr = await github.getPr(action.repo, action.pr);
           const target = agentPrIssue({ ref: pr.headRef, fromFork: pr.fromFork });
           if ("reason" in target) return log("stop ignored: not an agent pull request", { ...action, ...target });
+
           issue = target.issue;
           branch = pr.headRef;
         }
@@ -384,6 +395,7 @@ export function createIssueService(opts: {
             const { state } = await lookup(repo, issue);
             if (!state || !isSettled(state)) {
               if ((await github.getIssue(repo, issue)).state !== "closed") continue;
+
               if (state?.branch && (await github.findOpenPr(repo, state.branch))) continue;
             }
             await mutex.run(() => cleanup(repo, issue));
@@ -420,6 +432,7 @@ export function createIssueService(opts: {
           updatedAt: state.updatedAt ?? null,
         });
       }
+
       return states;
     },
 

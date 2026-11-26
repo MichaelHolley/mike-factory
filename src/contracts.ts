@@ -15,9 +15,12 @@ export function branchSlug(text: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+
   if (slug.length <= BRANCH_SLUG_MAX) return slug || "issue";
+
   const cut = slug.slice(0, BRANCH_SLUG_MAX + 1);
   const boundary = cut.lastIndexOf("-");
+
   return (boundary > 0 ? cut.slice(0, boundary) : cut.slice(0, BRANCH_SLUG_MAX)).replace(/-+$/, "");
 }
 
@@ -31,7 +34,9 @@ export function issueOfBranch(ref: string): number | undefined {
 export function agentPrIssue(head: { ref?: string; fromFork: boolean }): { issue: number } | { reason: string } {
   const issue = issueOfBranch(head.ref ?? "");
   if (issue === undefined) return { reason: `branch ${head.ref} is not an agent branch` };
+
   if (head.fromFork) return { reason: "pull request comes from a fork" };
+
   return { issue };
 }
 

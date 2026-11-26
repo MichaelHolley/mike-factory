@@ -5,7 +5,9 @@ import { isFinished } from "./phase.ts";
 export function searchRuns(runs: readonly RunStatus[], query: string, limit = 8): RunStatus[] {
   const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (!tokens.length) return [];
+
   const updated = (run: RunStatus) => (run.updatedAt ? Date.parse(run.updatedAt) : 0);
+
   return runs
     .filter((run) => {
       const text = `${run.repo}\n${run.title ?? ""}\n#${run.issue}`.toLowerCase();

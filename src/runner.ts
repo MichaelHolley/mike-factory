@@ -86,6 +86,7 @@ async function trustRunner(host: string, sshDir: string): Promise<SshTarget> {
       target.identityFile,
     ]);
   }
+
   await writeFile(AUTHORIZED_KEYS, await readFile(publicKey));
   // sshd refuses a key file others can write, and `writeFile`'s mode only applies when it creates the file.
   await chmod(AUTHORIZED_KEYS, 0o600);

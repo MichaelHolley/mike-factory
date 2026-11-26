@@ -58,8 +58,11 @@ export function parseCommand(body: string): Command | undefined {
   const [first = "", ...rest] = body.trimStart().split(/\r?\n/);
   const match = /^\/mike(?:\s+(.*))?$/i.exec(first.trimEnd());
   if (!match) return undefined;
+
   const args = match[1] ?? "";
+
   if (args.toLowerCase() === "stop") return { kind: "stop" };
+
   return { kind: "start", instructions: [args, ...rest].join("\n").trim() };
 }
 
@@ -96,6 +99,7 @@ export async function verifyWebhook(input: {
   const issue = payload.issue?.number;
   const repo = payload.repository?.name;
   const commentId = payload.comment?.id;
+
   if (typeof issue !== "number" || typeof commentId !== "number" || !repo)
     return ignore("payload has no issue number, comment id or repository");
 
@@ -105,6 +109,7 @@ export async function verifyWebhook(input: {
   if (payload.issue?.pull_request) {
     // The payload carries no head branch; the service checks the PR before acting on it.
     if (command.kind === "stop") return { kind: "pr-stop", repo, pr: issue };
+
     return {
       kind: "feedback",
       repo,
@@ -119,6 +124,7 @@ export async function verifyWebhook(input: {
 
   const requestId = `comment-${commentId}`;
   if (command.kind === "stop") return { kind: "stop", repo, issue, requestId };
+
   return { ...command, repo, issue, requestId, reviewer: payload.sender?.login ?? "" };
 }
 
@@ -127,9 +133,12 @@ const HANDLED_EVENTS = new Set(["issue_comment", "pull_request", "pull_request_r
 function pullRequestAction(payload: PullRequestPayload, config: WebhookConfig): WebhookAction {
   if (payload.action !== "closed" && payload.action !== "reopened")
     return ignore(`pull_request action ${payload.action} is not handled`);
+
   const target = agentPr(payload, config);
   if ("reason" in target) return ignore(target.reason);
+
   const closedAs = payload.pull_request?.merged === true ? "merged" : "closed";
+
   return {
     kind: "pr-state",
     repo: target.repo,
@@ -141,12 +150,16 @@ function pullRequestAction(payload: PullRequestPayload, config: WebhookConfig): 
 
 function reviewAction(payload: ReviewPayload, config: WebhookConfig): WebhookAction {
   if (payload.action !== "submitted") return ignore(`pull_request_review action ${payload.action} is not handled`);
+
   const review = payload.review;
   const body = review?.body ?? "";
   const command = parseCommand(body);
+
   if (!command && review?.state !== "changes_requested")
     return ignore(`review in state ${review?.state} has no /mike command`);
+
   if (typeof review?.id !== "number") return ignore("payload has no review id");
+
   return prFeedback(payload, config, command, {
     reviewId: review.id,
     nodeId: review.node_id ?? "",
@@ -158,9 +171,12 @@ function reviewCommentAction(payload: ReviewCommentPayload, config: WebhookConfi
   if (payload.action !== "created")
     return ignore(`pull_request_review_comment action ${payload.action} is not handled`);
   const comment = payload.comment;
+
   const command = parseCommand(comment?.body ?? "");
   if (!command) return ignore("comment is not a /mike command");
+
   if (typeof comment?.pull_request_review_id !== "number") return ignore("payload has no review id");
+
   return prFeedback(payload, config, command, {
     reviewId: comment.pull_request_review_id,
     nodeId: comment.node_id ?? "",
@@ -179,6 +195,7 @@ function prFeedback(
 
   const target = agentPr(payload, config);
   if ("reason" in target) return ignore(target.reason);
+
   if (!target.pr) return ignore("payload has no pull request number");
 
   if (command?.kind === "stop") return { kind: "pr-stop", repo: target.repo, pr: target.pr };
@@ -202,10 +219,12 @@ function agentPr(
   config: WebhookConfig,
 ): { repo: string; pr: number; issue: number } | { reason: string } {
   const head = payload.pull_request?.head;
+
   const target = agentPrIssue({
     ref: head?.ref,
     fromFork: head?.repo?.full_name !== payload.repository?.full_name,
   });
+
   if ("reason" in target) return target;
 
   const notAllowed = repoNotAllowed(payload, config);
@@ -217,12 +236,14 @@ function agentPr(
 function senderNotAllowed(payload: { sender?: Sender }, config: WebhookConfig): string | undefined {
   if (!config.allowedSenderIds.includes(Number(payload.sender?.id)))
     return `sender ${payload.sender?.id} is not allowed`;
+
   return undefined;
 }
 
 function repoNotAllowed(payload: { repository?: Repository }, config: WebhookConfig): string | undefined {
   const owner = payload.repository?.owner?.login;
   if (owner?.toLowerCase() !== config.owner.toLowerCase()) return `repository owner ${owner} is not ${config.owner}`;
+
   return undefined;
 }
 

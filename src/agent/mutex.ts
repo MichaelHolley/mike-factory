@@ -14,6 +14,7 @@ export function createMutex(): Mutex {
         await new Promise<void>((resolve, reject) => {
           const onAbort = () => reject(signal?.reason);
           if (signal?.aborted) return onAbort();
+
           signal?.addEventListener("abort", onAbort, { once: true });
           turn.then(() => {
             signal?.removeEventListener("abort", onAbort);

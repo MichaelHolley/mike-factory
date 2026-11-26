@@ -51,6 +51,7 @@ const ABSOLUTE_PATH = /(?:^|[\s"'=(])(\/[^\s"'`;|&<>)]*)/g;
 const inside = (path: string, dir: string) => {
   const normalized = posix.normalize(path);
   const root = posix.normalize(dir);
+
   return normalized === root || normalized.startsWith(`${root}/`);
 };
 
@@ -59,10 +60,13 @@ export function pathOutside(text: string, dirs: readonly string[]): string | und
   for (const match of text.matchAll(ABSOLUTE_PATH)) {
     const path = match[1]!;
     if (dirs.some((dir) => inside(path, dir))) continue;
+
     const normalized = posix.normalize(path);
     if (ALLOWED_ABSOLUTE_ROOTS.some((root) => normalized === root || normalized.startsWith(root))) continue;
+
     return path;
   }
+
   return undefined;
 }
 
@@ -73,7 +77,9 @@ export type IssueDirs = { worktree: string; attachments: string };
 export function bashViolation(command: string, dirs: IssueDirs): string | undefined {
   const blocked = BLOCKED_COMMANDS.find(({ pattern }) => pattern.test(command));
   if (blocked) return blocked.reason;
+
   const outside = pathOutside(command, [dirs.worktree, dirs.attachments]);
+
   return outside && `path outside the issue worktree: ${outside}`;
 }
 
@@ -89,6 +95,7 @@ export function pathToolViolation(tool: string, path: string, dirs: IssueDirs): 
   if (writes && inside(resolved, dirs.attachments)) return `attached files are read-only: ${path}`;
 
   const outside = pathOutside(resolved, writes ? [dirs.worktree] : [dirs.worktree, dirs.attachments]);
+
   return outside && `path outside the issue worktree: ${path}`;
 }
 
@@ -133,6 +140,7 @@ export async function runBudgetBreach(
   if (!state?.repo) return undefined;
 
   const costUsd = totalCostUsd(await read.snapshot(UsageDoc, conversationId, context));
+
   return budgetBreach(budgets, spentSince(messages, costUsd, state.budgetFrom));
 }
 

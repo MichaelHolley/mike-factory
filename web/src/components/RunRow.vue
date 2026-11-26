@@ -13,6 +13,7 @@ const props = defineProps<{ run: RunStatus; now: number; compact?: boolean }>();
 const details = computed(() => {
   const { startedAt, costUsd } = props.run;
   if (!startedAt) return "Waiting in the queue";
+
   return `Running for ${formatDuration(props.now - Date.parse(startedAt))} · ${formatCost(costUsd)}`;
 });
 </script>

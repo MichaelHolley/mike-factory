@@ -13,6 +13,7 @@ export function createRepoContext(owner: string) {
         const state = await input.read.snapshot(IssueState, input.conversationId, context);
         const settings = state?.settings;
         if (!state || !settings) return undefined;
+
         return [
           `Repository: ${owner}/${state.repo} (default branch ${settings.defaultBranch}), working on issue #${state.issue} on branch ${state.branch}.`,
           `To catch up with the default branch, merge \`origin/${settings.defaultBranch}\`, fetched when this round started; the local \`${settings.defaultBranch}\` branch is stale. Don't rebase: published commits can't be rewritten.`,
@@ -25,8 +26,10 @@ export function createRepoContext(owner: string) {
         const state = await input.read.snapshot(IssueState, input.conversationId, context);
         const env = input.env;
         if (!state || !env) return undefined;
+
         return projectInstructions(async (name) => {
           const file = await env.readTextFile(`${state.worktreePath}/${name}`, context);
+
           return file.ok ? file.value : undefined;
         });
       }),
@@ -38,10 +41,13 @@ export async function projectInstructions(read: (name: string) => Promise<string
   for (const name of CONTEXT_FILES) {
     const content = await read(name);
     if (content === undefined) continue;
+
     if (content.length <= MAX_DOC_CHARS) {
       return `${NESTED_HINT}\n\n${name} (already included in full; don't read it again, even on follow-up rounds):\n${content}`;
     }
+
     return `${NESTED_HINT}\n\n${name} (already included up to the truncation point; don't read that part again, even on follow-up rounds):\n${content.slice(0, MAX_DOC_CHARS)}\n[Truncated at ${MAX_DOC_CHARS} characters; read ${name} for the rest.]`;
   }
+
   return NESTED_HINT;
 }

@@ -9,6 +9,7 @@ export function createLiveList<T>(url: () => string) {
   const data = shallowRef<T[]>([]);
   const error = ref<string | null>(null);
   const loaded = ref(false);
+
   let source: EventSource | undefined;
   let retry: ReturnType<typeof setTimeout> | undefined;
 
@@ -21,17 +22,22 @@ export function createLiveList<T>(url: () => string) {
   function open() {
     close();
     source = new EventSource(url());
+
     source.onmessage = (event: MessageEvent<string>) => {
       const { from, items } = JSON.parse(event.data) as LiveEvent<T>;
       const next = from === 0 ? [] : data.value.slice(0, from);
+
       next.push(...items);
       data.value = next;
+
       error.value = null;
       loaded.value = true;
     };
+
     source.onerror = () => {
       error.value = "connection lost";
       loaded.value = true;
+
       // EventSource gives up for good on a non-stream response, such as a proxy 502 while the server restarts.
       if (source?.readyState === EventSource.CLOSED) {
         close();
@@ -63,5 +69,6 @@ export function useLiveList<T>(url: () => string) {
   const { data, error, loaded, start, stop } = createLiveList<T>(url);
   onMounted(start);
   onBeforeUnmount(stop);
+
   return { data, error, loaded };
 }
