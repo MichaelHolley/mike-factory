@@ -45,14 +45,20 @@ export function nameFromUrl(url: string): string | undefined {
 
 const extensionOf = (name: string) => /\.[A-Za-z0-9]{1,10}$/.exec(name)?.[0];
 
-/** `name` in safe characters, without leading dots or hyphens, and at most `MAX_NAME_LENGTH` long with its extension kept. */
+/**
+ * `raw` in safe characters, without leading dots or hyphens, and at most `MAX_NAME_LENGTH` long with its extension kept;
+ * empty when nothing of its stem is left, as for `截图.png`.
+ */
 function cleanName(raw: string) {
-  const name = raw.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[.-]+/, "");
-  if (name.length <= MAX_NAME_LENGTH) return name;
+  const extension = extensionOf(raw) ?? "";
 
-  const extension = extensionOf(name) ?? "";
+  const stem = raw
+    .slice(0, raw.length - extension.length)
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^[.-]+/, "")
+    .slice(0, MAX_NAME_LENGTH - extension.length);
 
-  return name.slice(0, MAX_NAME_LENGTH - extension.length) + extension;
+  return stem && stem + extension;
 }
 
 /** `name`, or `name-2`, `name-3`... before its extension, whichever `taken` doesn't hold yet, ignoring case. */
@@ -93,7 +99,7 @@ export function uploadedFiles(folder: string, names: readonly string[]): StoredF
   const taken = new Set<string>();
 
   return names.map((raw, index) => {
-    const name = unique(cleanName(raw) || `file-${index + 1}`, taken);
+    const name = unique(cleanName(raw) || `file-${index + 1}${extensionOf(raw) ?? ""}`, taken);
 
     return { name, source: "upload", path: `${folder}/${name}` };
   });

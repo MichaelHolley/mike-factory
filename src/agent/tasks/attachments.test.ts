@@ -63,12 +63,15 @@ describe("noteFolder", () => {
 
 describe("uploadedFiles", () => {
   it("cleans names, names empty ones by position and keeps each unique in the folder", () => {
-    expect(uploadedFiles("note-1", ["Screen Shot.png", "../.env", "screen-shot.PNG", "", "Makefile"])).toEqual([
+    expect(
+      uploadedFiles("note-1", ["Screen Shot.png", "../.env", "screen-shot.PNG", "", "Makefile", "截图.png"]),
+    ).toEqual([
       { name: "Screen-Shot.png", source: "upload", path: "note-1/Screen-Shot.png" },
-      { name: "env", source: "upload", path: "note-1/env" },
+      { name: "file-2.env", source: "upload", path: "note-1/file-2.env" },
       { name: "screen-shot-2.PNG", source: "upload", path: "note-1/screen-shot-2.PNG" },
       { name: "file-4", source: "upload", path: "note-1/file-4" },
       { name: "Makefile", source: "upload", path: "note-1/Makefile" },
+      { name: "file-6.png", source: "upload", path: "note-1/file-6.png" },
     ]);
   });
 });
