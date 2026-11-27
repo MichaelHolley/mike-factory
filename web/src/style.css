@@ -12,7 +12,7 @@
   --color-brand: #5e6ad2;
   --color-run: #4f5cf0;
   --color-wrap: #f08a00;
-  --color-focus: #4f5cf0;
+  --color-focus: var(--color-run);
   --color-ok: #10b26c;
   --color-bad: #f03e3e;
   --color-halt: #7d838d;
@@ -36,7 +36,6 @@
     --color-line: #23252a;
     --color-run: #6080ff;
     --color-wrap: #f2c94c;
-    --color-focus: #6f7cff;
     --color-ok: #4cb782;
     --color-bad: #eb5757;
     --color-halt: #95a2b3;
