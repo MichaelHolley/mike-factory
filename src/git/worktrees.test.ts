@@ -68,6 +68,15 @@ describe("createWorktrees", () => {
     expect(await worktrees.attachment("..", 3, "../secret.txt")).toBeUndefined();
   });
 
+  it("stores an attachment in its folder, replacing one of the same name, and nowhere else", async () => {
+    await worktrees.storeAttachment(repo, 3, "note-1/shot.png", new Uint8Array([1]));
+    await worktrees.storeAttachment(repo, 3, "note-1/shot.png", new Uint8Array([2]));
+
+    expect(await worktrees.attachment(repo, 3, "note-1/shot.png")).toEqual(new Uint8Array([2]));
+    await expect(worktrees.storeAttachment(repo, 3, "../note-1/shot.png", new Uint8Array([3]))).rejects.toThrow();
+    await expect(worktrees.storeAttachment(repo, 3, "note-1/..", new Uint8Array([3]))).rejects.toThrow();
+  });
+
   it("creates a bare clone and a worktree on the issue branch", async () => {
     const info = await worktrees.prepare(repo, 1, { branch: branch(1), openPr: false, defaultBranch: "main" });
     expect(info).toEqual({

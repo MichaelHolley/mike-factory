@@ -583,6 +583,48 @@ describe("issue pipeline", () => {
       expect(prompts).toHaveLength(1);
     });
 
+    it("stores uploads in the note's folder and lists them, beside a linked file of the same name", async () => {
+      const world = createWorld({ dir });
+      let prompt = "";
+      autopilot(world.faux, (messages) => {
+        if (textOf(messages.at(-1)).includes("The repository owner sent a message")) prompt = textOf(messages.at(-1));
+        return undefined;
+      });
+      const { harness, service } = await launch(world);
+      await service.start(startAction(1, "comment-1"));
+      await pipelineResult(harness, 1);
+
+      const link = "https://github.com/user-attachments/files/1/build.log";
+      world.github.addAttachment(link, "linked");
+      const id = randomUUID();
+      const files = [
+        { name: "build.log", bytes: new TextEncoder().encode("uploaded") },
+        { name: "shot.png", bytes: PNG_BYTES },
+      ];
+
+      expect(await service.message({ ...message(`See ${link}`, id), files })).toBe("started");
+      expect((await pipelineResult(harness, 1)).status).toBe("completed");
+
+      const folder = join(world.deps.worktrees.attachmentsPath(REPO, 1), `note-${id}`);
+      expect(readFileSync(join(folder, "build.log"), "utf8")).toBe("uploaded");
+      expect(readFileSync(join(folder, "build-2.log"), "utf8")).toBe("linked");
+      expect(prompt).toContain(
+        [
+          `- ${join(folder, "build.log")}`,
+          `- ${join(folder, "shot.png")}`,
+          `- ${join(folder, "build-2.log")} (from ${link})`,
+        ].join("\n"),
+      );
+      expect(prompt).not.toContain("uploaded");
+      expect((await service.transcript(REPO, 1))?.find((item) => item.kind === "human")).toMatchObject({
+        files: [
+          { name: "build.log", source: "upload", path: `note-${id}/build.log` },
+          { name: "shot.png", source: "upload", path: `note-${id}/shot.png` },
+          { name: "build-2.log", source: link, path: `note-${id}/build-2.log` },
+        ],
+      });
+    });
+
     it("sends a fresh fix prompt when a revision breaks the checks after an earlier fix", async () => {
       const checksLog = join(dir, "checks.log");
       const world = createWorld({

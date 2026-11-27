@@ -3,9 +3,12 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono, type Context } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { streamSSE } from "hono/streaming";
 import { imageHeader } from "./agent/images.ts";
-import type { IssueService } from "./contracts.ts";
+import { MAX_ATTACHMENTS } from "./agent/tasks/attachments.ts";
+import type { IssueService, Upload } from "./contracts.ts";
+import { MAX_ATTACHMENT_BYTES } from "./github/attachments.ts";
 import { InvalidSignatureError, verifyWebhook, type WebhookConfig } from "./github/webhooks.ts";
 
 export interface ServerDeps {
@@ -25,6 +28,9 @@ const MAX_MESSAGE_CHARS = 8_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PING_MS = 20_000;
 const RETRY_MS = 5_000;
+// Room for the id, the text and the multipart framing on top of the files.
+const MAX_MESSAGE_BYTES = MAX_ATTACHMENTS * MAX_ATTACHMENT_BYTES + 64 * 1024;
+const MAX_FILE_MIB = MAX_ATTACHMENT_BYTES / 1024 / 1024;
 
 const DEFAULT_UI_DIR = fileURLToPath(new URL("../web/dist", import.meta.url));
 
@@ -163,28 +169,66 @@ export function createServer({
       return c.body(null, 202);
     });
 
-  app.post("/status/:repo/:issue/messages", async (c) => {
-    const repo = c.req.param("repo");
-    const issue = Number(c.req.param("issue"));
-    if (!Number.isInteger(issue)) return c.text("not found", 404);
+  app.post(
+    "/status/:repo/:issue/messages",
+    async (c, next) => {
+      // Multipart needs no CORS preflight, but a custom header does, and this server never allows one.
+      if (c.req.header("x-mike-request") !== "1") return c.text("missing X-Mike-Request header", 403);
 
-    // Browsers can't send JSON cross-site without a CORS preflight, which this server never allows.
-    if (!/^application\/json\b/i.test(c.req.header("content-type") ?? ""))
-      return c.text("expected application/json", 415);
+      return next();
+    },
+    bodyLimit({
+      maxSize: MAX_MESSAGE_BYTES,
+      onError: (c) => c.text(`attach at most ${MAX_ATTACHMENTS} files of ${MAX_FILE_MIB} MiB each`, 413),
+    }),
+    async (c) => {
+      const repo = c.req.param("repo");
+      const issue = Number(c.req.param("issue"));
+      if (!Number.isInteger(issue)) return c.text("not found", 404);
 
-    const body = (await c.req.json().catch(() => undefined)) as { id?: unknown; text?: unknown } | undefined;
-    const { id, text } = body ?? {};
+      if (!/^multipart\/form-data\b/i.test(c.req.header("content-type") ?? ""))
+        return c.text("expected multipart/form-data", 415);
 
-    if (typeof id !== "string" || !UUID.test(id)) return c.text("id must be a UUID", 400);
-    if (typeof text !== "string" || !text.trim() || text.length > MAX_MESSAGE_CHARS)
-      return c.text(`text must be 1 to ${MAX_MESSAGE_CHARS} characters`, 400);
+      const form = await c.req.formData().catch(() => undefined);
+      if (!form) return c.text("malformed form data", 400);
 
-    const result = await service.message({ repo, issue, id, text: text.trim() });
-    log("message received", { repo, issue, id, result });
+      const id = form.get("id");
+      const text = form.get("text") ?? "";
+      const files = form.getAll("files");
 
-    if (result === "not_found") return c.text("not found", 404);
-    return c.json({ result }, 202);
-  });
+      if (typeof id !== "string" || !UUID.test(id)) return c.text("id must be a UUID", 400);
+
+      if (typeof text !== "string" || text.length > MAX_MESSAGE_CHARS)
+        return c.text(`text must be at most ${MAX_MESSAGE_CHARS} characters`, 400);
+
+      if (!files.every((file) => file instanceof File)) return c.text("files must be files", 400);
+
+      if (files.length > MAX_ATTACHMENTS) return c.text(`attach at most ${MAX_ATTACHMENTS} files`, 413);
+
+      const large = files.find((file) => file.size > MAX_ATTACHMENT_BYTES);
+      if (large) return c.text(`${large.name} is over ${MAX_FILE_MIB} MiB`, 413);
+
+      if (!text.trim() && files.length === 0) return c.text("send text, files or both", 400);
+
+      const uploads: Upload[] = await Promise.all(
+        files.map(async (file) => ({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) })),
+      );
+
+      const result = await service.message({
+        repo,
+        issue,
+        id,
+        text: text.trim(),
+        ...(uploads.length > 0 && { files: uploads }),
+      });
+
+      log("message received", { repo, issue, id, files: uploads.length, result });
+
+      if (result === "not_found") return c.text("not found", 404);
+
+      return c.json({ result }, 202);
+    },
+  );
 
   app.get("/status", async (c) => c.json(await service.status()));
 

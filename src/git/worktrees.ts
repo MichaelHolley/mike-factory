@@ -12,6 +12,13 @@ const execFileAsync = promisify(execFile);
 
 const isPathSegment = (value: string) => /^[\w.-]+$/.test(value) && !/^\.+$/.test(value);
 
+/** `<folder>/<name>` of a repo's attachment, in segments that can't leave its directory. */
+const isAttachmentPath = (repo: string, path: string) => {
+  const segments = [repo, ...path.split("/")];
+
+  return segments.length === 3 && segments.every(isPathSegment);
+};
+
 /**
  * The agent's clones and worktrees live in `env` and are only touched through it. The server keeps a trusted mirror per
  * repo, the only place that talks to GitHub with the token; `env` clones from it by path and publishes through a bundle.
@@ -136,8 +143,7 @@ export function createWorktrees(opts: {
     attachmentsPath,
 
     async attachment(repo, issue, path) {
-      const segments = [repo, ...path.split("/")];
-      if (segments.length !== 3 || !segments.every(isPathSegment)) return undefined;
+      if (!isAttachmentPath(repo, path)) return undefined;
 
       const opened = await workspace.openBinaryReader(
         join(attachmentsPath(repo, issue), path),
@@ -157,6 +163,15 @@ export function createWorktrees(opts: {
       } finally {
         await reader.close(ctx);
       }
+    },
+
+    async storeAttachment(repo, issue, path, bytes) {
+      if (!isAttachmentPath(repo, path)) throw new Error(`invalid attachment path ${path}`);
+
+      const file = join(attachmentsPath(repo, issue), path);
+
+      await createDir(dirname(file));
+      getOrThrow(await workspace.writeFile(file, bytes, ctx));
     },
 
     prepare: (repo, issue, { branch, openPr, defaultBranch }) =>

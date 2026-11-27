@@ -13,6 +13,7 @@ import {
   nameFromUrl,
   noteFolder,
   placeAttachments,
+  uploadedFiles,
 } from "./attachments.ts";
 
 const image = "https://github.com/user-attachments/assets/2d1f6a3c-9b7e-4f1a-8c2d-3e4f5a6b7c8d";
@@ -57,6 +58,21 @@ describe("noteFolder", () => {
     ["7d2f8c1e-5b3a-4c6d-9e8f-0a1b2c3d4e5f", "note-7d2f8c1e-5b3a-4c6d-9e8f-0a1b2c3d4e5f"],
   ])("puts %s in %s", (id, folder) => {
     expect(noteFolder(id)).toBe(folder);
+  });
+});
+
+describe("uploadedFiles", () => {
+  it("cleans names, names empty ones by position and keeps each unique in the folder", () => {
+    expect(
+      uploadedFiles("note-1", ["Screen Shot.png", "../.env", "screen-shot.PNG", "", "Makefile", "截图.png"]),
+    ).toEqual([
+      { name: "Screen-Shot.png", source: "upload", path: "note-1/Screen-Shot.png" },
+      { name: "file-2.env", source: "upload", path: "note-1/file-2.env" },
+      { name: "screen-shot-2.PNG", source: "upload", path: "note-1/screen-shot-2.PNG" },
+      { name: "file-4", source: "upload", path: "note-1/file-4" },
+      { name: "Makefile", source: "upload", path: "note-1/Makefile" },
+      { name: "file-6.png", source: "upload", path: "note-1/file-6.png" },
+    ]);
   });
 });
 
@@ -111,6 +127,14 @@ describe("placeAttachments", () => {
       "Build.log",
       "build-2-2.log",
     ]);
+  });
+
+  it("leaves the names a source already holds to those files", async () => {
+    github.addAttachment(file, "linked");
+
+    const placed = await place([{ folder: "note-1", texts: [file], taken: ["Build.log"] }]);
+
+    expect(placed).toEqual([{ url: file, path: join(root, "note-1", "build-2.log") }]);
   });
 
   it("bounds download attempts per message, including failures", async () => {

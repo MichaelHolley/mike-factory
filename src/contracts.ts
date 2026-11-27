@@ -55,6 +55,9 @@ export interface IssueComment {
   createdAt: string;
 }
 
+/** A file the owner uploaded with a run-page message, under the name the browser sent. */
+export type Upload = { name: string; bytes: Uint8Array };
+
 /** An attached file's bytes, bounded by the server's GitHub client; any type. */
 export type AttachmentDownload = { ok: true; bytes: Uint8Array } | { ok: false; reason: string };
 
@@ -154,6 +157,8 @@ export interface Worktrees {
    * over the size limit. The runner can write there, so the bytes are untrusted.
    */
   attachment(repo: string, issue: number, path: string): Promise<Uint8Array | undefined>;
+  /** Writes `<folder>/<name>` in the issue's attachments, replacing any file there; throws for any other path. */
+  storeAttachment(repo: string, issue: number, path: string, bytes: Uint8Array): Promise<void>;
   /**
    * Idempotent: create, or reuse the existing path or branch, and refresh `origin/*` either way. A new branch starts from
    * its remote copy only with `openPr`, otherwise from `defaultBranch`.
@@ -223,13 +228,15 @@ export interface IssueService {
   feedback(action: Extract<WebhookAction, { kind: "feedback" }>): Promise<void>;
   /**
    * Stores an owner message from the run page. A live pipeline steers it into the agent's work (`steered`); otherwise
-   * it starts a follow-up run on the same conversation and branch (`started`). A repeated `id` adds nothing.
+   * it starts a follow-up run on the same conversation and branch (`started`). Either `text` or `files` may be empty, not
+   * both. A repeated `id` adds nothing, and its files overwrite the ones stored before.
    */
   message(message: {
     repo: string;
     issue: number;
     id: string;
     text: string;
+    files?: readonly Upload[];
   }): Promise<"steered" | "started" | "not_found">;
   /**
    * Records the PR's state on the run. Once the PR isn't open, removes the issue's worktree and local branch unless a
