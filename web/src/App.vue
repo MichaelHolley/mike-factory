@@ -2,6 +2,7 @@
 import { Activity, ChartNoAxesCombined, Factory, History } from "@lucide/vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 import RunSearch from "./components/RunSearch.vue";
+import SidebarRuns from "./components/SidebarRuns.vue";
 
 const route = useRoute();
 
@@ -41,6 +42,8 @@ const NAV = [
           <span>{{ item.label }}</span>
         </RouterLink>
       </nav>
+
+      <SidebarRuns class="max-md:hidden" />
     </aside>
 
     <main class="md:flex md:min-h-screen md:flex-col md:py-2 md:pr-2">

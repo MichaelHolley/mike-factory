@@ -20,7 +20,7 @@
   --color-merged: #7c3aed;
   --color-idle: #dcdde1;
 
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
   --ease-out-quint: cubic-bezier(0.23, 1, 0.32, 1);
@@ -49,7 +49,6 @@
   :root {
     color-scheme: light dark;
     line-height: 1.5;
-    font-feature-settings: "cv01", "ss03";
     -webkit-font-smoothing: antialiased;
   }
 
@@ -59,7 +58,7 @@
 
   h1,
   h2 {
-    @apply leading-tight font-semibold tracking-tight;
+    @apply leading-tight font-semibold;
   }
 
   ::selection {
