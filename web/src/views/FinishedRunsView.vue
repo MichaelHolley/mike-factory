@@ -175,7 +175,7 @@ watch([repo, outcome, started], reset);
 
     <div v-if="filtered.length" class="flex flex-col gap-4">
       <section v-for="group in days" :key="group.day" :aria-label="group.day">
-        <h2 class="sticky top-14 z-10 flex items-baseline gap-2 bg-bg py-2 text-sm font-semibold">
+        <h2 class="sticky top-14 z-10 md:top-0 flex items-baseline gap-2 bg-bg py-2 text-sm font-semibold">
           {{ group.day }} <span class="font-medium text-muted tabular-nums">{{ dayCounts.get(group.day) }}</span>
         </h2>
         <ul class="@container overflow-hidden rounded-lg border border-line bg-surface">

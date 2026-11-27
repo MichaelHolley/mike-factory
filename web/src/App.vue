@@ -13,33 +13,42 @@ const NAV = [
 </script>
 
 <template>
-  <header class="sticky top-0 z-20 border-b border-line bg-surface">
-    <div class="relative mx-auto flex h-14 max-w-6xl items-center gap-6 px-4 max-sm:gap-3 sm:px-8">
-      <RouterLink to="/" class="flex flex-none items-center gap-2 font-semibold text-ink no-underline">
-        <span class="grid size-7 place-items-center rounded-md bg-ink text-surface" aria-hidden="true">
-          <Factory class="size-4" :stroke-width="2.25" />
+  <div class="md:pl-60">
+    <aside
+      class="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-line bg-canvas px-4 md:fixed md:inset-y-0 md:left-0 md:h-auto md:w-60 md:flex-col md:items-stretch md:gap-3 md:border-0 md:p-3"
+    >
+      <RouterLink
+        to="/"
+        class="flex flex-none items-center gap-2 rounded-md text-sm font-semibold text-ink no-underline md:h-8 md:px-2 md:hover:bg-ink/5"
+      >
+        <span class="grid size-5 place-items-center rounded-sm bg-brand text-white" aria-hidden="true">
+          <Factory class="size-3.5" :stroke-width="2.25" />
         </span>
         <span class="max-sm:sr-only">mike-factory</span>
       </RouterLink>
 
-      <nav aria-label="Main" class="flex h-full items-stretch gap-1">
+      <RunSearch />
+
+      <nav aria-label="Main" class="flex gap-0.5 md:flex-col">
         <RouterLink
           v-for="item in NAV"
           :key="item.to"
           :to="item.to"
           :aria-current="item.matches(route.path) ? 'page' : undefined"
-          class="relative flex items-center gap-1.5 px-2.5 text-sm font-medium text-muted no-underline hover:text-ink aria-[current=page]:text-ink aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-2.5 aria-[current=page]:after:-bottom-px aria-[current=page]:after:h-0.5 aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-ink"
+          class="group flex h-8 items-center gap-2 rounded-md px-2 text-sm font-medium text-muted no-underline hover:bg-ink/5 hover:text-ink aria-[current=page]:bg-ink/7 aria-[current=page]:text-ink"
         >
-          <component :is="item.icon" class="size-4 flex-none" aria-hidden="true" />
+          <component :is="item.icon" class="size-4 flex-none group-aria-[current=page]:text-brand" aria-hidden="true" />
           <span>{{ item.label }}</span>
         </RouterLink>
       </nav>
+    </aside>
 
-      <RunSearch />
-    </div>
-  </header>
-
-  <main class="mx-auto max-w-6xl px-4 pt-6 pb-16 sm:px-8 sm:pt-8">
-    <RouterView />
-  </main>
+    <main class="md:flex md:min-h-screen md:flex-col md:py-2 md:pr-2">
+      <div class="bg-bg md:flex-1 md:rounded-lg md:border md:border-line md:shadow-xs">
+        <div class="mx-auto max-w-6xl px-4 pt-6 pb-16 sm:px-8 sm:pt-8">
+          <RouterView />
+        </div>
+      </div>
+    </main>
+  </div>
 </template>

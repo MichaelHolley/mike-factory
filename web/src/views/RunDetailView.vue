@@ -41,7 +41,7 @@ const run = computed(() =>
     <PhaseTrack :phase="run.phase" class="mb-8" />
 
     <div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_15rem]">
-      <aside class="lg:sticky lg:top-20 lg:col-start-2 lg:row-start-1 lg:self-start">
+      <aside class="lg:sticky lg:top-6 lg:col-start-2 lg:row-start-1 lg:self-start">
         <RunFacts :run :now />
       </aside>
 
