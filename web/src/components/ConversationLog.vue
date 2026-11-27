@@ -168,7 +168,7 @@ const TEXT: Record<Exclude<Message["kind"], "user">, string> = {
               v-if="entry.message.kind === 'human' && entry.message.files"
               :files="entry.message.files"
               :file-url
-              class="mt-2.5"
+              :class="(entry.message.text || entry.message.pending) && 'mt-2.5'"
             />
           </div>
         </template>

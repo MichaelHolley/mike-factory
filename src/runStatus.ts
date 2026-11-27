@@ -29,6 +29,7 @@ export type ReviewCard = {
 
 /** A file attached to a message: stored at `path`, `<folder>/<name>` under the issue's attachments, or skipped. */
 export type AttachedFile = { name: string; source: string } & ({ path: string } | { skipped: string });
+export type StoredFile = Extract<AttachedFile, { path: string }>;
 
 export type TranscriptItem =
   | { kind: "user"; text: string; files?: AttachedFile[] }

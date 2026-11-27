@@ -14,11 +14,20 @@ import {
   type Storage,
   type TaskId,
 } from "@earendil-works/pi-durable";
-import { agentPrIssue, issueKey, type IssueService, type ReviewFeedback } from "../contracts.ts";
+import { agentPrIssue, issueKey, type IssueService } from "../contracts.ts";
 import type { IssuePhase, PrState, RunStatus } from "../runStatus.ts";
-import { asConversationId, HUMAN_ENTRY, IssueIndex, IssueNotes, IssueState, type IssueStateValue } from "./docs.ts";
+import {
+  asConversationId,
+  HUMAN_ENTRY,
+  IssueIndex,
+  IssueNotes,
+  IssueState,
+  type IssueStateValue,
+  type Note,
+} from "./docs.ts";
 import type { AgentDeps } from "./harness.ts";
 import { createMutex } from "./mutex.ts";
+import { noteFolder, uploadedFiles } from "./tasks/attachments.ts";
 import { upsertStatus, WORKING_STATUS, type IssuePipeline, type PipelineInput } from "./tasks/issuePipeline.ts";
 import { humanMessage, toTranscript } from "./transcript.ts";
 
@@ -205,7 +214,7 @@ export function createIssueService(opts: {
    */
   const addNote = async (
     conversation: Conversation,
-    note: { id: string; text: string; review?: ReviewFeedback },
+    note: Pick<Note, "id" | "text" | "review" | "files">,
     pr?: { number: number; reviewer: string },
   ) =>
     conversation.commit(async (tx) => {
@@ -297,13 +306,25 @@ export function createIssueService(opts: {
         await launch(conversationId, { repo, issue, requestId, instructions, trigger: "comment" }, { reviewer });
       }),
 
-    message: ({ repo, issue, id, text }) =>
+    message: ({ repo, issue, id, text, files = [] }) =>
       mutex.run(async () => {
         const { conversationId } = await lookup(repo, issue);
         const conversation = conversationId && (await harness.conversation(conversationId, context));
         if (!conversation) return "not_found";
 
-        const { live, pending } = await addNote(conversation, { id, text });
+        const stored = uploadedFiles(
+          noteFolder(id),
+          files.map(({ name }) => name),
+        );
+
+        for (const [index, { bytes }] of files.entries())
+          await worktrees.storeAttachment(repo, issue, stored[index]!.path, bytes);
+
+        const { live, pending } = await addNote(conversation, {
+          id,
+          text,
+          ...(stored.length > 0 && { files: stored }),
+        });
         if (live) return "steered";
 
         // A retry of a message that was already delivered has nothing left to start.

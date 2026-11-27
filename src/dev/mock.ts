@@ -3,6 +3,7 @@ import { serve } from "@hono/node-server";
 import { branchName, branchSlug, type IssueService } from "../contracts.ts";
 import type { PrState, RunStatus, TranscriptItem } from "../runStatus.ts";
 import { createServer } from "../server.ts";
+import { noteFolder, uploadedFiles } from "../agent/tasks/attachments.ts";
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
@@ -93,7 +94,7 @@ function screenshot(width: number, height: number, dark: boolean): Buffer {
   ]);
 }
 
-const SAMPLE_FILES: Record<string, Buffer> = {
+const SAMPLE_FILES: Record<string, Uint8Array> = {
   "issue/image-1.png": screenshot(960, 600, false),
   "issue/image-2.png": screenshot(600, 900, true),
   "issue/server.log": Buffer.from("12:04:31 GET /status 200 4ms\n12:04:32 GET /status/stream 200 open\n"),
@@ -393,14 +394,22 @@ function createMockService(): IssueService {
 
       return { items: async () => items(k) ?? [], stop: () => void listeners.delete(listener) };
     },
-    async message({ repo, issue, text }) {
+    async message({ repo, issue, id, text, files = [] }) {
       const k = key(repo, issue);
       const conversation = conversations.get(k);
       const target = runs.find((r) => key(r.repo, r.issue) === k);
       if (!conversation || !target) return "not_found";
 
       const result = IDLE.includes(target.phase) ? "started" : "steered";
-      const item: TranscriptItem = { kind: "human", text, pending: true };
+
+      const stored = uploadedFiles(
+        noteFolder(id),
+        files.map(({ name }) => name),
+      );
+
+      stored.forEach(({ path }, index) => (SAMPLE_FILES[path] = files[index]!.bytes));
+
+      const item: TranscriptItem = { kind: "human", text, pending: true, ...(stored.length > 0 && { files: stored }) };
 
       conversation.push(item);
       notify(transcriptListeners.get(k));

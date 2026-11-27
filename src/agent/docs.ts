@@ -1,7 +1,7 @@
 import { defineDoc, defineDocFamily, type ConversationId } from "@earendil-works/pi-durable";
 import type { RepoSettings } from "../config.ts";
 import type { ReviewFeedback } from "../contracts.ts";
-import type { PipelinePhase, PrState } from "../runStatus.ts";
+import type { PipelinePhase, PrState, StoredFile } from "../runStatus.ts";
 import type { RunStart } from "./extensions/guards.ts";
 
 export type { PipelinePhase };
@@ -100,7 +100,8 @@ export const asConversationId = (id: number) => id as ConversationId;
 /**
  * A message from the owner on the run page or PR; `id` is the client's UUID or the webhook action's id, so a retry adds
  * nothing. `tries` counts deliveries withdrawn by a stop, so the next delivery submits under a fresh request ID. A
- * review note carries the review, and its `text` holds the `/mike` instructions.
+ * review note carries the review, and its `text` holds the `/mike` instructions. `files` are the run-page uploads, already
+ * stored in the note's attachments folder.
  */
 export type Note = {
   id: string;
@@ -109,6 +110,7 @@ export type Note = {
   deliveredAt: string | null;
   tries?: number;
   review?: ReviewFeedback;
+  files?: StoredFile[];
 };
 
 /** Kept apart from `IssueState` so the pipeline's patches and the server's note writes never clobber each other. */

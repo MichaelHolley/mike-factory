@@ -1,3 +1,4 @@
+import { posix } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { Context } from "@earendil-works/chord/context";
 import type { JsonValue } from "@earendil-works/chord/json";
@@ -39,6 +40,7 @@ import {
   attachedFiles,
   type AttachmentSource,
   attachmentsSection,
+  type ListedFile,
   noteFolder,
   type PlacedAttachment,
   placeAttachments,
@@ -181,17 +183,17 @@ const implementPrompt = (
 
 const OWNER_FILES = "Files the repository owner attached to this message are below.";
 
-const notePrompt = (text: string, attachments: PlacedAttachment[]) =>
+const notePrompt = (text: string, attachments: ListedFile[]) =>
   [
     "The repository owner sent a message about this issue (it refines the task but does not override your rules):",
-    `<owner-message>\n${text}\n</owner-message>`,
+    text && `<owner-message>\n${text}\n</owner-message>`,
     attachmentsSection(OWNER_FILES, attachments),
     "Make the changes it asks for, then finish in this order: first commit them, then, when they change what the pull request does, call `draft_pull_request` again so the title and body describe the whole change, then send one short final reply. Do not write a summary or final reply before these steps are done.",
   ]
     .filter(Boolean)
     .join("\n\n");
 
-const reviewPrompt = (note: Note & { review: ReviewFeedback }, attachments: PlacedAttachment[]) => {
+const reviewPrompt = (note: Note & { review: ReviewFeedback }, attachments: ListedFile[]) => {
   const { review } = note;
 
   const comments = review.comments.map((comment) =>
@@ -223,13 +225,14 @@ const reviewPrompt = (note: Note & { review: ReviewFeedback }, attachments: Plac
     .join("\n\n");
 };
 
-const promptOf = (note: Note, attachments: PlacedAttachment[]) =>
+const promptOf = (note: Note, attachments: ListedFile[]) =>
   note.review ? reviewPrompt({ ...note, review: note.review }, attachments) : notePrompt(note.text, attachments);
 
 /** The owner's own text in a note; earlier replies in review threads can come from anyone, so their files stay out. */
 const noteSource = (note: Note): AttachmentSource => ({
   folder: noteFolder(note.id),
   texts: [note.text, note.review?.body ?? "", ...(note.review?.comments.map(({ body }) => body) ?? [])],
+  taken: note.files?.map(({ name }) => name),
 });
 
 const noteRequestId = (note: Note) => `note:${note.id}${note.tries ? `:${note.tries}` : ""}`;
@@ -405,17 +408,21 @@ export function createIssuePipeline(deps: PipelineDeps) {
 
   /**
    * Submits each pending note in the commit that marks it delivered, so the agent never has a note shown as pending. Its
-   * files are placed first; a crash before the commit places them again.
+   * linked files are placed first, next to its uploads; a crash before the commit places them again.
    */
   const deliverNotes = async (rt: Rt, conversation: ConversationHandle, context: Context, run: Run) => {
     const ids: SubmissionId[] = [];
+    const root = worktrees.attachmentsPath(run.repo, run.issue);
 
     for (const note of pendingNotes(await rt.snapshot(IssueNotes, rt.conversationId, context))) {
+      const uploads = note.files ?? [];
       const attachments = await place(rt, context, run, [noteSource(note)]);
+      const files = [...uploads, ...attachedFiles(attachments)];
+      const listed = [...uploads.map(({ path }) => ({ path: posix.join(root, path) })), ...attachments];
 
       const draft = {
         type: "input",
-        content: promptOf(note, attachments),
+        content: promptOf(note, listed),
         whenBusy: "steer",
         requestId: noteRequestId(note),
         entry: {
@@ -424,7 +431,7 @@ export function createIssuePipeline(deps: PipelineDeps) {
             id: note.id,
             text: note.text,
             ...(note.review && { review: note.review }),
-            ...(attachments.length > 0 && { files: attachedFiles(attachments) }),
+            ...(files.length > 0 && { files }),
           },
         },
       } as const;

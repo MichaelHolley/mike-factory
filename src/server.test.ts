@@ -225,46 +225,100 @@ describe("webhook server", () => {
 
   describe("POST /status/:repo/:issue/messages", () => {
     const id = "6f1c2a3b-4d5e-4f60-8a9b-0c1d2e3f4a5b";
-    const send = (app: ReturnType<typeof setup>["app"], body: unknown, path = "/status/widgets/12/messages") =>
-      app.request(path, {
-        method: "POST",
-        body: JSON.stringify(body),
-        headers: { "content-type": "application/json" },
-      });
+    const file = (name: string, size = 3) => new File([new Uint8Array(size).fill(97)], name);
+
+    const form = (fields: { id?: string; text?: string }, files: File[] = []) => {
+      const body = new FormData();
+
+      for (const [key, value] of Object.entries(fields)) if (value !== undefined) body.append(key, value);
+      for (const upload of files) body.append("files", upload);
+
+      return body;
+    };
+
+    const send = (
+      app: ReturnType<typeof setup>["app"],
+      body: FormData | string,
+      headers: Record<string, string> = { "x-mike-request": "1" },
+    ) => app.request("/status/widgets/12/messages", { method: "POST", body, headers });
 
     it.each([
-      { body: { id: "not-a-uuid", text: "hi" } },
-      { body: { id, text: "   " } },
-      { body: { id, text: "x".repeat(8_001) } },
-      { body: { id } },
-      { body: null },
-    ])("rejects $body with 400", async ({ body }) => {
+      { fields: { id: "not-a-uuid", text: "hi" } },
+      { fields: { id, text: "   " } },
+      { fields: { id, text: "x".repeat(8_001) } },
+      { fields: { id } },
+      { fields: { text: "hi" } },
+    ])("rejects $fields with 400", async ({ fields }) => {
       const { app, service } = setup();
-      expect((await send(app, body)).status).toBe(400);
+      expect((await send(app, form(fields))).status).toBe(400);
       expect(service.message).not.toHaveBeenCalled();
     });
 
-    it("rejects a body that isn't sent as JSON with 415", async () => {
+    it("rejects a request without the custom header, which a cross-site page can't send", async () => {
       const { app, service } = setup();
-      const response = await app.request("/status/widgets/12/messages", {
-        method: "POST",
-        body: JSON.stringify({ id, text: "hi" }),
-        headers: { "content-type": "text/plain" },
+      const response = await send(app, form({ id, text: "hi" }), {});
+      expect(response.status).toBe(403);
+      expect(service.message).not.toHaveBeenCalled();
+    });
+
+    it("rejects a body that isn't multipart with 415", async () => {
+      const { app, service } = setup();
+      const response = await send(app, JSON.stringify({ id, text: "hi" }), {
+        "x-mike-request": "1",
+        "content-type": "application/json",
       });
       expect(response.status).toBe(415);
       expect(service.message).not.toHaveBeenCalled();
     });
 
+    it.each([
+      { files: Array.from({ length: 6 }, (_, index) => file(`${index}.txt`)), message: "attach at most 5 files" },
+      { files: [file("big.bin", 10 * 1024 * 1024 + 1)], message: "big.bin is over 10 MiB" },
+    ])("rejects over-limit files with 413: $message", async ({ files, message }) => {
+      const { app, service } = setup();
+      const response = await send(app, form({ id }, files));
+      expect(response.status).toBe(413);
+      expect(await response.text()).toBe(message);
+      expect(service.message).not.toHaveBeenCalled();
+    });
+
+    it("rejects a body over the files' combined limit before reading it", async () => {
+      const { app, service } = setup();
+      const response = await send(app, "x", {
+        "x-mike-request": "1",
+        "content-type": "multipart/form-data; boundary=x",
+        "content-length": String(60 * 1024 * 1024),
+      });
+      expect(response.status).toBe(413);
+      expect(service.message).not.toHaveBeenCalled();
+    });
+
     it("passes the message on with 202, and 404s for an unknown run", async () => {
       const { app, service, log } = setup();
-      const response = await send(app, { id, text: "  Use tabs  " });
+      const response = await send(app, form({ id, text: "  Use tabs  " }));
       expect(response.status).toBe(202);
       expect(await response.json()).toEqual({ result: "steered" });
       expect(service.message).toHaveBeenCalledWith({ repo: "widgets", issue: 12, id, text: "Use tabs" });
       expect(JSON.stringify(log.mock.calls)).not.toContain("Use tabs");
 
       vi.mocked(service.message).mockResolvedValue("not_found");
-      expect((await send(app, { id, text: "hi" })).status).toBe(404);
+      expect((await send(app, form({ id, text: "hi" }))).status).toBe(404);
+    });
+
+    it("passes on a message of only files", async () => {
+      const { app, service } = setup();
+      const response = await send(app, form({ id }, [file("shot one.png"), file("build.log")]));
+      expect(response.status).toBe(202);
+      expect(service.message).toHaveBeenCalledWith({
+        repo: "widgets",
+        issue: 12,
+        id,
+        text: "",
+        files: [
+          { name: "shot one.png", bytes: new Uint8Array([97, 97, 97]) },
+          { name: "build.log", bytes: new Uint8Array([97, 97, 97]) },
+        ],
+      });
     });
   });
 

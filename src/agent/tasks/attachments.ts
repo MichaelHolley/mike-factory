@@ -2,7 +2,7 @@ import { posix } from "node:path";
 import type { Context } from "@earendil-works/chord/context";
 import { type ExecutionEnv, getOrThrow } from "@earendil-works/pi-durable/env";
 import type { GitHubClient } from "../../contracts.ts";
-import type { AttachedFile } from "../../runStatus.ts";
+import type { AttachedFile, StoredFile } from "../../runStatus.ts";
 import { isAttachmentUrl } from "../../github/attachments.ts";
 import { imageHeader } from "../images.ts";
 
@@ -38,11 +38,19 @@ export function nameFromUrl(url: string): string | undefined {
     // Malformed escapes stay as they are and are replaced below.
   }
 
-  const name = decoded.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[.-]+/, "");
-  const extension = /\.[A-Za-z0-9]{1,10}$/.exec(name)?.[0];
-  if (!extension) return undefined;
+  const name = cleanName(decoded);
 
+  return extensionOf(name) ? name : undefined;
+}
+
+const extensionOf = (name: string) => /\.[A-Za-z0-9]{1,10}$/.exec(name)?.[0];
+
+/** `name` in safe characters, without leading dots or hyphens, and at most `MAX_NAME_LENGTH` long with its extension kept. */
+function cleanName(raw: string) {
+  const name = raw.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[.-]+/, "");
   if (name.length <= MAX_NAME_LENGTH) return name;
+
+  const extension = extensionOf(name) ?? "";
 
   return name.slice(0, MAX_NAME_LENGTH - extension.length) + extension;
 }
@@ -60,10 +68,16 @@ function unique(name: string, taken: Set<string>) {
   return candidate;
 }
 
-/** One message's attached files, stored in `folder` under the issue's attachments directory. */
-export type AttachmentSource = { folder: string; texts: readonly string[] };
+/**
+ * One message's attached files, stored in `folder` under the issue's attachments directory. `taken` names files already
+ * there, such as run-page uploads, which linked files must not overwrite.
+ */
+export type AttachmentSource = { folder: string; texts: readonly string[]; taken?: readonly string[] };
 
 export type PlacedAttachment = { url: string; path: string } | { url: string; skipped: string };
+
+/** A file for the prompt's list: placed from a link, or uploaded and stored at `path` without a URL. */
+export type ListedFile = PlacedAttachment | { path: string };
 
 /** The folder of a note's files: `review-<id>` and `comment-<id>` for PR feedback, `note-<uuid>` for the run page. */
 export const noteFolder = (id: string) => {
@@ -73,6 +87,17 @@ export const noteFolder = (id: string) => {
 
   return `note-${id}`;
 };
+
+/** Run-page uploads as stored in `folder`: cleaned names, unique within it, derived only from `names` so a retry matches. */
+export function uploadedFiles(folder: string, names: readonly string[]): StoredFile[] {
+  const taken = new Set<string>();
+
+  return names.map((raw, index) => {
+    const name = unique(cleanName(raw) || `file-${index + 1}`, taken);
+
+    return { name, source: "upload", path: `${folder}/${name}` };
+  });
+}
 
 /**
  * Downloads each source's attachments on the server and writes them to `<root>/<folder>/` through `env`, at most
@@ -90,9 +115,9 @@ export async function placeAttachments(
   const placed: PlacedAttachment[] = [];
   const seen = new Set<string>();
 
-  for (const { folder, texts } of sources) {
+  for (const { folder, texts, taken: stored = [] } of sources) {
     const dir = posix.join(root, folder);
-    const taken = new Set<string>();
+    const taken = new Set(stored.map((name) => name.toLowerCase()));
     let attempted = 0;
     let unnamed = 0;
 
@@ -142,12 +167,14 @@ export const attachedFiles = (placed: readonly PlacedAttachment[]): AttachedFile
   });
 
 /** Lists the files for the prompt, without their content, after `intro`; undefined when there are none. */
-export function attachmentsSection(intro: string, placed: readonly PlacedAttachment[]) {
-  if (placed.length === 0) return undefined;
+export function attachmentsSection(intro: string, files: readonly ListedFile[]) {
+  if (files.length === 0) return undefined;
 
-  const lines = placed.map((file) =>
-    "path" in file ? `- ${file.path} (from ${file.url})` : `- ${file.url}: skipped (${file.skipped})`,
-  );
+  const lines = files.map((file) => {
+    if (!("path" in file)) return `- ${file.url}: skipped (${file.skipped})`;
+
+    return "url" in file ? `- ${file.path} (from ${file.url})` : `- ${file.path}`;
+  });
 
   return [
     `${intro} They are stored outside the working directory, so they can't be committed; read them but don't change them. Open them with \`read\` for text and images, or \`bash\` for other formats such as archives or PDFs. Copy one into the repository only when the task asks for it.`,
