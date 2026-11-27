@@ -7,26 +7,13 @@ import ErrorBanner from "../components/ErrorBanner.vue";
 import RunRow from "../components/RunRow.vue";
 import { useNow } from "../composables/useNow.ts";
 import { useRuns } from "../composables/useRuns.ts";
-import { isFinished, isIdle } from "../phase.ts";
+import { isFinished } from "../phase.ts";
 
-const { runs, error, loaded } = useRuns();
+const { runs, live, inReview, error, loaded } = useRuns();
 const now = useNow();
 
 const time = (iso: string | null) => (iso ? Date.parse(iso) : null);
 const runKey = (run: { repo: string; issue: number }) => `${run.repo}#${run.issue}`;
-
-// Oldest start first so live rows keep their place as updates stream in; queued runs go last.
-const live = computed(() =>
-  runs.value
-    .filter((run) => !isIdle(run.phase))
-    .sort((a, b) => (time(a.startedAt) ?? Infinity) - (time(b.startedAt) ?? Infinity)),
-);
-
-const inReview = computed(() =>
-  runs.value
-    .filter((run) => run.phase === "review")
-    .sort((a, b) => (time(a.updatedAt) ?? 0) - (time(b.updatedAt) ?? 0)),
-);
 
 const RECENT_MS = 24 * 60 * 60 * 1000;
 const RECENT_SHOWN = 8;

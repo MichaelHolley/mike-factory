@@ -3,20 +3,22 @@
 @import "@ui-sdk/core/web.css" layer(components);
 
 @theme {
-  --color-bg: #f4f5f7;
+  --color-canvas: #f3f3f5;
+  --color-bg: #fbfbfc;
   --color-surface: #ffffff;
-  --color-ink: #16191d;
-  --color-muted: #5e6672;
-  --color-line: #e2e5e9;
-  --color-run: #2447f5;
-  --color-wrap: #e8890c;
-  --color-focus: #2447f5;
-  --color-ok: #22c27a;
-  --color-bad: #ff5650;
-  --color-halt: #6b7280;
-  --color-you: #0a8fb8;
-  --color-merged: #8250df;
-  --color-idle: #d3d7dd;
+  --color-ink: #1b1c1f;
+  --color-muted: #6b6f76;
+  --color-line: #e4e4e8;
+  --color-brand: #5e6ad2;
+  --color-run: #4f5cf0;
+  --color-wrap: #f08a00;
+  --color-focus: var(--color-run);
+  --color-ok: #10b26c;
+  --color-bad: #f03e3e;
+  --color-halt: #7d838d;
+  --color-you: #0aa6c9;
+  --color-merged: #7c3aed;
+  --color-idle: #dcdde1;
 
   --font-sans: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
@@ -26,20 +28,20 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #0e1013;
-    --color-surface: #16191e;
-    --color-ink: #e8eaed;
-    --color-muted: #959ca7;
-    --color-line: #262a31;
-    --color-run: #6e8bff;
-    --color-wrap: #f5a524;
-    --color-focus: #6e8bff;
-    --color-ok: #2fd98a;
-    --color-bad: #ff5650;
-    --color-halt: #9ca3af;
-    --color-you: #5cc8d8;
+    --color-canvas: #08090a;
+    --color-bg: #0f1011;
+    --color-surface: #151618;
+    --color-ink: #f7f8f8;
+    --color-muted: #8a8f98;
+    --color-line: #23252a;
+    --color-run: #6080ff;
+    --color-wrap: #f2c94c;
+    --color-ok: #4cb782;
+    --color-bad: #eb5757;
+    --color-halt: #95a2b3;
+    --color-you: #26b5ce;
     --color-merged: #a371f7;
-    --color-idle: #343941;
+    --color-idle: #2c2e33;
   }
 }
 
@@ -51,19 +53,23 @@
   }
 
   body {
-    @apply min-h-screen bg-bg font-sans text-ink;
+    @apply min-h-screen bg-canvas font-sans text-ink;
   }
 
   h1,
   h2 {
     @apply leading-tight font-semibold;
   }
+
+  ::selection {
+    @apply bg-brand/25;
+  }
 }
 
 /* Above web.css's own element rules in components.ui-sdk, below utilities. */
 @layer components {
   a {
-    @apply text-run underline decoration-current decoration-1 underline-offset-3 hover:decoration-2;
+    @apply text-run underline decoration-current/35 decoration-1 underline-offset-3 hover:decoration-current;
   }
 
   :focus-visible {
@@ -87,8 +93,8 @@
   --ui-muted-foreground: var(--color-muted);
   --ui-border: var(--color-line);
   --ui-input: var(--color-line);
-  --ui-primary: var(--color-run);
-  --ui-primary-foreground: var(--color-surface);
+  --ui-primary: var(--color-brand);
+  --ui-primary-foreground: #ffffff;
   --ui-destructive: var(--color-bad);
   --ui-ring: var(--color-focus);
   --ui-ring-border: var(--color-focus);
@@ -96,4 +102,5 @@
   --ui-font-size: 0.875rem;
   --ui-font-sans: var(--font-sans);
   --ui-font-mono: var(--font-mono);
+  --ui-shadow: 0 0 0 1px color-mix(in oklab, var(--color-ink) 8%, transparent), 0 4px 24px -4px rgb(0 0 0 / 0.16);
 }

@@ -74,12 +74,18 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onShortcut));
 </script>
 
 <template>
-  <IconButton v-if="!expanded" :icon="Search" label="Search runs" class="ml-auto sm:hidden" @click="expand" />
+  <IconButton
+    v-if="!expanded"
+    :icon="Search"
+    label="Search runs"
+    class="order-last ml-auto md:hidden"
+    @click="expand"
+  />
   <div
-    class="ml-auto w-full max-w-xs items-center sm:flex"
+    class="w-full items-center max-md:order-last max-md:ml-auto max-md:max-w-xs md:flex"
     :class="
       expanded
-        ? 'flex max-sm:absolute max-sm:inset-0 max-sm:z-10 max-sm:max-w-none max-sm:bg-surface max-sm:px-4'
+        ? 'flex max-md:absolute max-md:inset-0 max-md:z-10 max-md:max-w-none max-md:bg-canvas max-md:px-4'
         : 'hidden'
     "
   >
@@ -102,7 +108,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onShortcut));
           @blur="expanded && reset()"
         />
         <kbd
-          class="pointer-events-none absolute right-2 rounded-sm border border-line px-1.5 font-mono text-xs leading-5 text-muted peer-focus:invisible peer-not-placeholder-shown:invisible max-sm:hidden"
+          class="pointer-events-none absolute right-2 rounded-sm border border-line px-1.5 font-mono text-xs leading-5 text-muted peer-focus:invisible peer-not-placeholder-shown:invisible max-md:hidden"
           aria-hidden="true"
           >/</kbd
         >
