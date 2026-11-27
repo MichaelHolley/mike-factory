@@ -10,14 +10,14 @@
   --color-muted: #6b6f76;
   --color-line: #e4e4e8;
   --color-brand: #5e6ad2;
-  --color-run: #5e6ad2;
-  --color-wrap: #db8a1f;
-  --color-focus: #5e6ad2;
-  --color-ok: #3ea672;
-  --color-bad: #e5484d;
-  --color-halt: #858a93;
-  --color-you: #1f9fb8;
-  --color-merged: #8250df;
+  --color-run: #4f5cf0;
+  --color-wrap: #f08a00;
+  --color-focus: #4f5cf0;
+  --color-ok: #10b26c;
+  --color-bad: #f03e3e;
+  --color-halt: #7d838d;
+  --color-you: #0aa6c9;
+  --color-merged: #7c3aed;
   --color-idle: #dcdde1;
 
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
